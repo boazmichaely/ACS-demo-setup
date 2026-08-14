@@ -2,6 +2,8 @@
 
 Local web UI for ACS demo setup. Binds **127.0.0.1:8765** only.
 
+**Design:** [REQUIREMENTS-GUI.md](../REQUIREMENTS-GUI.md) (PatternFly v5). Current static assets are a temporary stub until PF layout is ported.
+
 ## Start
 
 ```bash

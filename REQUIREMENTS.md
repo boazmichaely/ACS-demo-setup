@@ -354,6 +354,8 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 The GUI is **required from the first deliverable** (module M1 `central`). No module ships without corresponding GUI support for that module’s status, configuration, and run action.
 
+**Look, feel, layout, and interaction:** [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) (PatternFly v5, wide column, module table, collapsibles, log pane).
+
 | ID | Requirement |
 |----|-------------|
 | R-GUI-1 | `gui/` exists before M1 is considered done |
@@ -366,6 +368,7 @@ The GUI is **required from the first deliverable** (module M1 `central`). No mod
 | R-GUI-8 | GUI backend invokes `acs-setup.sh` (or module entrypoints directly with the same contract); GUI does not reimplement module logic |
 | R-GUI-9 | New modules add GUI affordances in the **same PR/change** as the module script |
 | R-GUI-10 | GUI server binds **`127.0.0.1` only**; no network exposure beyond the operator laptop |
+| R-GUI-11 | Visual and UX requirements in **REQUIREMENTS-GUI.md** are part of GUI acceptance |
 
 ### 7.1 First deliverable (M1 + GUI)
 

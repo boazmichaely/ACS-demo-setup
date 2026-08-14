@@ -1,27 +1,26 @@
 # ACS demo setup
 
-Repeatable automation to **prepare a RHACS demo lab** after Central and a secured cluster are already running: credentials, `roxctl`, sample apps, users, OAuth, integrations, compliance, Splunk — driven primarily through a **web GUI** from the first module on.
+Repeatable automation to **prepare a RHACS demo lab** after Central and a secured cluster are already running: credentials, `roxctl`, sample apps, users, OAuth, integrations, compliance, Splunk — driven primarily through a **web GUI**.
 
-**Start here:** [REQUIREMENTS.md](REQUIREMENTS.md) — problem statement, environment assumptions, system behavior, and per-module acceptance criteria.
+| Doc | Contents |
+|-----|----------|
+| [REQUIREMENTS.md](REQUIREMENTS.md) | Problem, lab assumptions, modules, CLI contract, functional GUI behavior |
+| [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) | **Look and feel** — PatternFly v5, layout, credentials panel, module table, status, log |
 
-This repo is greenfield. Implementation follows approved requirements, not the other way around.
+**Repo:** https://github.com/boazmichaely/ACS-demo-setup (private)
 
-## Quick orientation
+## Layout
 
 | Piece | Role |
 |-------|------|
-| `gui/` | Primary interface: status, credentials, run per module (ships with M1) |
-| `acs-setup.sh` | CLI entrypoint for automation and GUI backend: `--status`, `--run`, `--help` |
-| `config/modules.json` | Module registry (ids, order, dependencies) |
-| `modules/NN-<id>.sh` | Module entrypoint (bash/jq; Python where it helps) |
+| `gui/` | Primary interface — [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
+| `acs-setup.sh` | CLI + GUI backend (`--status`, `--run`, `--help`) |
+| `config/modules.json` | Module registry |
+| `modules/NN-<id>.sh` | Module entrypoints (bash/jq; Python where it helps) |
 
-**Lab prerequisites:** OpenShift with `oc` access, RHACS operator installed, Central and secured cluster already up. See REQUIREMENTS §3.
+**Lab prerequisites:** OpenShift with `oc`, RHACS operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
 
-## Status
-
-GUI v0 shipped (orchestrator stub; module scripts not yet implemented). **M1 not implemented yet.**
-
-**Secrets:** `central-credentials.json` and `*.local.env` are gitignored. Copy `acs-demo-setup.local.env.example` for optional env overrides.
+**Secrets:** `central-credentials.json` and `*.local.env` are gitignored. Copy [acs-demo-setup.local.env.example](acs-demo-setup.local.env.example) for optional env overrides.
 
 ## Run the GUI
 
@@ -31,3 +30,12 @@ cd ~/code/ACS-demo-setup
 ```
 
 Open http://127.0.0.1:8765
+
+## Status
+
+| Area | State |
+|------|--------|
+| Requirements | Approved ([§9](REQUIREMENTS.md)) |
+| GUI backend | FastAPI stub — shells out to `acs-setup.sh` |
+| GUI look/feel | **Not yet** PatternFly — see [REQUIREMENTS-GUI.md §10](REQUIREMENTS-GUI.md) |
+| Module scripts | Not implemented (M1 next) |
