@@ -8,13 +8,10 @@ lab-credentials.json
 central-credentials.json
 **/central-credentials.json
 
-# Operator env files with real tokens/passwords
-*.local.env
+# Generic env files with real tokens/passwords
 .env
 .env.*
 !.env.example
-acs-demo-setup.local.env
-acs-playground.local.env
 
 # Generic credential / secret filenames
 credentials.json

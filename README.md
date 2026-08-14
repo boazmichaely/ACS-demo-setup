@@ -21,7 +21,7 @@ Repeatable automation to **prepare a RHACS demo lab** after Central and a secure
 
 **Lab prerequisites:** OpenShift with `oc`, RHACS Operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
 
-**Secrets:** `lab-credentials.json` and `*.local.env` are gitignored. Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json). Env overrides: [acs-demo-setup.local.env.example](acs-demo-setup.local.env.example).
+**Secrets:** `lab-credentials.json` is gitignored. Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json).
 
 ## Run the GUI
 

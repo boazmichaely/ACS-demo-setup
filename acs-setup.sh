@@ -55,7 +55,12 @@ module_status_row() {
   script="$(module_script_path "$id")"
   if [[ -x "$script" ]]; then
     local line
-    line="$("$script" --status)"
+    line="$("$script" --status 2>&1 || true)"
+    if [[ -z "$line" ]]; then
+      printf '%s\terror\tmodule status produced no output\n' "$id"
+      return 0
+    fi
+    line="$(printf '%s\n' "$line" | tail -1)"
     state="$(printf '%s' "$line" | awk -F'\t' '{print $2}')"
     message="$(printf '%s' "$line" | awk -F'\t' '{for (i=3;i<=NF;i++) {if (i>3) printf "\t"; printf "%s", $i}}')"
     printf '%s\t%s\t%s\n' "$id" "$state" "$message"
