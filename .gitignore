@@ -1,0 +1,93 @@
+# =============================================================================
+# ACS demo setup — secrets and sensitive local state (never commit)
+# =============================================================================
+
+# Central API (D-1): endpoint + token on disk
+central-credentials.json
+**/central-credentials.json
+
+# Operator env files with real tokens/passwords
+*.local.env
+.env
+.env.*
+!.env.example
+acs-demo-setup.local.env
+acs-playground.local.env
+
+# Generic credential / secret filenames
+credentials.json
+secrets.json
+secrets/
+*.secret
+*.secrets
+
+# API tokens, webhooks, passwords (accidental saves)
+*token*
+!*token*example*
+*webhook*
+*htpasswd*
+*.htpasswd
+
+# RHACS / OpenShift sensitive artifacts
+init-bundle*.zip
+init-bundle*/
+cluster-init-bundle*
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+oc-login-token*
+
+# TLS private keys
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# Splunk / integration locals
+splunk-admin-password*
+*admin-password*
+
+# =============================================================================
+# Tooling / runtime (local only)
+# =============================================================================
+
+# Python (GUI backend, module helpers)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.Python
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node (if gui/ adds frontend tooling later)
+node_modules/
+.npm/
+.yarn/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs and temp (may contain URLs or error payloads)
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# GUI local state
+gui/.env
+gui/data/
