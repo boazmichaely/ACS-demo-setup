@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Module: compliance-operator — phase 1: OLM install on secured cluster
+# Module: compliance-operator — OLM install + Central compliance scan schedule
 set -euo pipefail
 
 MODULE_ID="compliance-operator"
@@ -13,25 +13,27 @@ Usage: $(basename "$0") --help
        $(basename "$0") --run [--dry-run]
 
 Purpose:
-  Phase 1: Install OpenShift Compliance Operator via OLM on the secured cluster
-  (namespace openshift-compliance, Subscription from redhat-operators).
-
-  Phase 2 (not yet implemented): ACS compliance scan schedule via Central API
-  (RHACS UI equivalent). Do not apply ScanSetting/ScanSettingBinding CRs directly.
+  Install OpenShift Compliance Operator via OLM on the secured cluster, then
+  create/update a compliance scan configuration in Central (RHACS UI equivalent).
+  Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
 
 Depends on:
-  - oc logged into the secured OpenShift cluster
+  - oc logged into the lab secured OpenShift cluster
+  - lab-credentials.json Central API token and console URL
 
 Environment:
-  COMPLIANCE_OPERATOR_NAMESPACE      Default openshift-compliance
-  COMPLIANCE_SUBSCRIPTION_NAME       Default compliance-operator-sub
-  COMPLIANCE_OPERATOR_CHANNEL        Default stable
-  COMPLIANCE_CSV_TIMEOUT_SECONDS     Default 600
-  COMPLIANCE_ROLLOUT_TIMEOUT_SECONDS Default 240
-  ACS_COMPLIANCE_PATCH_NODE_SELECTOR Set to 1 to clear namespace node selector
+  COMPLIANCE_OPERATOR_NAMESPACE           Default openshift-compliance
+  COMPLIANCE_SUBSCRIPTION_NAME            Default compliance-operator-sub
+  COMPLIANCE_OPERATOR_CHANNEL             Default stable
+  COMPLIANCE_CSV_TIMEOUT_SECONDS          Default 600
+  COMPLIANCE_ROLLOUT_TIMEOUT_SECONDS      Default 240
+  ACS_COMPLIANCE_PATCH_NODE_SELECTOR      Set to 1 to clear namespace node selector
+  ACS_COMPLIANCE_SCAN_NAME                Default acs-demo-setup
+  ACS_COMPLIANCE_CLUSTER_NAME             Secured cluster name in Central (auto from SecuredCluster CR)
+  ACS_COMPLIANCE_PROFILE_SYNC_TIMEOUT_SECONDS  Default 600 (poll every 3s on --run)
 
 Side effects:
-  --run applies Namespace, OperatorGroup, and Subscription on the secured cluster
+  --run applies OLM resources on the secured cluster and scan configuration via Central API
 EOF
 }
 
