@@ -13,7 +13,7 @@ Implementation target: **PatternFly v5** + local layout CSS. The current custom-
 | G-LF-1 | **PatternFly v5** core + addons via CDN (`@patternfly/patternfly@5.4.2` or compatible patch). Use `pf-v5-c-*` components (page, card, table, form, button, check). |
 | G-LF-2 | **Local stylesheet** (`gui/static/demo-setup.css` or equivalent) for layout and status styling only — use **PF design tokens** (`--pf-v5-global--*`), not ad hoc hex colors except where this doc specifies badge semantics. |
 | G-LF-3 | Base font size **112.5%** on `html` for slightly larger, readable lab UI. |
-| G-LF-4 | **No external repo links** in the UI copy; file paths shown are local paths on the operator machine. |
+| G-LF-4 | **No external repo links** in the UI copy; file paths shown are local paths on the **user's** machine. |
 | G-LF-5 | **Title:** page heading **"ACS demo setup"** (`pf-v5-c-title`, bold, tight letter-spacing). |
 | G-LF-6 | **Favicon:** RHACS-related icon served by the GUI backend (inline data URI or static asset under `gui/static/`). |
 

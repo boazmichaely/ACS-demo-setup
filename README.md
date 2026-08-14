@@ -18,7 +18,7 @@ Repeatable automation to **prepare a RHACS demo lab** after Central and a secure
 | `config/modules.json` | Module registry |
 | `modules/NN-<id>.sh` | Module entrypoints (bash/jq; Python where it helps) |
 
-**Lab prerequisites:** OpenShift with `oc`, RHACS operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
+**Lab prerequisites:** OpenShift with `oc`, RHACS Operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
 
 **Secrets:** `central-credentials.json` and `*.local.env` are gitignored. Copy [acs-demo-setup.local.env.example](acs-demo-setup.local.env.example) for optional env overrides.
 

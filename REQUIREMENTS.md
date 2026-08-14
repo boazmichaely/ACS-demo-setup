@@ -39,11 +39,11 @@ Not in scope: unattended multi-tenant provisioning, production installs, or teac
 | # | Condition |
 |---|-----------|
 | E-1 | A single OpenShift cluster is the demo target |
-| E-2 | `oc` (or `kubectl`) on the operator’s machine is logged in with permissions to create projects, routes, OAuth, operators, etc. as each module requires |
-| E-3 | The RHACS operator is installed |
+| E-2 | `oc` (or `kubectl`) on the **user's** machine is logged in with permissions to create projects, routes, OAuth, cluster Operators, etc. as each module requires |
+| E-3 | The RHACS Operator is installed |
 | E-4 | **Central is installed and running** (Custom Resource already applied; not greenfield install) |
 | E-5 | **A secured cluster is installed and registered** with that Central (sensor stack present) |
-| E-6 | `bash`, `jq`, and `python3` are available on the operator’s machine |
+| E-6 | `bash`, `jq`, and `python3` are available on the **user's** machine |
 | E-7 | Network path exists from the laptop to Central’s HTTPS endpoint (route or override URL) |
 
 ### 3.2 What this project does *not* assume
@@ -51,7 +51,7 @@ Not in scope: unattended multi-tenant provisioning, production installs, or teac
 - A specific OpenShift version (modules may document minimums in their `--help`)
 - That every optional integration (Slack token, Splunk, external registries) is preconfigured; modules that need secrets document required env vars
 
-### 3.3 Operator-provided inputs (secrets and overrides)
+### 3.3 User-provided inputs (secrets and overrides)
 
 Documented in an example env file (no real values in git):
 
@@ -77,6 +77,12 @@ Local credential files (gitignored) hold endpoint + token for the GUI and for mo
 | **ok** | Status state: nothing to do |
 | **needs-run** | Status state: desired state missing or drifted; `--run` should fix it |
 | **error** | Status state: check failed (permissions, API down, misconfiguration) |
+| **User** | The person preparing the demo lab (GUI or CLI). Do not call them an "operator" — that word is reserved for Kubernetes/OpenShift **Operators** (RHACS Operator, Compliance Operator, etc.). |
+
+### Terminology
+
+- **User** — human running this toolkit on their laptop.
+- **Operator** (capital **O**, or "RHACS Operator", "Splunk Operator", …) — a cluster component installed via OLM/Helm, not a person.
 
 ---
 
@@ -166,8 +172,8 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 1. Discover Central’s public route in the cluster (default: StackRox/Central namespace route) **or** use `ACS_CENTRAL_ENDPOINT`
 2. Normalize to a `https://host:port` endpoint string
 3. Validate token against Central API (e.g. lightweight authenticated request)
-4. Write/update gitignored `central-credentials.json` at repo root (`endpoint`, `token`) when operator saves via GUI or `--run`
-5. **Not** create or modify the Central Custom Resource, operator install, or Central deployment
+4. Write/update gitignored `central-credentials.json` at repo root (`endpoint`, `token`) when the **user** saves via GUI or `--run`
+5. **Not** create or modify the Central Custom Resource, RHACS Operator install, or Central deployment
 
 **Acceptance:**
 
@@ -203,7 +209,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ### M3 — `secured-cluster` (registration and sensor health)
 
-**Purpose:** Confirm the demo cluster’s secured cluster is registered with Central and sensors are healthy. Read-only verification; surfaces facts for the operator to investigate elsewhere.
+**Purpose:** Confirm the demo cluster’s secured cluster is registered with Central and sensors are healthy. Read-only verification; surfaces facts for the **user** to investigate elsewhere.
 
 **Depends on:** `central`
 
@@ -326,9 +332,9 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 **Depends on:** `secured-cluster`
 
-**Status must verify:** Operator healthy; scan schedule present in Central
+**Status must verify:** Compliance Operator healthy; scan schedule present in Central
 
-**Run must do:** Install/configure operator if missing; set schedule via API
+**Run must do:** Install/configure Compliance Operator if missing; set schedule via API
 
 **Acceptance:** Compliance scans visible in Central for demo cluster
 
@@ -367,7 +373,7 @@ The GUI is **required from the first deliverable** (module M1 `central`). No mod
 | R-GUI-7 | Does not commit secrets; server-side gitignored storage preferred over browser localStorage for tokens |
 | R-GUI-8 | GUI backend invokes `acs-setup.sh` (or module entrypoints directly with the same contract); GUI does not reimplement module logic |
 | R-GUI-9 | New modules add GUI affordances in the **same PR/change** as the module script |
-| R-GUI-10 | GUI server binds **`127.0.0.1` only**; no network exposure beyond the operator laptop |
+| R-GUI-10 | GUI server binds **`127.0.0.1` only**; no network exposure beyond the **user's** laptop |
 | R-GUI-11 | Visual and UX requirements in **REQUIREMENTS-GUI.md** are part of GUI acceptance |
 
 ### 7.1 First deliverable (M1 + GUI)
@@ -378,7 +384,7 @@ Shipping M1 is not complete until all of the following work:
 2. `modules/01-central.sh` meets R-MOD-* and M1 acceptance
 3. `acs-setup.sh` can `--status` and `--run --module central`
 4. GUI lists module `central`, shows its status, saves credentials, and triggers run
-5. Operator can complete a full M1 workflow without using the shell
+5. **User** can complete a full M1 workflow without using the shell
 
 Later modules extend the same GUI (new row/card, config fields if needed, run button); the shell is never the only way to drive setup.
 
@@ -388,7 +394,7 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 
 | Item | Reason |
 |------|--------|
-| Installing RHACS operator | Lab prerequisite (E-3) |
+| Installing RHACS Operator | Lab prerequisite (E-3) |
 | Installing Central from scratch | Lab prerequisite (E-4) |
 | Net-new OpenShift cluster creation | Outside demo-prep |
 | Committing API tokens or webhooks | Security |
@@ -403,7 +409,7 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 | D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored `central-credentials.json` at repo root: `{ "endpoint": "https://host:port", "token": "..." }`. GUI Save writes both fields. Discover-from-cluster fills endpoint; token pasted/saved explicitly. Env vars (`ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`) override or supplement per module `--help`. |
 | D-2 | M3 `--run`: verify-only or also register/fix secured cluster? | **Decided:** Verify only. `--status` and `--run` report what failed (connectivity, registration, sensor health) and include **examination context** (Central endpoint, whether credentials loaded, cluster name, relevant resource names/status). No repair actions, no prescriptive "fix by doing X" guidance — the tool does not diagnose remediation. |
 | D-3 | GUI stack and how the local server is started | **Decided:** Python backend (Flask or FastAPI) + simple HTML/JS frontend; `./gui/serve.sh` or equivalent; REST API shells out to `acs-setup.sh`. Bind **`127.0.0.1` only** (localhost); fixed port documented in `gui/README` or `--help`. No auth (solo laptop use). |
-| D-4 | M12: reimplement Splunk deploy or call existing `splunk-lab.sh`? | **Decided:** **Wrap first** — `modules/12-splunk.sh` delegates to `splunk-lab.sh` (default path documented; override via env e.g. `ACS_SPLUNK_LAB_SCRIPT`). Map module `--status` / `--run` to script `--status` / `install`. **Optional later:** vendor script into this repo if path coupling or sync becomes annoying. TA `.tgz` remains operator-supplied; status reports if missing. |
+| D-4 | M12: reimplement Splunk deploy or call existing `splunk-lab.sh`? | **Decided:** **Wrap first** — `modules/12-splunk.sh` delegates to `splunk-lab.sh` (default path documented; override via env e.g. `ACS_SPLUNK_LAB_SCRIPT`). Map module `--status` / `--run` to script `--status` / `install`. **Optional later:** vendor script into this repo if path coupling or sync becomes annoying. TA `.tgz` remains **user-supplied**; status reports if missing. |
 | D-5 | Per-module `--dry-run` mandatory for all modules or only destructive ones? | **Decided:** **All modules** implement `--dry-run` for consistency. Verify/read-only modules describe checks and examination context only; mutating modules describe planned changes without applying. GUI may expose dry-run where useful. |
 
 ---
