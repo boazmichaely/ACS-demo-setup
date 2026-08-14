@@ -247,6 +247,79 @@
             <div class="pf-v5-c-card__header">
               <div class="pf-v5-c-card__header-main">
                 <div class="pf-v5-c-card__title">
+                  <h2 class="pf-v5-c-card__title-text pf-m-0">Modules</h2>
+                </div>
+              </div>
+            </div>
+            <div class="pf-v5-c-card__body pf-m-pt-0">
+              <div class="bulk-toolbar" id="moduleBulkBar" aria-label="Module selection">
+                <label class="pf-v5-c-check" for="modSelectAll">
+                  <input
+                    class="pf-v5-c-check__input"
+                    type="checkbox"
+                    id="modSelectAll"
+                    name="select-all-modules"
+                  />
+                  <span class="pf-v5-c-check__label">Select all</span>
+                </label>
+                <div class="bulk-toolbar__results">
+                  <span id="modSelectionCount" class="bulk-toolbar__count">0 of 0 selected</span>
+                  <span id="modRefreshFeedback" class="bulk-toolbar__feedback" aria-live="polite"></span>
+                </div>
+              </div>
+              <div class="modules-table-scroll">
+                <table class="pf-v5-c-table modules-table" aria-label="Demo modules">
+                  <thead class="pf-v5-c-table__thead">
+                    <tr class="pf-v5-c-table__tr">
+                      <th class="pf-v5-c-table__th modules-th-module" scope="col">Module</th>
+                      <th class="pf-v5-c-table__th modules-th-status" scope="col">
+                        State · detail
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="pf-v5-c-table__tbody" id="modulesTbody">
+                    <tr class="pf-v5-c-table__tr">
+                      <td class="pf-v5-c-table__td module-row-td" colspan="2">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="demo-actions-row">
+                <button
+                  class="pf-v5-c-button pf-m-secondary"
+                  type="button"
+                  id="btnRefreshSelected"
+                  title="Status for checked modules only"
+                >
+                  Refresh selected
+                </button>
+                <button class="pf-v5-c-button pf-m-primary" type="button" id="btnRun">
+                  Run selected
+                </button>
+                <button
+                  class="pf-v5-c-button pf-m-secondary"
+                  type="button"
+                  id="btnDryRun"
+                  title="Dry run for checked modules"
+                >
+                  Dry run selected
+                </button>
+                <button
+                  class="pf-v5-c-button pf-m-secondary"
+                  type="button"
+                  id="btnRunFull"
+                  title="All modules in registry order"
+                >
+                  Run full install
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="pf-v5-c-card pf-m-mt-lg">
+            <div class="pf-v5-c-card__header">
+              <div class="pf-v5-c-card__header-main">
+                <div class="pf-v5-c-card__title">
                   <h2 class="pf-v5-c-card__title-text pf-m-0">Status</h2>
                 </div>
               </div>
@@ -254,16 +327,8 @@
                 <button
                   class="pf-v5-c-button pf-m-secondary"
                   type="button"
-                  id="btnRunFull"
-                  title="Run all modules in registry order"
-                >
-                  Run full install
-                </button>
-                <button
-                  class="pf-v5-c-button pf-m-secondary"
-                  type="button"
                   id="btnStatus"
-                  title="Refresh all module status"
+                  title="Refresh all module status rows"
                 >
                   Refresh status
                 </button>
@@ -276,10 +341,10 @@
                   <span class="status-panel__chev" aria-hidden="true"></span>
                   <button
                     type="button"
-                    id="btnModulesExpandAll"
+                    id="btnPreflightExpandAll"
                     class="status-panel__expand-all"
                     disabled
-                    aria-label="Expand all modules"
+                    aria-label="Expand all sections"
                   >
                     <span
                       class="material-symbols-outlined status-panel__expand-all-ms"
@@ -287,7 +352,7 @@
                       >unfold_more</span
                     >
                   </button>
-                  <span class="status-panel__title">Modules</span>
+                  <span class="status-panel__title">Preflight</span>
                 </summary>
                 <div id="statusWrap" class="status-panel__body"></div>
               </details>

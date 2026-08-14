@@ -932,31 +932,3 @@ details.pf-block table.status {
 .cred-same-cluster {
   margin: 0 0 var(--pf-v5-global--spacer--sm);
 }
-
-.module-block-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--pf-v5-global--spacer--sm);
-  width: 100%;
-  padding-right: var(--pf-v5-global--spacer--sm);
-}
-
-.module-block-summary__label {
-  flex: 1;
-  min-width: 12rem;
-}
-
-.module-block-summary__badge {
-  flex-shrink: 0;
-}
-
-.module-block-message {
-  margin: 0 0 var(--pf-v5-global--spacer--sm);
-  word-break: break-word;
-}
-
-details.pf-block > summary.pf-block__summary.module-block-summary {
-  flex-wrap: wrap;
-}
