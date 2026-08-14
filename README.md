@@ -19,6 +19,15 @@ This repo is greenfield. Implementation follows approved requirements, not the o
 
 ## Status
 
-Requirements approved (see REQUIREMENTS §9). **M1 + GUI not implemented yet.**
+GUI v0 shipped (orchestrator stub; module scripts not yet implemented). **M1 not implemented yet.**
 
 **Secrets:** `central-credentials.json` and `*.local.env` are gitignored. Copy `acs-demo-setup.local.env.example` for optional env overrides.
+
+## Run the GUI
+
+```bash
+cd ~/code/ACS-demo-setup
+./gui/serve.sh
+```
+
+Open http://127.0.0.1:8765

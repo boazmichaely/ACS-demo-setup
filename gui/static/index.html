@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACS Demo Setup</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div>
+        <h1>ACS Demo Setup</h1>
+        <p class="subtitle">Module status and run controls</p>
+      </div>
+      <button type="button" id="refresh-btn" class="btn btn-secondary">Refresh status</button>
+    </header>
+
+    <main class="layout">
+      <section class="panel" aria-labelledby="credentials-heading">
+        <h2 id="credentials-heading">Central credentials</h2>
+        <p class="hint">Saved to <code>central-credentials.json</code> (gitignored).</p>
+        <form id="credentials-form" class="form">
+          <label>
+            Endpoint
+            <input
+              type="url"
+              id="endpoint"
+              name="endpoint"
+              placeholder="https://central.example.apps.cluster.com:443"
+              autocomplete="off"
+            />
+          </label>
+          <label>
+            API token
+            <input
+              type="password"
+              id="token"
+              name="token"
+              placeholder="Paste token to save or replace"
+              autocomplete="off"
+            />
+            <span id="token-hint" class="field-hint"></span>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save credentials</button>
+          </div>
+        </form>
+        <p id="credentials-message" class="message" role="status" hidden></p>
+      </section>
+
+      <section class="panel panel-wide" aria-labelledby="modules-heading">
+        <h2 id="modules-heading">Modules</h2>
+        <p id="status-error" class="message message-error" role="alert" hidden></p>
+        <div class="table-wrap">
+          <table class="modules-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Module</th>
+                <th>Status</th>
+                <th>Message</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="modules-body">
+              <tr>
+                <td colspan="5" class="loading">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="output-dialog">
+      <form method="dialog">
+        <h3 id="output-title">Module output</h3>
+        <pre id="output-body"></pre>
+        <button type="submit" class="btn btn-secondary">Close</button>
+      </form>
+    </dialog>
+
+    <script src="/static/app.js" type="module"></script>
+  </body>
+</html>
