@@ -47,23 +47,16 @@ body {
 }
 
 .layout {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1.25rem;
   padding: 1.25rem 1.5rem 2rem;
-  max-width: 1200px;
+  max-width: min(1600px, 98vw);
   margin: 0 auto;
 }
 
-@media (min-width: 900px) {
-  .layout {
-    grid-template-columns: 320px 1fr;
-    align-items: start;
-  }
-
-  .panel-wide {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
+.panel-wide {
+  width: 100%;
 }
 
 .panel {
@@ -260,4 +253,158 @@ input:focus {
 
 code {
   font-size: 0.85em;
+}
+
+/* Lab credentials panel (PF cred-panel patterns, stub theme) */
+.cred-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.cred-panel__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  cursor: pointer;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px 8px 0 0;
+  user-select: none;
+}
+
+.cred-panel__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.cred-panel:not([open]) .cred-panel__toggle {
+  border-radius: 8px;
+}
+
+.cred-panel[open] .cred-panel__toggle {
+  border-bottom: 1px solid var(--border);
+}
+
+.cred-panel__chev {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.cred-panel[open] .cred-panel__chev {
+  transform: rotate(45deg);
+}
+
+.cred-panel__body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.cred-path-line {
+  margin: 0 0 1rem;
+}
+
+.cred-file-path {
+  word-break: break-all;
+}
+
+.cred-cluster {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.cred-cluster legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+
+.cluster-hint {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.cred-subsection {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.cred-subsection:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.cred-subsection--disabled {
+  opacity: 0.55;
+}
+
+.cred-subsection__title {
+  margin: 0 0 0.65rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cred-row {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .cred-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.auth-pref {
+  border: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.auth-pref__legend {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.radio-label,
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.cred-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.cred-save-feedback {
+  min-height: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--ok);
+  flex: 1;
+  text-align: right;
+}
+
+.cred-save-feedback--err {
+  color: var(--err);
 }

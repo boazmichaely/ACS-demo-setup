@@ -16,11 +16,12 @@ Repeatable automation to **prepare a RHACS demo lab** after Central and a secure
 | `gui/` | Primary interface — [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
 | `acs-setup.sh` | CLI + GUI backend (`--status`, `--run`, `--help`) |
 | `config/modules.json` | Module registry |
+| `config/lab-credentials.schema.json` | Credentials file shape (see `lab-credentials.example.json`) |
 | `modules/NN-<id>.sh` | Module entrypoints (bash/jq; Python where it helps) |
 
 **Lab prerequisites:** OpenShift with `oc`, RHACS Operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
 
-**Secrets:** `central-credentials.json` and `*.local.env` are gitignored. Copy [acs-demo-setup.local.env.example](acs-demo-setup.local.env.example) for optional env overrides.
+**Secrets:** `lab-credentials.json` and `*.local.env` are gitignored. Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json). Env overrides: [acs-demo-setup.local.env.example](acs-demo-setup.local.env.example).
 
 ## Run the GUI
 

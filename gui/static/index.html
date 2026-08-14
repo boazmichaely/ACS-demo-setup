@@ -16,37 +16,114 @@
     </header>
 
     <main class="layout">
-      <section class="panel" aria-labelledby="credentials-heading">
-        <h2 id="credentials-heading">Central credentials</h2>
-        <p class="hint">Saved to <code>central-credentials.json</code> (gitignored).</p>
-        <form id="credentials-form" class="form">
-          <label>
-            Endpoint
-            <input
-              type="url"
-              id="endpoint"
-              name="endpoint"
-              placeholder="https://central.example.apps.cluster.com:443"
-              autocomplete="off"
-            />
-          </label>
-          <label>
-            API token
-            <input
-              type="password"
-              id="token"
-              name="token"
-              placeholder="Paste token to save or replace"
-              autocomplete="off"
-            />
-            <span id="token-hint" class="field-hint"></span>
-          </label>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save credentials</button>
-          </div>
-        </form>
-        <p id="credentials-message" class="message" role="status" hidden></p>
-      </section>
+      <details class="cred-panel" id="cred-panel">
+        <summary class="cred-panel__toggle">
+          <span class="cred-panel__chev" aria-hidden="true"></span>
+          <span class="cred-panel__title">Lab credentials</span>
+        </summary>
+        <div class="cred-panel__body">
+          <p class="hint cred-path-line">
+            <span class="cred-path-label">File:</span>
+            <code id="cred-file-path" class="cred-file-path">lab-credentials.json</code>
+          </p>
+          <form id="credentials-form" class="form" autocomplete="off">
+            <fieldset class="cred-cluster">
+              <legend>Central cluster</legend>
+              <p class="cluster-hint">
+                Where RHACS Central runs (management cluster).
+              </p>
+
+              <div class="cred-subsection">
+                <h3 class="cred-subsection__title">OpenShift</h3>
+                <label>
+                  Console URL
+                  <input type="url" id="central-ocp-console" name="centralOcpConsole" placeholder="https://console-openshift-console.apps…" />
+                </label>
+                <div class="cred-row">
+                  <label>
+                    Admin username
+                    <input type="text" id="central-ocp-user" name="centralOcpUser" />
+                  </label>
+                  <label>
+                    Admin password
+                    <input type="password" id="central-ocp-password" name="centralOcpPassword" placeholder="Optional if using oc login" />
+                  </label>
+                </div>
+                <p id="central-ocp-pw-hint" class="field-hint"></p>
+              </div>
+
+              <div class="cred-subsection">
+                <h3 class="cred-subsection__title">RHACS Central</h3>
+                <label>
+                  Console URL
+                  <input type="url" id="central-console" name="centralConsole" placeholder="https://central-stackrox.apps…" />
+                </label>
+                <label>
+                  API token
+                  <input type="text" id="central-api-token" name="centralApiToken" placeholder="Paste to save or replace" spellcheck="false" />
+                </label>
+                <p id="central-token-hint" class="field-hint"></p>
+                <div class="cred-row">
+                  <label>
+                    Admin username
+                    <input type="text" id="central-admin-user" name="centralAdminUser" />
+                  </label>
+                  <label>
+                    Admin password
+                    <input type="password" id="central-admin-password" name="centralAdminPassword" placeholder="Optional" />
+                  </label>
+                </div>
+                <p id="central-admin-pw-hint" class="field-hint"></p>
+                <fieldset class="auth-pref">
+                  <legend class="auth-pref__legend">When both API token and password are set</legend>
+                  <label class="radio-label">
+                    <input type="radio" name="centralAuthPref" value="apiToken" checked />
+                    Prefer API token
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" name="centralAuthPref" value="password" />
+                    Prefer admin password
+                  </label>
+                </fieldset>
+              </div>
+            </fieldset>
+
+            <fieldset class="cred-cluster">
+              <legend>Secured cluster</legend>
+              <p class="cluster-hint">
+                Cluster where the sensor runs, when it is not the same as the Central cluster.
+              </p>
+              <label class="checkbox-label">
+                <input type="checkbox" id="secured-same-as-central" name="securedSameAsCentral" checked />
+                Same OpenShift cluster as Central
+              </label>
+              <div id="secured-ocp-section" class="cred-subsection cred-subsection--disabled" hidden>
+                <h3 class="cred-subsection__title">OpenShift</h3>
+                <label>
+                  Console URL
+                  <input type="url" id="secured-ocp-console" name="securedOcpConsole" placeholder="https://console-openshift-console.apps…" />
+                </label>
+                <div class="cred-row">
+                  <label>
+                    Admin username
+                    <input type="text" id="secured-ocp-user" name="securedOcpUser" />
+                  </label>
+                  <label>
+                    Admin password
+                    <input type="password" id="secured-ocp-password" name="securedOcpPassword" placeholder="Optional if using oc login" />
+                  </label>
+                </div>
+                <p id="secured-ocp-pw-hint" class="field-hint"></p>
+              </div>
+            </fieldset>
+
+            <div class="cred-actions-row">
+              <span id="credentials-message" class="cred-save-feedback" role="status"></span>
+              <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </details>
 
       <section class="panel panel-wide" aria-labelledby="modules-heading">
         <h2 id="modules-heading">Modules</h2>

@@ -25,24 +25,46 @@ Implementation target: **PatternFly v5** + local layout CSS. The current custom-
 |----|-------------|
 | G-LAY-1 | **Wide main column:** header and content use `max-width: min(1600px, 98vw)`, centered. |
 | G-LAY-2 | Structure: `pf-v5-c-page` → main → **header** (title only) → **demo pad** (stacked sections). |
-| G-LAY-3 | Vertical order (top to bottom): **Central credentials** → **Modules** card → **Status** card → **Log** card. |
+| G-LAY-3 | Vertical order (top to bottom): **Lab credentials** → **Modules** card → **Status** card → **Log** card. |
 | G-LAY-4 | Section titles use `pf-v5-c-card__title-text` — xl, bold. Card headers: title left, actions right, wrap on narrow viewports. |
 
 ---
 
 ## 3. Central credentials panel
 
+Outer collapsible **"Lab credentials"** (`cred-panel`), **collapsed by default**. Inner layout: two **fieldset** blocks (Central cluster, Secured cluster). See `config/lab-credentials.schema.json` for the persisted JSON shape.
+
 | ID | Requirement |
 |----|-------------|
-| G-CRED-1 | **Standalone collapsible** (`<details class="cred-panel">`), **collapsed by default**. Not part of the Status "expand all" control. |
-| G-CRED-2 | Toggle row: **left 3px primary-color accent**, chevron rotation on open/close, semibold title **"Central credentials"**. |
-| G-CRED-3 | Body: PF card, form with `pf-v5-c-form` groups. |
-| G-CRED-4 | **Save** primary button, right-aligned in an actions row with **inline feedback** beside it (`Saved` success / error text, `aria-live="polite"`). |
-| G-CRED-5 | Show **credentials file path** (`File: <code>…</code>`) — repo-root `central-credentials.json` unless overridden by env (see [REQUIREMENTS.md](REQUIREMENTS.md) §9 D-1). |
-| G-CRED-6 | **API key / token** input is **plain text** (lab tool, not a production login form). |
-| G-CRED-7 | **v1 fields (required):** Central endpoint, API token — persisted per D-1 JSON shape. |
-| G-CRED-8 | **Extended fields (when password auth is supported):** admin username, admin password, radio **auth preference** (API key vs password). Omit from UI until backend/modules accept them; layout slots match archived spec. |
-| G-CRED-9 | Blank token on save **keeps** existing token (do not wipe). |
+| G-CRED-1 | **Standalone collapsible** — not controlled by Status "expand all". |
+| G-CRED-2 | Toggle: left **3px primary accent**, chevron, title **"Lab credentials"**. |
+| G-CRED-3 | Show **file path** (`lab-credentials.json` or `ACS_LAB_CREDENTIALS_FILE`). |
+| G-CRED-4 | **Save** + inline feedback (`Saved` / error), `aria-live="polite"`. |
+| G-CRED-5 | Blank password or API token on save **keeps** the existing value; GET never returns raw secrets (masked hints only). |
+
+### 3.1 Central cluster fieldset
+
+| Block | Fields | UX |
+|-------|--------|-----|
+| **OpenShift** | Console URL, admin username, admin password | Subsection title "OpenShift". Hint: admin password **optional** if the user uses `oc login`. |
+| **RHACS Central** | Console URL, API token (plain text), admin username, admin password | Subsection title "RHACS Central". Radio: **Prefer API token** vs **Prefer admin password** when both are set. |
+
+Short hint under fieldset legend: *Where RHACS Central runs (management cluster).*
+
+### 3.2 Secured cluster fieldset
+
+| Control | Behavior |
+|---------|----------|
+| **Same OpenShift cluster as Central** | Checkbox, **checked by default**. When checked, Secured OpenShift fields are hidden/disabled. |
+| **OpenShift** (when not same) | Console URL, admin username, admin password — same optional admin semantics as Central cluster OCP block. |
+
+Short hint: *Cluster where the sensor runs, when different from Central.*
+
+### 3.3 Layout notes
+
+- Full-width credentials block above the Modules card (not a narrow sidebar).
+- Use paired username/password on one row at `min-width: 640px`.
+- When PatternFly is ported, map fieldsets to `pf-v5-c-form` / `pf-v5-c-card` per §1.
 
 ---
 
@@ -140,7 +162,7 @@ Before calling the GUI "done" for a milestone:
 |------|--------|--------|
 | CSS | Custom dark `styles.css` | PF v5 + `demo-setup.css` |
 | Layout | Sidebar + simple table | Full-width stacked cards |
-| Credentials | Always-visible form | Collapsed `cred-panel` |
+| Credentials | Multi-cluster form implemented (stub CSS); PF port pending | §3 fieldsets + `lab-credentials.json` |
 | Output | Modal dialog | **Log** card + optional modal for errors only |
 | Modules | Per-row Run/Dry run only | Checkboxes + bulk run + full install |
 

@@ -2,7 +2,9 @@
 # ACS demo setup — secrets and sensitive local state (never commit)
 # =============================================================================
 
-# Central API (D-1): endpoint + token on disk
+# Central API (lab-credentials.json): cluster + Central access
+lab-credentials.json
+**/lab-credentials.json
 central-credentials.json
 **/central-credentials.json
 

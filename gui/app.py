@@ -5,16 +5,18 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from lab_credentials import credentials_path, for_api_response, merge_and_save
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GUI_DIR = Path(__file__).resolve().parent
 MODULES_JSON = REPO_ROOT / "config" / "modules.json"
-CREDENTIALS_PATH = REPO_ROOT / "central-credentials.json"
 ACS_SETUP = REPO_ROOT / "acs-setup.sh"
 
 HOST = "127.0.0.1"
@@ -23,9 +25,33 @@ PORT = 8765
 app = FastAPI(title="ACS Demo Setup", version="0.1.0")
 
 
-class CredentialsIn(BaseModel):
-    endpoint: str = ""
-    token: str = Field(default="", description="Leave blank to keep existing token")
+class OpenshiftAccessIn(BaseModel):
+    consoleUrl: str = ""
+    adminUsername: str = ""
+    adminPassword: str = Field(default="", description="Blank keeps existing password")
+
+
+class CentralConsoleIn(BaseModel):
+    consoleUrl: str = ""
+    apiToken: str = Field(default="", description="Blank keeps existing token")
+    adminUsername: str = ""
+    adminPassword: str = Field(default="", description="Blank keeps existing password")
+    authPreference: str = "apiToken"
+
+
+class CentralClusterIn(BaseModel):
+    openshift: OpenshiftAccessIn = Field(default_factory=OpenshiftAccessIn)
+    central: CentralConsoleIn = Field(default_factory=CentralConsoleIn)
+
+
+class SecuredClusterIn(BaseModel):
+    sameAsCentralCluster: bool = True
+    openshift: OpenshiftAccessIn = Field(default_factory=OpenshiftAccessIn)
+
+
+class LabCredentialsIn(BaseModel):
+    centralCluster: CentralClusterIn = Field(default_factory=CentralClusterIn)
+    securedCluster: SecuredClusterIn = Field(default_factory=SecuredClusterIn)
 
 
 class RunResult(BaseModel):
@@ -75,40 +101,19 @@ def get_status() -> list[dict]:
 
 
 @app.get("/api/credentials")
-def get_credentials() -> dict:
-    if not CREDENTIALS_PATH.is_file():
-        return {
-            "endpoint": "",
-            "has_token": False,
-            "token_masked": "",
-            "saved": False,
-        }
-    data = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
-    token = data.get("token") or ""
-    masked = ""
-    if token:
-        masked = f"{token[:4]}…{token[-4:]}" if len(token) > 8 else "********"
-    return {
-        "endpoint": data.get("endpoint") or "",
-        "has_token": bool(token),
-        "token_masked": masked,
-        "saved": True,
-    }
+def get_credentials() -> dict[str, Any]:
+    return for_api_response(REPO_ROOT)
 
 
 @app.post("/api/credentials")
-def save_credentials(body: CredentialsIn) -> dict[str, bool]:
-    existing: dict[str, str] = {}
-    if CREDENTIALS_PATH.is_file():
-        existing = json.loads(CREDENTIALS_PATH.read_text(encoding="utf-8"))
-
-    endpoint = body.endpoint.strip()
-    token = body.token.strip() if body.token.strip() else (existing.get("token") or "")
-
-    payload = {"endpoint": endpoint, "token": token}
-    CREDENTIALS_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    CREDENTIALS_PATH.chmod(0o600)
+def save_credentials(body: LabCredentialsIn) -> dict[str, bool]:
+    merge_and_save(REPO_ROOT, body.model_dump())
     return {"ok": True}
+
+
+@app.get("/api/credentials/path")
+def get_credentials_path() -> dict[str, str]:
+    return {"path": str(credentials_path(REPO_ROOT))}
 
 
 @app.post("/api/run/{module_id}", response_model=RunResult)

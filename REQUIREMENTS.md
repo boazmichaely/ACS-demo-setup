@@ -53,16 +53,24 @@ Not in scope: unattended multi-tenant provisioning, production installs, or teac
 
 ### 3.3 User-provided inputs (secrets and overrides)
 
-Documented in an example env file (no real values in git):
+Documented in an example env file (no real values in git). Primary store: gitignored **`lab-credentials.json`** at repo root (schema: `config/lab-credentials.schema.json`, example: `config/lab-credentials.example.json`). Override path: `ACS_LAB_CREDENTIALS_FILE`.
+
+| Area | Fields | Notes |
+|------|--------|--------|
+| **Central cluster → OpenShift** | console URL, admin username, admin password | OCP admin fields optional when the user relies on `oc login` |
+| **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
+| **Secured cluster** | `sameAsCentralCluster` (boolean) | Default `true` when Central and sensor share one cluster |
+| **Secured cluster → OpenShift** (when not same) | console URL, admin username, admin password | Same optional OCP admin semantics |
+
+Legacy `central-credentials.json` (`endpoint` + `token`) is read once and migrated to the v1 shape on load.
 
 | Variable | Used by | Meaning |
 |----------|---------|---------|
-| `ACS_CENTRAL_ENDPOINT` | `central`, others | Override auto-discovered Central URL (`https://host:443`) |
-| `ROX_API_TOKEN` / `TOKEN` | `central`, `roxctl-env`, API modules | Admin or automation API token for Central |
+| `ACS_LAB_CREDENTIALS_FILE` | GUI, modules | Override path to credentials JSON |
+| `ACS_CENTRAL_ENDPOINT` | `central`, others | Override Central console URL (env wins over file when documented) |
+| `ROX_API_TOKEN` / `TOKEN` | API modules | Override Central API token |
 | `ACS_ENV_FILE` | all | Optional path to a sourced env file |
 | Module-specific vars | e.g. `slack-notifier`, `splunk` | Defined in each module’s `--help` |
-
-Local credential files (gitignored) hold endpoint + token for the GUI and for modules that should not require re-exporting env vars every session.
 
 ---
 
@@ -172,7 +180,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 1. Discover Central’s public route in the cluster (default: StackRox/Central namespace route) **or** use `ACS_CENTRAL_ENDPOINT`
 2. Normalize to a `https://host:port` endpoint string
 3. Validate token against Central API (e.g. lightweight authenticated request)
-4. Write/update gitignored `central-credentials.json` at repo root (`endpoint`, `token`) when the **user** saves via GUI or `--run`
+4. Write/update gitignored `lab-credentials.json` (Central console URL, API token, cluster access fields per §3.3) when the **user** saves via GUI or `--run`
 5. **Not** create or modify the Central Custom Resource, RHACS Operator install, or Central deployment
 
 **Acceptance:**
@@ -367,7 +375,7 @@ The GUI is **required from the first deliverable** (module M1 `central`). No mod
 | R-GUI-1 | `gui/` exists before M1 is considered done |
 | R-GUI-2 | Reads `config/modules.json` for module list, order, labels, and dependencies |
 | R-GUI-3 | Shows per-module status (invokes orchestrator `--status --json` or equivalent API) |
-| R-GUI-4 | For M1: form to set/save Central endpoint and API token; persisted via the same gitignored credentials file the module uses |
+| R-GUI-4 | Lab credentials form per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) §3; persisted to `lab-credentials.json` |
 | R-GUI-5 | For each shipped module: control to run that module (with confirmation when `--run` is destructive) |
 | R-GUI-6 | Refresh status on demand and after a run completes |
 | R-GUI-7 | Does not commit secrets; server-side gitignored storage preferred over browser localStorage for tokens |
@@ -406,7 +414,7 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 
 | # | Question | Decision |
 |---|----------|----------|
-| D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored `central-credentials.json` at repo root: `{ "endpoint": "https://host:port", "token": "..." }`. GUI Save writes both fields. Discover-from-cluster fills endpoint; token pasted/saved explicitly. Env vars (`ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`) override or supplement per module `--help`. |
+| D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json`**. Two clusters: **centralCluster** (OpenShift + RHACS Central) and **securedCluster** (optional separate OpenShift when `sameAsCentralCluster` is false). OCP admin username/password optional per cluster. Central: console URL, API token, admin username/password, `authPreference` (`apiToken` \| `password`). GUI Save merges secrets (blank password/token keeps existing). Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN` may override per module `--help`. Legacy `central-credentials.json` migrated on read. |
 | D-2 | M3 `--run`: verify-only or also register/fix secured cluster? | **Decided:** Verify only. `--status` and `--run` report what failed (connectivity, registration, sensor health) and include **examination context** (Central endpoint, whether credentials loaded, cluster name, relevant resource names/status). No repair actions, no prescriptive "fix by doing X" guidance — the tool does not diagnose remediation. |
 | D-3 | GUI stack and how the local server is started | **Decided:** Python backend (Flask or FastAPI) + simple HTML/JS frontend; `./gui/serve.sh` or equivalent; REST API shells out to `acs-setup.sh`. Bind **`127.0.0.1` only** (localhost); fixed port documented in `gui/README` or `--help`. No auth (solo laptop use). |
 | D-4 | M12: reimplement Splunk deploy or call existing `splunk-lab.sh`? | **Decided:** **Wrap first** — `modules/12-splunk.sh` delegates to `splunk-lab.sh` (default path documented; override via env e.g. `ACS_SPLUNK_LAB_SCRIPT`). Map module `--status` / `--run` to script `--status` / `install`. **Optional later:** vendor script into this repo if path coupling or sync becomes annoying. TA `.tgz` remains **user-supplied**; status reports if missing. |
