@@ -199,27 +199,32 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ---
 
-### M2 — `roxctl-env` (`~/.roxctl` for demos)
+### M2 — `compliance-operator` (Compliance Operator + scan schedule)
 
-**Purpose:** Configure the local `roxctl` CLI so demo commands work without manual config editing.
+**Purpose:** Ensure the OpenShift Compliance Operator is installed on the secured cluster and ACS compliance scan schedules are configured the same way a user would in the RHACS UI.
 
-**Depends on:** none (reads endpoint and token from `lab-credentials.json`)
+**ACS principle (required):** This toolkit targets **RHACS (ACS)** demos. Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. That bypasses Central and duplicates what the UI does via Central API. The operator install is on-cluster (`oc`); scan schedules must be created through **Central API** (equivalent to Compliance → scan configurations → Save in the UI), not raw CO YAML.
 
-**Status must verify:**
+**Phased delivery:**
 
-1. `~/.roxctl` (or documented config path) points at the Central endpoint in lab credentials
-2. Configured token works (`roxctl` can authenticate)
+| Phase | Scope | Mechanism |
+|-------|--------|-----------|
+| **1 (shipped first)** | Install Compliance Operator via OLM on the secured cluster | `oc` — namespace, OperatorGroup, Subscription; wait for CSV/deployment |
+| **2 (follow-up)** | Scan schedule for the demo cluster | Central API (e.g. `POST /v2/compliance/scan/configurations`) — mimic UI wizard |
 
-**Run must do:**
+**Depends on:** none (secured cluster is a manual prerequisite per §3.1)
 
-1. Read endpoint and token from lab credentials / env
-2. Write `roxctl` config for Central URL and admin API token
-3. Not rotate or create Central users unless documented
+**Status must verify (full module):** Compliance Operator healthy; scan schedule present in Central.
 
-**Acceptance:**
+**Status (phase 1 only):** Compliance Operator Subscription + CSV `Succeeded` + operator deployment ready. Message notes scan schedule not configured until phase 2.
 
-- After `--run`, a documented `roxctl` command against Central succeeds
-- `--status` is `ok` when config matches current Central endpoint and token
+**Run must do (full module):** Install Compliance Operator if missing; create/update scan schedule via Central API.
+
+**Run (phase 1 only):** OLM install only; idempotent `oc apply`; no Central API calls; no `ScanSetting` / `ScanSettingBinding`.
+
+**Acceptance (full module):** Compliance scans visible in Central for demo cluster.
+
+**Acceptance (phase 1):** `--status` is `ok` when the operator is installed and healthy on the secured cluster.
 
 ---
 
@@ -303,36 +308,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ---
 
-### M9 — `compliance-operator` (Compliance Operator + scan schedule)
-
-**Purpose:** Ensure the OpenShift Compliance Operator is installed on the secured cluster and ACS compliance scan schedules are configured the same way a user would in the RHACS UI.
-
-**ACS principle (required):** This toolkit targets **RHACS (ACS)** demos. Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. That bypasses Central and duplicates what the UI does via Central API. The operator install is on-cluster (`oc`); scan schedules must be created through **Central API** (equivalent to Compliance → scan configurations → Save in the UI), not raw CO YAML.
-
-**Phased delivery:**
-
-| Phase | Scope | Mechanism |
-|-------|--------|-----------|
-| **1 (shipped first)** | Install Compliance Operator via OLM on the secured cluster | `oc` — namespace, OperatorGroup, Subscription; wait for CSV/deployment |
-| **2 (follow-up)** | Scan schedule for the demo cluster | Central API (e.g. `POST /v2/compliance/scan/configurations`) — mimic UI wizard |
-
-**Depends on:** none (secured cluster is a manual prerequisite per §3.1)
-
-**Status must verify (full module):** Compliance Operator healthy; scan schedule present in Central.
-
-**Status (phase 1 only):** Compliance Operator Subscription + CSV `Succeeded` + operator deployment ready. Message notes scan schedule not configured until phase 2.
-
-**Run must do (full module):** Install Compliance Operator if missing; create/update scan schedule via Central API.
-
-**Run (phase 1 only):** OLM install only; idempotent `oc apply`; no Central API calls; no `ScanSetting` / `ScanSettingBinding`.
-
-**Acceptance (full module):** Compliance scans visible in Central for demo cluster.
-
-**Acceptance (phase 1):** `--status` is `ok` when the operator is installed and healthy on the secured cluster.
-
----
-
-### M10 — `splunk` (Splunk Operator + TA)
+### M9 — `splunk` (Splunk Operator + TA)
 
 **Purpose:** Deploy Splunk Operator and RHACS Splunk TA so audit/violation events can flow to Splunk for SIEM demos.
 
@@ -342,9 +318,33 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 **Run must do:** Delegate to `splunk-lab.sh` `install` (or equivalent); idempotent per wrapped script behavior
 
-**Wrap:** Entrypoint finds `splunk-lab.sh` via `ACS_SPLUNK_LAB_SCRIPT` or documented default under `rhacs-splunk-ta-demo-skill`. Vendoring into this repo is optional follow-up, not required for M10 v1.
+**Wrap:** Entrypoint finds `splunk-lab.sh` via `ACS_SPLUNK_LAB_SCRIPT` or documented default under `rhacs-splunk-ta-demo-skill`. Vendoring into this repo is optional follow-up, not required for M9 v1.
 
 **Acceptance:** Events searchable in Splunk after demo traffic; `--status` reflects wrapped script health; clear message if script path or TA bundle missing
+
+---
+
+### M10 — `roxctl-env` (`~/.roxctl` for demos)
+
+**Purpose:** Configure the local `roxctl` CLI so demo commands work without manual config editing.
+
+**Depends on:** none (reads endpoint and token from `lab-credentials.json`)
+
+**Status must verify:**
+
+1. `~/.roxctl` (or documented config path) points at the Central endpoint in lab credentials
+2. Configured token works (`roxctl` can authenticate)
+
+**Run must do:**
+
+1. Read endpoint and token from lab credentials / env
+2. Write `roxctl` config for Central URL and admin API token
+3. Not rotate or create Central users unless documented
+
+**Acceptance:**
+
+- After `--run`, a documented `roxctl` command against Central succeeds
+- `--status` is `ok` when config matches current Central endpoint and token
 
 ---
 

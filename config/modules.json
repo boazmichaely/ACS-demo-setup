@@ -8,8 +8,8 @@
     },
     {
       "number": 2,
-      "id": "roxctl-env",
-      "label": "roxctl-env — ~/.roxctl route + API token",
+      "id": "compliance-operator",
+      "label": "compliance-operator — Compliance Operator + scan schedule",
       "dependsOn": []
     },
     {
@@ -50,14 +50,14 @@
     },
     {
       "number": 9,
-      "id": "compliance-operator",
-      "label": "compliance-operator — Compliance Operator + scan schedule",
+      "id": "splunk",
+      "label": "splunk — Splunk Operator + RHACS TA",
       "dependsOn": []
     },
     {
       "number": 10,
-      "id": "splunk",
-      "label": "splunk — Splunk Operator + RHACS TA",
+      "id": "roxctl-env",
+      "label": "roxctl-env — ~/.roxctl route + API token",
       "dependsOn": []
     }
   ]
