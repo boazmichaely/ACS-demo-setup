@@ -38,5 +38,5 @@ Open http://127.0.0.1:8765
 |------|--------|
 | Requirements | Approved ([§9](REQUIREMENTS.md)) |
 | GUI backend | FastAPI stub — shells out to `acs-setup.sh` |
-| GUI look/feel | **Not yet** PatternFly — see [REQUIREMENTS-GUI.md §10](REQUIREMENTS-GUI.md) |
+| GUI | PatternFly v5 per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
 | Module scripts | Not implemented (M1 next) |

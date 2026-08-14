@@ -144,26 +144,22 @@ Additional badge styles for future use: `--deferred` (dashed), `--pending`, `--u
 
 ## 9. Compliance checklist
 
-Before calling the GUI "done" for a milestone:
+Milestone: **GUI shell** (module scripts may still be stubs).
 
-- [ ] PatternFly v5 loaded; no custom dark-theme replacement
-- [ ] Wide column layout (1600px / 98vw)
-- [ ] Credentials collapsible, collapsed by default, Save + feedback
-- [ ] Modules table with checkboxes, badges, bulk bar, three action buttons
-- [ ] Status card with preflight panel + expand-all
-- [ ] Log pane (not dialog-only)
-- [ ] Matches functional requirements in REQUIREMENTS.md §7
+- [x] PatternFly v5 loaded; no custom dark-theme replacement
+- [x] Wide column layout (1600px / 98vw)
+- [x] Credentials collapsible, collapsed by default, Save + feedback
+- [x] Modules table with checkboxes, badges, bulk bar, action buttons (+ dry run)
+- [x] Status card with preflight panel + expand-all
+- [x] Log pane (not dialog-only)
+- [x] Matches functional requirements in REQUIREMENTS.md §7 (API-backed)
 
 ---
 
-## 10. Current gap
+## 10. Follow-ups
 
-| Area | Today | Target |
-|------|--------|--------|
-| CSS | Custom dark `styles.css` | PF v5 + `demo-setup.css` |
-| Layout | Sidebar + simple table | Full-width stacked cards |
-| Credentials | Multi-cluster form implemented (stub CSS); PF port pending | §3 fieldsets + `lab-credentials.json` |
-| Output | Modal dialog | **Log** card + optional modal for errors only |
-| Modules | Per-row Run/Dry run only | Checkboxes + bulk run + full install |
-
-Track UI work against §9 checklist; functional API in `gui/app.py` can remain while static assets are replaced.
+| Area | Notes |
+|------|--------|
+| Module scripts | Rows show real status when `modules/NN-*.sh` exist |
+| Preflight depth | Extra nested breakdowns when status JSON adds structured fields (M3, M2) |
+| Destructive run confirm | Dialog before run when module documents destructive `--run` |

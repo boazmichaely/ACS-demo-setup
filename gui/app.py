@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -87,7 +87,27 @@ def list_modules() -> list[dict]:
 
 
 @app.get("/api/status")
-def get_status() -> list[dict]:
+def get_status(modules: str | None = Query(default=None)) -> list[dict]:
+    if modules:
+        ids = [m.strip() for m in modules.split(",") if m.strip()]
+        merged: list[dict] = []
+        for module_id in ids:
+            result = run_acs_setup("--status", "--json", "--module", module_id)
+            if result.returncode != 0:
+                raise HTTPException(
+                    status_code=500,
+                    detail=result.stderr.strip()
+                    or result.stdout.strip()
+                    or f"status failed for {module_id}",
+                )
+            try:
+                merged.extend(json.loads(result.stdout))
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"invalid status JSON for {module_id}: {exc}"
+                ) from exc
+        return merged
+
     result = run_acs_setup("--status", "--json")
     if result.returncode != 0:
         raise HTTPException(
