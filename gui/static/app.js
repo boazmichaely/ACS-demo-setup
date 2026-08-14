@@ -3,21 +3,15 @@
  */
 
 const logEl = document.getElementById("log");
-const modulesTbody = document.getElementById("modulesTbody");
-const modSelectAll = document.getElementById("modSelectAll");
-const modSelectionCount = document.getElementById("modSelectionCount");
-const moduleBulkBar = document.getElementById("moduleBulkBar");
-const modRefreshFeedback = document.getElementById("modRefreshFeedback");
 const statusWrap = document.getElementById("statusWrap");
 const statusRefreshIndicator = document.getElementById("statusRefreshIndicator");
-const btnPreflightExpandAll = document.getElementById("btnPreflightExpandAll");
+const btnModulesExpandAll = document.getElementById("btnModulesExpandAll");
 const credFilePath = document.getElementById("credFilePath");
 const credSaveFeedback = document.getElementById("credSaveFeedback");
 
 let registryModules = [];
 let lastStatusModules = [];
 let lastStatusMap = new Map();
-let moduleMetaById = new Map();
 let busy = false;
 
 const fields = {
@@ -66,28 +60,19 @@ function clearLog() {
 
 function setBusy(on) {
   busy = on;
-  const ids = [
-    "btnCredSave",
-    "btnRefreshSelected",
-    "btnRun",
-    "btnDryRun",
-    "btnRunFull",
-    "btnStatus",
-  ];
-  for (const id of ids) {
+  for (const id of ["btnCredSave", "btnStatus", "btnRunFull"]) {
     const el = document.getElementById(id);
     if (el) el.disabled = on;
   }
+  statusWrap?.querySelectorAll(".js-mod-run, .js-mod-dry-run").forEach((btn) => {
+    btn.disabled = on;
+  });
 }
 
 function setCredFeedback(text, isError = false) {
   if (!credSaveFeedback) return;
   credSaveFeedback.textContent = text || "";
   credSaveFeedback.classList.toggle("cred-save-feedback--err", Boolean(isError));
-}
-
-function setModuleRefreshFeedback(text) {
-  if (modRefreshFeedback) modRefreshFeedback.textContent = text || "";
 }
 
 function setStatusIndicator(text) {
@@ -113,22 +98,12 @@ async function api(path, options = {}) {
 function uiStateFromOrchestrator(state) {
   switch (state) {
     case "ok":
-      return { ui: "ready", label: "Ready", badge: "module-status-badge--ready", icon: "✓" };
+      return { label: "Ready", badge: "module-status-badge--ready", icon: "✓" };
     case "error":
-      return {
-        ui: "blocked",
-        label: "Error",
-        badge: "module-status-badge--blocked",
-        icon: "⚠",
-      };
+      return { label: "Error", badge: "module-status-badge--blocked", icon: "⚠" };
     case "needs-run":
     default:
-      return {
-        ui: "partial",
-        label: "Needs run",
-        badge: "module-status-badge--partial",
-        icon: "◐",
-      };
+      return { label: "Needs run", badge: "module-status-badge--partial", icon: "◐" };
   }
 }
 
@@ -136,39 +111,27 @@ function statusMapFromModules(modules) {
   const map = new Map();
   for (const row of modules || []) {
     if (!row?.id) continue;
-    map.set(row.id, {
-      state: row.state || "",
-      message: row.message || "",
-    });
+    map.set(row.id, { state: row.state || "", message: row.message || "" });
   }
   return map;
 }
 
-function dependsOnHintHtml(m) {
-  const deps = m.dependsOn;
-  if (!Array.isArray(deps) || deps.length === 0) return "";
-  return `<div class="module-deps-hint">Requires: ${deps.map(escapeHtml).join(", ")}</div>`;
-}
-
-function moduleCellHtml(m) {
-  const label = String(m.label ?? "");
+function moduleLineHtml(m) {
+  const label = String(m.label ?? m.id ?? "");
   const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
   const parts = label.split(/\s+—\s+/);
-  let inner;
   if (parts.length >= 2) {
-    inner = `<span class="module-line">
+    return `<span class="module-line">
       <span class="module-line__idx">${idx}</span>
       <strong class="module-line__slug">${escapeHtml(parts[0].trim())}</strong>
       <span class="module-line__sep"> - </span>
       <span class="module-line__desc">${escapeHtml(parts.slice(1).join(" — ").trim())}</span>
     </span>`;
-  } else {
-    inner = `<span class="module-line">
-      <span class="module-line__idx">${idx}</span>
-      <strong class="module-line__slug">${escapeHtml(label.trim())}</strong>
-    </span>`;
   }
-  return `${inner}${dependsOnHintHtml(m)}<div class="js-deps-lock-hint module-deps-lock-hint" hidden></div>`;
+  return `<span class="module-line">
+    <span class="module-line__idx">${idx}</span>
+    <strong class="module-line__slug">${escapeHtml(label.trim())}</strong>
+  </span>`;
 }
 
 function badgeHtml(moduleId) {
@@ -184,279 +147,99 @@ function badgeHtml(moduleId) {
   </span>`;
 }
 
-function statusDetailHtml(moduleId) {
-  const st = lastStatusMap.get(moduleId);
-  const msg = st?.message ? escapeHtml(st.message) : "—";
-  return `<div class="sc-overall">${msg}</div>`;
+function depsMet(moduleId) {
+  const meta = registryModules.find((m) => m.id === moduleId);
+  if (!meta?.dependsOn?.length) return true;
+  return meta.dependsOn.every((dep) => lastStatusMap.get(dep)?.state === "ok");
 }
 
-function moduleStatusCellHtml(moduleId) {
-  return `<div class="module-status-split">
-    <div class="module-status-split__badge">${badgeHtml(moduleId)}</div>
-    <div class="module-status-split__detail">${statusDetailHtml(moduleId)}</div>
-  </div>`;
+function missingDeps(moduleId) {
+  const meta = registryModules.find((m) => m.id === moduleId);
+  if (!meta?.dependsOn?.length) return [];
+  return meta.dependsOn.filter((dep) => lastStatusMap.get(dep)?.state !== "ok");
 }
 
-function getModuleCheckboxes() {
-  return [...modulesTbody.querySelectorAll("input.js-mod-cb[type=checkbox]")];
-}
-
-function collectCheckboxById() {
-  const m = new Map();
-  for (const tr of modulesTbody.querySelectorAll("tr[data-module-id]")) {
-    const id = tr.dataset.moduleId;
-    const cb = tr.querySelector("input.js-mod-cb");
-    if (id && cb) m.set(id, cb);
-  }
-  return m;
-}
-
-function prereqMet(depId, statusMap, cbById) {
-  const st = statusMap.get(depId);
-  if (st?.state === "ok") return true;
-  const cb = cbById.get(depId);
-  return Boolean(cb?.checked);
-}
-
-function syncDependencyLocks() {
-  const cbById = collectCheckboxById();
-  for (const [id, meta] of moduleMetaById) {
-    const tr = modulesTbody.querySelector(`tr[data-module-id="${CSS.escape(id)}"]`);
-    if (!tr) continue;
-    const cb = tr.querySelector("input.js-mod-cb");
-    const hint = tr.querySelector(".js-deps-lock-hint");
-    if (!cb) continue;
-
-    const missing = (meta.dependsOn || []).filter(
-      (dep) => !prereqMet(dep, lastStatusMap, cbById)
-    );
-    if (missing.length) {
-      cb.checked = false;
-      cb.disabled = true;
-      tr.classList.add("module-row--locked");
-      if (hint) {
-        hint.textContent = `Locked: needs ${missing.join(", ")} ready or selected.`;
-        hint.hidden = false;
-      }
-    } else {
-      cb.disabled = false;
-      tr.classList.remove("module-row--locked");
-      if (hint) hint.hidden = true;
-    }
-  }
-}
-
-function syncMasterCheckbox() {
-  const all = getModuleCheckboxes();
-  const enabled = all.filter((c) => !c.disabled);
-  const checked = enabled.filter((c) => c.checked).length;
-  const n = enabled.length;
-  modSelectAll.checked = n > 0 && checked === n;
-  modSelectAll.indeterminate = checked > 0 && checked < n;
-  modSelectionCount.textContent = `${checked} of ${all.length} selected`;
-  moduleBulkBar.classList.toggle("bulk-toolbar--has-selection", checked > 0);
-}
-
-function applySelectAll(on) {
-  if (!on) {
-    getModuleCheckboxes().forEach((c) => {
-      c.checked = false;
-    });
-    syncDependencyLocks();
-    syncMasterCheckbox();
-    return;
-  }
-  for (let pass = 0; pass < 5; pass++) {
-    let anyNew = false;
-    for (const m of registryModules) {
-      const tr = modulesTbody.querySelector(`tr[data-module-id="${CSS.escape(m.id)}"]`);
-      const cb = tr?.querySelector("input.js-mod-cb");
-      if (cb && !cb.disabled) {
-        if (!cb.checked) anyNew = true;
-        cb.checked = true;
-      }
-    }
-    syncDependencyLocks();
-    if (!anyNew) break;
-  }
-  syncMasterCheckbox();
-}
-
-function renderModuleRows() {
-  if (!registryModules.length) {
-    modulesTbody.innerHTML =
-      '<tr class="pf-v5-c-table__tr"><td class="pf-v5-c-table__td module-row-td" colspan="2">No modules.</td></tr>';
-    return;
-  }
-
-  modulesTbody.innerHTML = registryModules
-    .map((m) => {
-      const id = escapeHtml(m.id);
-      return `<tr class="pf-v5-c-table__tr" data-module-id="${id}">
-        <td class="pf-v5-c-table__td module-row-td module-module-col">
-          <div class="module-row">
-            <label class="module-row__check pf-v5-c-check">
-              <input class="pf-v5-c-check__input js-mod-cb" type="checkbox" data-module-id="${id}" />
-            </label>
-            <div class="module-row__label-wrap">
-              <label class="module-row__label" for="mod-cb-${id}">${moduleCellHtml(m)}</label>
-            </div>
-          </div>
-        </td>
-        <td class="pf-v5-c-table__td module-row-td module-status-col js-status-cell" data-module-id="${id}">
-          ${moduleStatusCellHtml(m.id)}
-        </td>
-      </tr>`;
-    })
-    .join("");
-
-  modulesTbody.querySelectorAll("input.js-mod-cb").forEach((cb) => {
-    cb.id = `mod-cb-${cb.dataset.moduleId}`;
-    cb.addEventListener("change", () => {
-      syncDependencyLocks();
-      syncMasterCheckbox();
-    });
-  });
-
-  syncDependencyLocks();
-  syncMasterCheckbox();
-  refreshStatusCells();
-}
-
-function refreshStatusCells() {
-  modulesTbody.querySelectorAll(".js-status-cell").forEach((td) => {
-    const id = td.dataset.moduleId;
-    if (id) td.innerHTML = moduleStatusCellHtml(id);
-  });
-}
-
-function renderPreflightPanel() {
+function renderModulesPanel() {
   if (!statusWrap) return;
-  const modules = lastStatusModules;
+
+  const modules = lastStatusModules.length ? lastStatusModules : registryModules;
   if (!modules.length) {
-    statusWrap.innerHTML = '<p class="pf-v5-c-helper-text">No status yet. Click Refresh status.</p>';
-    btnPreflightExpandAll.disabled = true;
+    statusWrap.innerHTML =
+      '<p class="pf-v5-c-helper-text">No modules loaded.</p>';
+    btnModulesExpandAll.disabled = true;
     return;
   }
 
-  let ok = 0;
-  let needs = 0;
-  let err = 0;
-  for (const row of modules) {
-    if (row.state === "ok") ok++;
-    else if (row.state === "error") err++;
-    else needs++;
-  }
-
-  let bannerClass = "ok";
-  let bannerText = `All ${ok} module(s) ready.`;
-  if (err > 0) {
-    bannerClass = "bad";
-    bannerText = `${err} module(s) in error, ${needs} need run, ${ok} ready.`;
-  } else if (needs > 0) {
-    bannerClass = "partial";
-    bannerText = `${needs} module(s) need run, ${ok} ready.`;
-  }
-
-  const rows = modules
+  statusWrap.innerHTML = modules
     .map((row) => {
-      const mapped = uiStateFromOrchestrator(row.state);
-      const okCell =
-        row.state === "ok" ? "yes" : row.state === "error" ? "no" : "—";
-      const okCls =
-        row.state === "ok"
-          ? "state-ready"
-          : row.state === "error"
-            ? "state-blocked"
-            : "state-partial";
-      return `<tr>
-        <td>${escapeHtml(row.label || row.id)}</td>
-        <td class="${okCls}">${escapeHtml(okCell)}</td>
-        <td>${escapeHtml(row.message || "")}</td>
-      </tr>`;
-    })
-    .join("");
+      const id = row.id;
+      const st = lastStatusMap.get(id);
+      const msg = escapeHtml(st?.message || row.message || "—");
+      const missing = missingDeps(id);
+      const canRun = missing.length === 0;
+      const lockHint = missing.length
+        ? `<p class="module-deps-lock-hint">Requires ready: ${escapeHtml(missing.join(", "))}</p>`
+        : "";
+      const depsHint =
+        Array.isArray(row.dependsOn) && row.dependsOn.length
+          ? `<p class="module-deps-hint">Depends on: ${row.dependsOn.map(escapeHtml).join(", ")}</p>`
+          : "";
 
-  const blocks = modules
-    .map((row) => {
-      const mapped = uiStateFromOrchestrator(row.state);
-      return `<details class="pf-block">
-        <summary class="pf-block__summary">${escapeHtml(row.id)} · ${escapeHtml(mapped.label)}</summary>
+      return `<details class="pf-block" data-module-id="${escapeHtml(id)}">
+        <summary class="pf-block__summary module-block-summary">
+          <span class="module-block-summary__label">${moduleLineHtml(row)}</span>
+          <span class="module-block-summary__badge">${badgeHtml(id)}</span>
+        </summary>
         <div class="pf-block__body">
-          <p>${escapeHtml(row.message || "—")}</p>
+          <p class="module-block-message">${msg}</p>
+          ${depsHint}
+          ${lockHint}
+          <div class="demo-actions-row">
+            <button type="button" class="pf-v5-c-button pf-m-primary js-mod-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Run</button>
+            <button type="button" class="pf-v5-c-button pf-m-secondary js-mod-dry-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Dry run</button>
+          </div>
         </div>
       </details>`;
     })
     .join("");
 
-  statusWrap.innerHTML = `
-    <div class="pfBanner ${bannerClass}">${escapeHtml(bannerText)}</div>
-    <table class="status compact preflight-checks">
-      <thead><tr><th>Module</th><th>OK</th><th>Detail</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    ${blocks}
-  `;
+  btnModulesExpandAll.disabled = false;
 
-  btnPreflightExpandAll.disabled = false;
+  statusWrap.querySelectorAll(".js-mod-run").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      runModule(btn.dataset.moduleId, false).catch((err) => log(`\n${err.message}\n`));
+    });
+  });
+  statusWrap.querySelectorAll(".js-mod-dry-run").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      runModule(btn.dataset.moduleId, true).catch((err) => log(`\n${err.message}\n`));
+    });
+  });
 }
 
 function setupExpandAll() {
-  if (!btnPreflightExpandAll || !statusWrap) return;
+  if (!btnModulesExpandAll || !statusWrap) return;
   let expanded = false;
-  btnPreflightExpandAll.addEventListener("click", (e) => {
+  btnModulesExpandAll.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     expanded = !expanded;
     statusWrap.querySelectorAll("details.pf-block").forEach((d) => {
       d.open = expanded;
     });
-    btnPreflightExpandAll.setAttribute(
+    btnModulesExpandAll.setAttribute(
       "aria-label",
-      expanded ? "Collapse all sections" : "Expand all sections"
+      expanded ? "Collapse all modules" : "Expand all modules"
     );
   });
 }
 
-function selectedModuleIds() {
-  return getModuleCheckboxes()
-    .filter((c) => c.checked)
-    .map((c) => c.dataset.moduleId)
-    .filter(Boolean);
-}
-
-function topologicalRunOrder(ids) {
-  const wanted = new Set(ids);
-  const order = [];
-  for (const m of registryModules) {
-    if (wanted.has(m.id)) order.push(m.id);
-  }
-  return order;
-}
-
-async function fetchStatus(moduleIds = null) {
-  const qs =
-    moduleIds && moduleIds.length
-      ? `?modules=${encodeURIComponent(moduleIds.join(","))}`
-      : "";
-  const data = await api(`/api/status${qs}`);
-  if (!moduleIds) {
-    lastStatusModules = data;
-    lastStatusMap = statusMapFromModules(data);
-    return;
-  }
-  const map = statusMapFromModules(lastStatusModules);
-  for (const row of data) {
-    map.set(row.id, { state: row.state, message: row.message });
-  }
-  lastStatusModules = registryModules.map((m) => {
-    const hit = data.find((r) => r.id === m.id);
-    if (hit) return hit;
-    return map.get(m.id)
-      ? { ...m, state: map.get(m.id).state, message: map.get(m.id).message }
-      : { ...m, state: "needs-run", message: "not refreshed" };
-  });
-  lastStatusMap = statusMapFromModules(lastStatusModules);
+async function fetchStatus() {
+  const data = await api("/api/status");
+  lastStatusModules = data;
+  lastStatusMap = statusMapFromModules(data);
 }
 
 async function refreshAllStatus() {
@@ -464,63 +247,52 @@ async function refreshAllStatus() {
   setStatusIndicator("Refreshing…");
   try {
     await fetchStatus();
-    refreshStatusCells();
-    renderPreflightPanel();
-    setModuleRefreshFeedback("Status updated.");
+    renderModulesPanel();
   } finally {
     setBusy(false);
     setStatusIndicator("");
   }
 }
 
-async function refreshSelectedStatus() {
-  const ids = selectedModuleIds();
-  if (!ids.length) {
-    setModuleRefreshFeedback("Select at least one module.");
-    return;
-  }
-  setBusy(true);
-  setStatusIndicator("Refreshing…");
-  try {
-    await fetchStatus(ids);
-    refreshStatusCells();
-    renderPreflightPanel();
-    setModuleRefreshFeedback(`Refreshed ${ids.length} module(s).`);
-  } finally {
-    setBusy(false);
-    setStatusIndicator("");
-  }
+async function executeModuleRun(moduleId, dryRun) {
+  const result = await api(
+    `/api/run/${encodeURIComponent(moduleId)}?dry_run=${dryRun}`,
+    { method: "POST" }
+  );
+  if (result.stdout) log(`${result.stdout}\n`);
+  if (result.stderr) log(`${result.stderr}\n`);
+  log(`exit code: ${result.exit_code}\n`);
 }
 
-async function runModules(ids, dryRun = false) {
-  if (!ids.length) {
-    setModuleRefreshFeedback("Select at least one module.");
-    return;
-  }
-  const order = topologicalRunOrder(ids);
+async function runModule(moduleId, dryRun = false) {
+  if (!moduleId) return;
   const label = dryRun ? "Dry run" : "Run";
   setBusy(true);
-  clearLog();
-  logSection(`${label}: ${order.join(", ")}`);
+  logSection(`${label}: ${moduleId}`);
 
   try {
-    for (const moduleId of order) {
-      logSection(`${label} ${moduleId}`);
-      const result = await api(
-        `/api/run/${encodeURIComponent(moduleId)}?dry_run=${dryRun}`,
-        { method: "POST" }
-      );
-      if (result.stdout) log(`${result.stdout}\n`);
-      if (result.stderr) log(`${result.stderr}\n`);
-      log(`exit code: ${result.exit_code}\n`);
+    await executeModuleRun(moduleId, dryRun);
+    await fetchStatus();
+    renderModulesPanel();
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function runAllModules(dryRun = false) {
+  const ids = registryModules.map((m) => m.id);
+  const label = dryRun ? "Dry run all" : "Run full install";
+  setBusy(true);
+  clearLog();
+  logSection(label);
+
+  try {
+    for (const moduleId of ids) {
+      logSection(`${dryRun ? "Dry run" : "Run"}: ${moduleId}`);
+      await executeModuleRun(moduleId, dryRun);
     }
     await fetchStatus();
-    refreshStatusCells();
-    renderPreflightPanel();
-    getModuleCheckboxes().forEach((c) => {
-      c.checked = false;
-    });
-    syncMasterCheckbox();
+    renderModulesPanel();
   } finally {
     setBusy(false);
   }
@@ -661,29 +433,15 @@ async function saveCredentials() {
 
 async function loadRegistry() {
   registryModules = await api("/api/modules");
-  moduleMetaById = new Map(registryModules.map((m) => [m.id, m]));
-  renderModuleRows();
 }
 
 document.getElementById("btnCredSave").addEventListener("click", saveCredentials);
 document.getElementById("btnStatus").addEventListener("click", () => {
   refreshAllStatus().catch((e) => log(`\n${e.message}\n`));
 });
-document.getElementById("btnRefreshSelected").addEventListener("click", () => {
-  refreshSelectedStatus().catch((e) => setModuleRefreshFeedback(e.message));
-});
-document.getElementById("btnRun").addEventListener("click", () => {
-  runModules(selectedModuleIds(), false).catch((e) => log(`\n${e.message}\n`));
-});
-document.getElementById("btnDryRun").addEventListener("click", () => {
-  runModules(selectedModuleIds(), true).catch((e) => log(`\n${e.message}\n`));
-});
 document.getElementById("btnRunFull").addEventListener("click", () => {
-  const allIds = registryModules.map((m) => m.id);
-  applySelectAll(true);
-  runModules(allIds, false).catch((e) => log(`\n${e.message}\n`));
+  runAllModules(false).catch((e) => log(`\n${e.message}\n`));
 });
-modSelectAll.addEventListener("change", () => applySelectAll(modSelectAll.checked));
 
 setupExpandAll();
 
@@ -694,8 +452,9 @@ async function init() {
     await refreshAllStatus();
   } catch (err) {
     log(`\n${err.message}\n`);
-    modulesTbody.innerHTML =
-      '<tr class="pf-v5-c-table__tr"><td class="pf-v5-c-table__td module-row-td" colspan="2">Failed to load.</td></tr>';
+    if (statusWrap) {
+      statusWrap.innerHTML = `<p class="err">${escapeHtml(err.message)}</p>`;
+    }
   }
 }
 
