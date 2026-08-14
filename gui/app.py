@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -34,6 +35,8 @@ class OpenshiftAccessIn(BaseModel):
 class CentralConsoleIn(BaseModel):
     consoleUrl: str = ""
     apiToken: str = Field(default="", description="Blank keeps existing token")
+    apiTokenName: str = ""
+    apiTokenExpires: str = Field(default="", description="YYYY-MM-DD")
     adminUsername: str = ""
     adminPassword: str = Field(default="", description="Blank keeps existing password")
     authPreference: str = "apiToken"
@@ -61,6 +64,17 @@ class RunResult(BaseModel):
     stderr: str
 
 
+def subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    extra = [
+        str(GUI_DIR / ".venv" / "bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ]
+    env["PATH"] = ":".join([p for p in extra if p] + [env.get("PATH", "")])
+    return env
+
+
 def run_acs_setup(*args: str) -> subprocess.CompletedProcess[str]:
     if not ACS_SETUP.is_file():
         raise HTTPException(status_code=500, detail=f"missing orchestrator: {ACS_SETUP}")
@@ -70,6 +84,7 @@ def run_acs_setup(*args: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=False,
+        env=subprocess_env(),
     )
 
 
@@ -136,18 +151,30 @@ def get_credentials_path() -> dict[str, str]:
     return {"path": str(credentials_path(REPO_ROOT))}
 
 
-@app.post("/api/run/{module_id}", response_model=RunResult)
-def run_module(module_id: str, dry_run: bool = False) -> RunResult:
+@app.post("/api/run/{module_id}")
+def run_module(module_id: str, dry_run: bool = False) -> StreamingResponse:
     args = ["--run", "--module", module_id]
     if dry_run:
         args.append("--dry-run")
-    result = run_acs_setup(*args)
-    return RunResult(
-        ok=result.returncode == 0,
-        exit_code=result.returncode,
-        stdout=result.stdout,
-        stderr=result.stderr,
-    )
+
+    def stream_output():
+        proc = subprocess.Popen(
+            [str(ACS_SETUP), *args],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=subprocess_env(),
+        )
+        assert proc.stdout is not None
+        try:
+            yield from proc.stdout
+        finally:
+            proc.wait()
+        yield f"\n__EXIT__:{proc.returncode}\n"
+
+    return StreamingResponse(stream_output(), media_type="text/plain; charset=utf-8")
 
 
 app.mount("/static", StaticFiles(directory=GUI_DIR / "static"), name="static")

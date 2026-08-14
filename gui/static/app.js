@@ -26,6 +26,8 @@ const fields = {
   centralOcpPassword: document.getElementById("centralOcpPassword"),
   centralConsole: document.getElementById("centralConsole"),
   centralApiToken: document.getElementById("centralApiToken"),
+  centralApiTokenName: document.getElementById("centralApiTokenName"),
+  centralApiTokenExpires: document.getElementById("centralApiTokenExpires"),
   centralAdminUser: document.getElementById("centralAdminUser"),
   centralAdminPassword: document.getElementById("centralAdminPassword"),
   securedSameAsCentral: document.getElementById("securedSameAsCentral"),
@@ -33,13 +35,6 @@ const fields = {
   securedOcpConsole: document.getElementById("securedOcpConsole"),
   securedOcpUser: document.getElementById("securedOcpUser"),
   securedOcpPassword: document.getElementById("securedOcpPassword"),
-};
-
-const hints = {
-  centralOcpPw: document.getElementById("centralOcpPwHint"),
-  centralToken: document.getElementById("centralTokenHint"),
-  centralAdminPw: document.getElementById("centralAdminPwHint"),
-  securedOcpPw: document.getElementById("securedOcpPwHint"),
 };
 
 function escapeHtml(s) {
@@ -58,6 +53,12 @@ function log(line) {
 
 function logSection(title) {
   log(`\n── ${title} ${"─".repeat(Math.max(0, 48 - title.length))}\n`);
+}
+
+function parseStreamExitCode(line) {
+  if (!line.startsWith("__EXIT__:")) return null;
+  const code = Number(line.slice(9));
+  return Number.isFinite(code) ? code : 1;
 }
 
 function clearLog() {
@@ -150,25 +151,32 @@ function dependsOnHintHtml(m) {
   return `<div class="module-deps-hint">Requires: ${deps.map(escapeHtml).join(", ")}</div>`;
 }
 
-function moduleCellHtml(m) {
-  const label = String(m.label ?? "");
+function moduleLineHtml(m) {
+  const label = String(m.label ?? m.id ?? "");
   const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
   const parts = label.split(/\s+—\s+/);
-  let inner;
   if (parts.length >= 2) {
-    inner = `<span class="module-line">
+    return `<span class="module-line">
       <span class="module-line__idx">${idx}</span>
       <strong class="module-line__slug">${escapeHtml(parts[0].trim())}</strong>
       <span class="module-line__sep"> - </span>
       <span class="module-line__desc">${escapeHtml(parts.slice(1).join(" — ").trim())}</span>
     </span>`;
-  } else {
-    inner = `<span class="module-line">
-      <span class="module-line__idx">${idx}</span>
-      <strong class="module-line__slug">${escapeHtml(label.trim())}</strong>
-    </span>`;
   }
-  return `${inner}${dependsOnHintHtml(m)}<div class="js-deps-lock-hint module-deps-lock-hint" hidden></div>`;
+  return `<span class="module-line">
+    <span class="module-line__idx">${idx}</span>
+    <strong class="module-line__slug">${escapeHtml(label.trim())}</strong>
+  </span>`;
+}
+
+function moduleCellHtml(m) {
+  return `${moduleLineHtml(m)}${dependsOnHintHtml(m)}<div class="js-deps-lock-hint module-deps-lock-hint" hidden></div>`;
+}
+
+function missingDeps(moduleId) {
+  const meta = moduleMetaById.get(moduleId);
+  if (!meta?.dependsOn?.length) return [];
+  return meta.dependsOn.filter((dep) => lastStatusMap.get(dep)?.state !== "ok");
 }
 
 function badgeHtml(moduleId) {
@@ -330,75 +338,64 @@ function refreshStatusCells() {
   });
 }
 
-function renderPreflightPanel() {
+function renderStatusModulesPanel() {
   if (!statusWrap) return;
-  const modules = lastStatusModules;
+
+  const modules = lastStatusModules.length ? lastStatusModules : registryModules;
   if (!modules.length) {
-    statusWrap.innerHTML = '<p class="pf-v5-c-helper-text">No status yet. Click Refresh status.</p>';
+    statusWrap.innerHTML =
+      '<p class="pf-v5-c-helper-text">No status yet. Click Refresh status.</p>';
     btnPreflightExpandAll.disabled = true;
     return;
   }
 
-  let ok = 0;
-  let needs = 0;
-  let err = 0;
-  for (const row of modules) {
-    if (row.state === "ok") ok++;
-    else if (row.state === "error") err++;
-    else needs++;
-  }
-
-  let bannerClass = "ok";
-  let bannerText = `All ${ok} module(s) ready.`;
-  if (err > 0) {
-    bannerClass = "bad";
-    bannerText = `${err} module(s) in error, ${needs} need run, ${ok} ready.`;
-  } else if (needs > 0) {
-    bannerClass = "partial";
-    bannerText = `${needs} module(s) need run, ${ok} ready.`;
-  }
-
-  const rows = modules
+  statusWrap.innerHTML = modules
     .map((row) => {
-      const mapped = uiStateFromOrchestrator(row.state);
-      const okCell =
-        row.state === "ok" ? "yes" : row.state === "error" ? "no" : "—";
-      const okCls =
-        row.state === "ok"
-          ? "state-ready"
-          : row.state === "error"
-            ? "state-blocked"
-            : "state-partial";
-      return `<tr>
-        <td>${escapeHtml(row.label || row.id)}</td>
-        <td class="${okCls}">${escapeHtml(okCell)}</td>
-        <td>${escapeHtml(row.message || "")}</td>
-      </tr>`;
-    })
-    .join("");
+      const id = row.id;
+      const st = lastStatusMap.get(id);
+      const msg = escapeHtml(st?.message || row.message || "—");
+      const missing = missingDeps(id);
+      const canRun = missing.length === 0;
+      const lockHint = missing.length
+        ? `<p class="module-deps-lock-hint">Requires ready: ${escapeHtml(missing.join(", "))}</p>`
+        : "";
+      const depsHint =
+        Array.isArray(row.dependsOn) && row.dependsOn.length
+          ? `<p class="module-deps-hint">Depends on: ${row.dependsOn.map(escapeHtml).join(", ")}</p>`
+          : "";
 
-  const blocks = modules
-    .map((row) => {
-      const mapped = uiStateFromOrchestrator(row.state);
-      return `<details class="pf-block">
-        <summary class="pf-block__summary">${escapeHtml(row.id)} · ${escapeHtml(mapped.label)}</summary>
+      return `<details class="pf-block" data-module-id="${escapeHtml(id)}">
+        <summary class="pf-block__summary module-block-summary">
+          <span class="module-block-summary__label">${moduleLineHtml(row)}</span>
+          <span class="module-block-summary__badge">${badgeHtml(id)}</span>
+        </summary>
         <div class="pf-block__body">
-          <p>${escapeHtml(row.message || "—")}</p>
+          <p class="module-block-message">${msg}</p>
+          ${depsHint}
+          ${lockHint}
+          <div class="demo-actions-row">
+            <button type="button" class="pf-v5-c-button pf-m-primary js-mod-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Run</button>
+            <button type="button" class="pf-v5-c-button pf-m-secondary js-mod-dry-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Dry run</button>
+          </div>
         </div>
       </details>`;
     })
     .join("");
 
-  statusWrap.innerHTML = `
-    <div class="pfBanner ${bannerClass}">${escapeHtml(bannerText)}</div>
-    <table class="status compact preflight-checks">
-      <thead><tr><th>Module</th><th>OK</th><th>Detail</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    ${blocks}
-  `;
-
   btnPreflightExpandAll.disabled = false;
+
+  statusWrap.querySelectorAll(".js-mod-run").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      runModule(btn.dataset.moduleId, false).catch((err) => log(`\n${err.message}\n`));
+    });
+  });
+  statusWrap.querySelectorAll(".js-mod-dry-run").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      runModule(btn.dataset.moduleId, true).catch((err) => log(`\n${err.message}\n`));
+    });
+  });
 }
 
 function setupExpandAll() {
@@ -413,7 +410,7 @@ function setupExpandAll() {
     });
     btnPreflightExpandAll.setAttribute(
       "aria-label",
-      expanded ? "Collapse all sections" : "Expand all sections"
+      expanded ? "Collapse all modules" : "Expand all modules"
     );
   });
 }
@@ -465,7 +462,7 @@ async function refreshAllStatus() {
   try {
     await fetchStatus();
     refreshStatusCells();
-    renderPreflightPanel();
+    renderStatusModulesPanel();
     setModuleRefreshFeedback("Status updated.");
   } finally {
     setBusy(false);
@@ -484,11 +481,75 @@ async function refreshSelectedStatus() {
   try {
     await fetchStatus(ids);
     refreshStatusCells();
-    renderPreflightPanel();
+    renderStatusModulesPanel();
     setModuleRefreshFeedback(`Refreshed ${ids.length} module(s).`);
   } finally {
     setBusy(false);
     setStatusIndicator("");
+  }
+}
+
+async function executeModuleRun(moduleId, dryRun) {
+  const res = await fetch(
+    `/api/run/${encodeURIComponent(moduleId)}?dry_run=${dryRun}`,
+    { method: "POST" }
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || res.statusText);
+  }
+  if (!res.body) {
+    throw new Error("No response body from module run");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let exitCode = 1;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = pending.indexOf("\n")) !== -1) {
+      const line = pending.slice(0, idx);
+      pending = pending.slice(idx + 1);
+      const parsedExit = parseStreamExitCode(line);
+      if (parsedExit !== null) {
+        exitCode = parsedExit;
+      } else {
+        log(`${line}\n`);
+      }
+    }
+  }
+
+  if (pending) {
+    const parsedExit = parseStreamExitCode(pending);
+    if (parsedExit !== null) {
+      exitCode = parsedExit;
+    } else {
+      log(`${pending}\n`);
+    }
+  }
+
+  log(`exit code: ${exitCode}\n`);
+  return { ok: exitCode === 0, exit_code: exitCode };
+}
+
+async function runModule(moduleId, dryRun = false) {
+  if (!moduleId) return;
+  const label = dryRun ? "Dry run" : "Run";
+  setBusy(true);
+  logSection(`${label}: ${moduleId}`);
+
+  try {
+    await executeModuleRun(moduleId, dryRun);
+    await fetchStatus([moduleId]);
+    refreshStatusCells();
+    renderStatusModulesPanel();
+  } finally {
+    setBusy(false);
   }
 }
 
@@ -505,18 +566,14 @@ async function runModules(ids, dryRun = false) {
 
   try {
     for (const moduleId of order) {
-      logSection(`${label} ${moduleId}`);
-      const result = await api(
-        `/api/run/${encodeURIComponent(moduleId)}?dry_run=${dryRun}`,
-        { method: "POST" }
-      );
-      if (result.stdout) log(`${result.stdout}\n`);
-      if (result.stderr) log(`${result.stderr}\n`);
-      log(`exit code: ${result.exit_code}\n`);
+      if (order.length > 1) {
+        log(`\n[${moduleId}]\n`);
+      }
+      await executeModuleRun(moduleId, dryRun);
     }
     await fetchStatus();
     refreshStatusCells();
-    renderPreflightPanel();
+    renderStatusModulesPanel();
     getModuleCheckboxes().forEach((c) => {
       c.checked = false;
     });
@@ -526,14 +583,17 @@ async function runModules(ids, dryRun = false) {
   }
 }
 
-function secretHint(el, hasSecret, masked, label) {
-  if (!el) return;
-  if (hasSecret) {
-    el.textContent = `${label} saved (${masked}). Leave blank to keep.`;
-  } else if (label.includes("OCP")) {
-    el.textContent = "Optional — leave blank if you use oc login.";
-  } else {
-    el.textContent = `No ${label.toLowerCase()} saved yet.`;
+async function saveCredentials() {
+  setCredFeedback("");
+  try {
+    await api("/api/credentials", {
+      method: "POST",
+      body: JSON.stringify(buildCredentialsPayload()),
+    });
+    await loadCredentials();
+    setCredFeedback("Saved.");
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
   }
 }
 
@@ -565,7 +625,84 @@ function setSecuredSectionVisible(same) {
 
 fields.securedSameAsCentral.addEventListener("change", () => {
   setSecuredSectionVisible(fields.securedSameAsCentral.checked);
+  syncCredentialCopyButtons();
 });
+
+function copyIconHtml(name) {
+  return `<span class="material-symbols-outlined cred-copy-btn__icon" aria-hidden="true">${name}</span>`;
+}
+
+function createCopyButton(getText, label) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "cred-copy-btn";
+  btn.setAttribute("aria-label", `Copy ${label}`);
+  btn.innerHTML = copyIconHtml("content_copy");
+  btn.addEventListener("click", async () => {
+    const text = getText();
+    if (!text?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    btn.innerHTML = copyIconHtml("done");
+    btn.classList.add("cred-copy-btn--ok");
+    window.setTimeout(() => {
+      btn.innerHTML = copyIconHtml("content_copy");
+      btn.classList.remove("cred-copy-btn--ok");
+    }, 1200);
+  });
+  return btn;
+}
+
+function setupCredentialCopyButtons() {
+  const form = document.getElementById("credForm");
+  if (!form || form.dataset.copyWired === "1") return;
+  form.dataset.copyWired = "1";
+
+  form.querySelectorAll("input.pf-v5-c-form-control").forEach((input) => {
+    const wrap = document.createElement("div");
+    wrap.className = "cred-field-wrap";
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const label = input.labels?.[0]?.textContent?.trim() || "value";
+    wrap.appendChild(createCopyButton(() => input.value, label));
+    input.addEventListener("input", syncCredentialCopyButtons);
+  });
+
+  const pathLine = document.querySelector(".cred-path-line");
+  if (pathLine && credFilePath && !pathLine.querySelector(".cred-copy-btn")) {
+    pathLine.appendChild(
+      createCopyButton(() => credFilePath.textContent || "", "credentials file path")
+    );
+  }
+
+  syncCredentialCopyButtons();
+}
+
+function syncCredentialCopyButtons() {
+  const form = document.getElementById("credForm");
+  if (!form) return;
+  form.querySelectorAll(".cred-field-wrap").forEach((wrap) => {
+    const input = wrap.querySelector("input.pf-v5-c-form-control");
+    const btn = wrap.querySelector(".cred-copy-btn");
+    if (!input || !btn) return;
+    btn.disabled = input.disabled || !input.value.trim();
+  });
+  const pathBtn = document.querySelector(".cred-path-line .cred-copy-btn");
+  if (pathBtn && credFilePath) {
+    const path = credFilePath.textContent?.trim();
+    pathBtn.disabled = !path || path === "—";
+  }
+}
 
 function buildCredentialsPayload() {
   return {
@@ -578,6 +715,8 @@ function buildCredentialsPayload() {
       central: {
         consoleUrl: fields.centralConsole.value,
         apiToken: fields.centralApiToken.value,
+        apiTokenName: fields.centralApiTokenName.value,
+        apiTokenExpires: fields.centralApiTokenExpires.value,
         adminUsername: fields.centralAdminUser.value,
         adminPassword: fields.centralAdminPassword.value,
         authPreference: authPrefValue(),
@@ -601,30 +740,14 @@ async function loadCredentials() {
   const cc = data.centralCluster;
   fields.centralOcpConsole.value = cc.openshift.consoleUrl || "";
   fields.centralOcpUser.value = cc.openshift.adminUsername || "";
-  fields.centralOcpPassword.value = "";
-  secretHint(
-    hints.centralOcpPw,
-    cc.openshift.hasAdminPassword,
-    cc.openshift.adminPasswordMasked,
-    "OCP admin password"
-  );
+  fields.centralOcpPassword.value = cc.openshift.adminPassword || "";
 
   fields.centralConsole.value = cc.central.consoleUrl || "";
-  fields.centralApiToken.value = "";
-  secretHint(
-    hints.centralToken,
-    cc.central.hasApiToken,
-    cc.central.apiTokenMasked,
-    "API token"
-  );
+  fields.centralApiToken.value = cc.central.apiToken || "";
+  fields.centralApiTokenName.value = cc.central.apiTokenName || "";
+  fields.centralApiTokenExpires.value = cc.central.apiTokenExpires || "";
   fields.centralAdminUser.value = cc.central.adminUsername || "";
-  fields.centralAdminPassword.value = "";
-  secretHint(
-    hints.centralAdminPw,
-    cc.central.hasAdminPassword,
-    cc.central.adminPasswordMasked,
-    "Central admin password"
-  );
+  fields.centralAdminPassword.value = cc.central.adminPassword || "";
   setAuthPref(cc.central.authPreference);
 
   const sc = data.securedCluster;
@@ -632,31 +755,8 @@ async function loadCredentials() {
   setSecuredSectionVisible(fields.securedSameAsCentral.checked);
   fields.securedOcpConsole.value = sc.openshift.consoleUrl || "";
   fields.securedOcpUser.value = sc.openshift.adminUsername || "";
-  fields.securedOcpPassword.value = "";
-  secretHint(
-    hints.securedOcpPw,
-    sc.openshift.hasAdminPassword,
-    sc.openshift.adminPasswordMasked,
-    "OCP admin password"
-  );
-}
-
-async function saveCredentials() {
-  setCredFeedback("");
-  try {
-    await api("/api/credentials", {
-      method: "POST",
-      body: JSON.stringify(buildCredentialsPayload()),
-    });
-    fields.centralOcpPassword.value = "";
-    fields.centralApiToken.value = "";
-    fields.centralAdminPassword.value = "";
-    fields.securedOcpPassword.value = "";
-    await loadCredentials();
-    setCredFeedback("Saved.");
-  } catch (err) {
-    setCredFeedback(String(err.message || err), true);
-  }
+  fields.securedOcpPassword.value = sc.openshift.adminPassword || "";
+  syncCredentialCopyButtons();
 }
 
 async function loadRegistry() {
@@ -689,6 +789,7 @@ setupExpandAll();
 
 async function init() {
   try {
+    setupCredentialCopyButtons();
     await loadRegistry();
     await loadCredentials();
     await refreshAllStatus();
