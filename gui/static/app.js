@@ -140,9 +140,47 @@ function statusMapFromModules(modules) {
     map.set(row.id, {
       state: row.state || "",
       message: row.message || "",
+      sections: Array.isArray(row.sections) ? row.sections : [],
     });
   }
   return map;
+}
+
+function renderSectionsHtml(sections) {
+  if (!Array.isArray(sections) || !sections.length) return "";
+
+  let currentGroup = null;
+  let html = '<div class="status-sections">';
+
+  for (const item of sections) {
+    const group = item.group || "";
+    if (group && group !== currentGroup) {
+      currentGroup = group;
+      html += `<p class="status-sections__group">${escapeHtml(group)}</p>`;
+    }
+
+    const tagKey = item.tag || "";
+    const tagText = item.tagLabel || item.tag || "";
+    const tag = tagKey
+      ? `<span class="status-section-tag status-section-tag--${escapeHtml(tagKey)}">${escapeHtml(tagText)}</span>`
+      : "";
+    const summary = item.summary
+      ? `<span class="status-section-summary">${escapeHtml(item.summary)}</span>`
+      : "";
+    const body = escapeHtml(JSON.stringify(item.body ?? {}, null, 2));
+
+    html += `<details class="status-section-json pf-block">
+      <summary class="pf-block__summary status-section-json__summary">
+        ${tag}<span class="status-section-json__title">${escapeHtml(item.title || "Section")}</span>${summary}
+      </summary>
+      <div class="pf-block__body">
+        <pre class="status-section-json__pre">${body}</pre>
+      </div>
+    </details>`;
+  }
+
+  html += "</div>";
+  return html;
 }
 
 function dependsOnHintHtml(m) {
@@ -192,17 +230,8 @@ function badgeHtml(moduleId) {
   </span>`;
 }
 
-function statusDetailHtml(moduleId) {
-  const st = lastStatusMap.get(moduleId);
-  const msg = st?.message ? escapeHtml(st.message) : "—";
-  return `<div class="sc-overall">${msg}</div>`;
-}
-
 function moduleStatusCellHtml(moduleId) {
-  return `<div class="module-status-split">
-    <div class="module-status-split__badge">${badgeHtml(moduleId)}</div>
-    <div class="module-status-split__detail">${statusDetailHtml(moduleId)}</div>
-  </div>`;
+  return `<div class="module-status-split module-status-split--badge-only">${badgeHtml(moduleId)}</div>`;
 }
 
 function getModuleCheckboxes() {
@@ -354,6 +383,7 @@ function renderStatusModulesPanel() {
       const id = row.id;
       const st = lastStatusMap.get(id);
       const msg = escapeHtml(st?.message || row.message || "—");
+      const sectionsHtml = renderSectionsHtml(st?.sections || row.sections || []);
       const missing = missingDeps(id);
       const canRun = missing.length === 0;
       const lockHint = missing.length
@@ -371,6 +401,7 @@ function renderStatusModulesPanel() {
         </summary>
         <div class="pf-block__body">
           <p class="module-block-message">${msg}</p>
+          ${sectionsHtml}
           ${depsHint}
           ${lockHint}
           <div class="demo-actions-row">
@@ -405,7 +436,7 @@ function setupExpandAll() {
     e.preventDefault();
     e.stopPropagation();
     expanded = !expanded;
-    statusWrap.querySelectorAll("details.pf-block").forEach((d) => {
+    statusWrap.querySelectorAll("details.pf-block, details.status-section-json").forEach((d) => {
       d.open = expanded;
     });
     btnPreflightExpandAll.setAttribute(
@@ -444,13 +475,22 @@ async function fetchStatus(moduleIds = null) {
   }
   const map = statusMapFromModules(lastStatusModules);
   for (const row of data) {
-    map.set(row.id, { state: row.state, message: row.message });
+    map.set(row.id, {
+      state: row.state,
+      message: row.message,
+      sections: Array.isArray(row.sections) ? row.sections : [],
+    });
   }
   lastStatusModules = registryModules.map((m) => {
     const hit = data.find((r) => r.id === m.id);
     if (hit) return hit;
     return map.get(m.id)
-      ? { ...m, state: map.get(m.id).state, message: map.get(m.id).message }
+      ? {
+          ...m,
+          state: map.get(m.id).state,
+          message: map.get(m.id).message,
+          sections: map.get(m.id).sections,
+        }
       : { ...m, state: "needs-run", message: "not refreshed" };
   });
   lastStatusMap = statusMapFromModules(lastStatusModules);

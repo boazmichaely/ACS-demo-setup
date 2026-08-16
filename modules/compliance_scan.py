@@ -23,7 +23,7 @@ from lib.central import (  # noqa: E402
     load_lab_credentials,
 )
 
-SCAN_NAME = os.environ.get("ACS_COMPLIANCE_SCAN_NAME", "acs-demo-setup").strip() or "acs-demo-setup"
+SCAN_NAME = os.environ.get("ACS_COMPLIANCE_SCAN_NAME", "ocp4-cis-scan-schedule").strip() or "ocp4-cis-scan-schedule"
 PROFILES = ["ocp4-cis", "ocp4-cis-node"]
 PROFILE_POLL_SECONDS = 3
 PROFILE_SYNC_TIMEOUT_SECONDS = int(

@@ -38,7 +38,7 @@ Environment:
       scheduling policy without intent. Set to 1 only when you want this
       module to clear openshift.io/node-selector on openshift-compliance
       during install (less restrictive scheduling for that namespace).
-  ACS_COMPLIANCE_SCAN_NAME                Default acs-demo-setup
+  ACS_COMPLIANCE_SCAN_NAME                Default ocp4-cis-scan-schedule
   ACS_COMPLIANCE_CLUSTER_NAME             Secured cluster name in Central (auto from SecuredCluster CR)
   ACS_COMPLIANCE_PROFILE_SYNC_TIMEOUT_SECONDS  Default 600 (poll every 3s on --run)
 

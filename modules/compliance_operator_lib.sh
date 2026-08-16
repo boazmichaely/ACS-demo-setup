@@ -126,8 +126,22 @@ co_combine_status() {
   printf '%s\t%s\t%s\n' "$MODULE_ID" "$combined_st" "$combined_msg"
 }
 
+compliance_operator_emit_overview_sections() {
+  local overview py
+  overview="${COMPLIANCE_MODULE_ROOT}/scripts/compliance_co_overview.py"
+  py="$(co_python)"
+  if [[ ! -f "$overview" ]]; then
+    return 0
+  fi
+  if ! command -v oc >/dev/null 2>&1 || ! oc whoami >/dev/null 2>&1; then
+    return 0
+  fi
+  "$py" "$overview" --sections-json 2>/dev/null || true
+}
+
 compliance_operator_emit_status() {
   local op_line scan_line op_st
+  compliance_operator_emit_overview_sections
   if ! op_line="$(co_operator_status_line)"; then
     :
   fi

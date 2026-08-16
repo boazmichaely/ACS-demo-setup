@@ -424,15 +424,75 @@ body {
   padding-top: 0.125rem;
 }
 
-.module-status-split__detail {
+.module-status-split--badge-only {
+  justify-content: flex-start;
+}
+
+.module-status-split--badge-only .module-status-split__badge {
+  padding-top: 0;
+}
+
+.status-sections {
+  margin-top: var(--pf-v5-global--spacer--md);
+}
+
+.status-sections__group {
+  margin: var(--pf-v5-global--spacer--md) 0 var(--pf-v5-global--spacer--sm);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  font-weight: var(--pf-v5-global--FontWeight--semibold);
+  color: var(--pf-v5-global--Color--200);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+details.status-section-json {
+  margin: var(--pf-v5-global--spacer--xs) 0;
+}
+
+details.status-section-json > summary.status-section-json__summary {
+  font-size: var(--pf-v5-global--FontSize--md);
+  font-weight: var(--pf-v5-global--FontWeight--normal);
+  border-left-width: 2px;
+}
+
+.status-section-json__title {
   flex: 1;
   min-width: 0;
-  border-left: 1px solid var(--pf-v5-global--BorderColor--100);
-  padding-left: var(--pf-v5-global--spacer--sm);
+}
+
+.status-section-summary {
+  margin-left: auto;
   font-size: var(--pf-v5-global--FontSize--sm);
   color: var(--pf-v5-global--Color--200);
-  line-height: 1.4;
+  font-weight: var(--pf-v5-global--FontWeight--normal);
+}
+
+.status-section-tag {
+  flex: 0 0 auto;
+  font-size: var(--pf-v5-global--FontSize--xs);
+  font-weight: var(--pf-v5-global--FontWeight--semibold);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  background: var(--pf-v5-global--palette--black-200);
+  color: var(--pf-v5-global--Color--100);
+}
+
+.status-section-tag--acs,
+.status-section-tag--acs-derived {
+  background: var(--pf-v5-global--palette--gold-100);
+  color: var(--pf-v5-global--palette--gold-700);
+}
+
+.status-section-json__pre {
+  margin: 0;
+  padding: var(--pf-v5-global--spacer--sm);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre-wrap;
   word-break: break-word;
+  background: var(--pf-v5-global--palette--black-100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
 }
 
 /* Secured-cluster multi-level (--status securedCluster) */
