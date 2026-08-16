@@ -94,6 +94,12 @@ TAG_INFO: dict[str, dict[str, str]] = {
         "marker": "local",
         "legend": "On the cluster and not tied to RHACS (manual CO use or cluster defaults).",
     },
+    "example": {
+        "label": "[example]",
+        "summary": "Sample row only",
+        "marker": "example",
+        "legend": "Illustrative sample; capped list is not exhaustive.",
+    },
 }
 
 
@@ -339,6 +345,72 @@ def get_list(resource: str) -> list[dict[str, Any]]:
     return json.loads(raw).get("items") or []
 
 
+def count_compliance_resource(resource: str) -> int | None:
+    """Return item count, or None if the API resource type is not installed."""
+    raw = run_oc("get", resource, "-n", NS, "--no-headers")
+    if raw is None:
+        return None
+    return len(raw.splitlines()) if raw else 0
+
+
+def profile_catalog_counts() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for resource, label in {
+        "profiles.compliance.openshift.io": "profiles",
+        "rules.compliance.openshift.io": "rules",
+        "tailoredprofiles.compliance.openshift.io": "tailoredProfiles",
+    }.items():
+        counts[label] = count_compliance_resource(resource) or 0
+    return counts
+
+
+def pick_example_profile(*preferred: str) -> str | None:
+    names = sorted(
+        (item.get("metadata") or {}).get("name", "")
+        for item in get_list("profiles.compliance.openshift.io")
+        if (item.get("metadata") or {}).get("name")
+    )
+    for candidate in preferred:
+        if candidate in names:
+            return candidate
+    return names[0] if names else None
+
+
+def profile_catalog_about_body(example_profile: str | None) -> str:
+    profile = example_profile or "<profile-name>"
+    list_cmd = (
+        f"oc get profile.compliance -n {NS} -o json | jq -r "
+        "'[\"NAME\",\"BUNDLE\",\"TYPE\",\"RULES\",\"PRODUCT\"], "
+        "(.items[] | [.metadata.name, "
+        ".metadata.labels[\"compliance.openshift.io/profile-bundle\"] // \"-\", "
+        ".metadata.annotations[\"compliance.openshift.io/product-type\"] // \"-\", "
+        "(.rules | length | tostring), "
+        ".metadata.annotations[\"compliance.openshift.io/product\"] // \"-\"]) | @tsv' "
+        "| column -t -s $'\\t'"
+    )
+    rules_cmd = (
+        f"jq -s -r '(.[0].rules) as $want | [\"NAME\",\"SEVERITY\",\"TITLE\"], "
+        "(.[1].items[] | select(.metadata.name as $n | $want | index($n)) | "
+        "[.metadata.name, (.severity // \"-\"), (.title // \"-\")]) | @tsv' "
+        f"<(oc get profile.compliance {profile} -n {NS} -o json) "
+        f"<(oc get rule.compliance -n {NS} -o json) | column -t -s $'\\t'"
+    )
+    rule_detail_cmd = (
+        f"RULE=$(oc get profile.compliance {profile} -n {NS} -o json | jq -r '.rules[0]') && "
+        f"oc get rule.compliance \"$RULE\" -n {NS} -o json | "
+        "jq '{name: .metadata.name, title, severity: .severity, description}'"
+    )
+    return prose_body(
+        "ProfileBundle content as Compliance Operator CRs.",
+        "List all profiles:",
+        list_cmd,
+        f"Rules in profile {profile}:",
+        rules_cmd,
+        "One rule:",
+        rule_detail_cmd,
+    )
+
+
 def secured_cluster_name_from_oc() -> str | None:
     for namespace in ("stackrox", "rhacs-operator"):
         raw = run_oc("get", "securedcluster", "-n", namespace, "-o", "json")
@@ -438,11 +510,26 @@ def print_object_block(origin: str | None, data: dict[str, Any]) -> None:
     print()
 
 
+def format_tag_legend_prose(keys: tuple[str, ...] | None = None) -> str:
+    use_keys = keys or tuple(TAG_INFO.keys())
+    lines = ["Tags on rows in this group:"]
+    for key in use_keys:
+        info = TAG_INFO[key]
+        summary = info.get("summary") or ""
+        lines.append(f"  {info['label']} — {summary}")
+    return "\n".join(lines)
+
+
+def prose_body(*paragraphs: str) -> str:
+    return "\n\n".join(paragraph for paragraph in paragraphs if paragraph)
+
+
 def make_section(
     group: str,
     title: str,
     body: Any,
     *,
+    body_format: str = "prose",
     source: str | None = None,
     kind: str | None = None,
     api_type: str | None = None,
@@ -451,6 +538,8 @@ def make_section(
     summary: str | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {"group": group, "title": title, "body": body}
+    if body_format == "json":
+        row["bodyFormat"] = "json"
     if source:
         row["source"] = source
     if kind:
@@ -480,6 +569,7 @@ def make_co_section(
         group,
         f"{kind}/{name}",
         body,
+        body_format="json",
         source="compliance-operator",
         kind=kind,
         tag=tag,
@@ -498,6 +588,7 @@ def make_central_section(
         group,
         f"ComplianceScanConfiguration/{scan_name}",
         body,
+        body_format="json",
         source="rhacs-central",
         api_type="ComplianceScanConfiguration",
         tag="acs",
@@ -514,10 +605,399 @@ def deploy_summary(item: dict[str, Any]) -> str:
     return ""
 
 
+RESULT_EXAMPLE_CAP = 1
+
+ABOUT_SECTION_ORDER = {
+    "About workloads": 1,
+    "About CO configuration": 2,
+    "About profile catalog": 3,
+    "About RHACS scan setting": 4,
+    "About RHACS scan results": 5,
+    "About CO scan activity": 6,
+    "About CO scan results": 7,
+}
+
+
+TAG_SORT_ORDER = {"local": 0, "acs": 1, "acs-derived": 2, "example": 3}
+
+
+def truncate_text(value: str | None, limit: int = 400) -> str | None:
+    if not value:
+        return None
+    text = str(value)
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "..."
+
+
+def trim_compliance_check_result(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": item.get("kind"),
+        "apiVersion": item.get("apiVersion"),
+        "metadata": trim_metadata(item.get("metadata")),
+        "status": item.get("status"),
+        "severity": item.get("severity"),
+        "description": truncate_text(item.get("description")),
+        "instructions": truncate_text(item.get("instructions")),
+        "rationale": truncate_text(item.get("rationale")),
+    }
+
+
+def trim_compliance_remediation(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": item.get("kind"),
+        "apiVersion": item.get("apiVersion"),
+        "metadata": trim_metadata(item.get("metadata")),
+        "spec": item.get("spec"),
+        "status": item.get("status"),
+    }
+
+
+def trim_central_check_result(row: dict[str, Any]) -> dict[str, Any]:
+    result = row.get("result") or {}
+    labels = result.get("labels") or {}
+    return {
+        "source": "rhacs-central",
+        "apiType": "ComplianceCheckResult",
+        "clusterId": row.get("clusterId"),
+        "scanName": row.get("scanName"),
+        "checkName": result.get("checkName"),
+        "ruleName": result.get("ruleName"),
+        "status": result.get("status"),
+        "severity": labels.get("compliance.openshift.io/check-severity"),
+        "description": truncate_text(result.get("description")),
+        "instructions": truncate_text(result.get("instructions")),
+        "rationale": truncate_text(result.get("rationale")),
+    }
+
+
+def status_counts_for_checks(items: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        status = item.get("status") or "?"
+        counts[status] = counts.get(status, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def central_scan_check_results(base: str, token: str, scan_name: str) -> list[dict[str, Any]]:
+    sys.path.insert(0, str(ROOT))
+    from lib.central import central_request  # noqa: WPS433
+
+    code, body = central_request(base, token, "GET", f"/v2/compliance/scan/results/{scan_name}")
+    if code != 200:
+        return []
+    return body.get("scanResults") or []
+
+
+def append_example_sections(
+    sections: list[dict[str, Any]],
+    *,
+    group: str,
+    source: str,
+    kind: str,
+    title_prefix: str,
+    items: list[dict[str, Any]],
+    title_key,
+    body_fn,
+    summary_fn,
+) -> None:
+    for item in items[:RESULT_EXAMPLE_CAP]:
+        title_name = title_key(item)
+        sections.append(
+            make_section(
+                group,
+                f"{title_prefix}/{title_name}",
+                body_fn(item),
+                body_format="json",
+                source=source,
+                kind=kind,
+                tag="example",
+                summary=summary_fn(item),
+            )
+        )
+
+
+def append_co_scan_result_sections(
+    sections: list[dict[str, Any]],
+    *,
+    acs_schedule_names: set[str],
+) -> None:
+    group = "6. CO scan results"
+    check_items = get_list("compliancecheckresult")
+    remediation_items = get_list("complianceremediation")
+
+    by_scan: dict[str, list[dict[str, Any]]] = {}
+    for item in check_items:
+        labels = (item.get("metadata") or {}).get("labels") or {}
+        scan_name = labels.get("compliance.openshift.io/scan-name") or "unknown"
+        by_scan.setdefault(scan_name, []).append(item)
+
+    sections.append(
+        make_section(
+            group,
+            "About CO scan results",
+            prose_body(
+                "Per-check outcomes on the cluster as ComplianceCheckResult CRs. "
+                "ComplianceRemediation CRs hold optional fixes. Raw ARF files stay on scan PVCs.",
+                f"Up to {RESULT_EXAMPLE_CAP} sample checks per scan are tagged [example].",
+            ),
+            source="compliance-operator",
+            summary="ComplianceCheckResult and ComplianceRemediation",
+        )
+    )
+    sections.append(
+        make_section(
+            group,
+            "Counts",
+            {
+                "complianceCheckResults": len(check_items),
+                "complianceRemediations": len(remediation_items),
+                "byScanName": {name: len(rows) for name, rows in sorted(by_scan.items())},
+            },
+            body_format="json",
+            source="compliance-operator",
+            summary="Result CR totals",
+        )
+    )
+
+    for scan_name in sorted(by_scan):
+        rows = sorted(by_scan[scan_name], key=lambda row: (row.get("metadata") or {}).get("name", ""))
+        status_counts = status_counts_for_checks(rows)
+        suite = ((rows[0].get("metadata") or {}).get("labels") or {}).get("compliance.openshift.io/suite")
+        tag = "acs-derived" if suite in acs_schedule_names or scan_name in acs_schedule_names else "local"
+        sections.append(
+            make_section(
+                group,
+                f"ComplianceCheckResults/{scan_name}",
+                {
+                    "kind": "ComplianceCheckResult",
+                    "scanName": scan_name,
+                    "total": len(rows),
+                    "byStatus": status_counts,
+                    "examplesShown": min(RESULT_EXAMPLE_CAP, len(rows)),
+                },
+                body_format="json",
+                source="compliance-operator",
+                kind="ComplianceCheckResult",
+                tag=tag,
+                summary=" · ".join(
+                    x
+                    for x in (
+                        tag_summary(tag),
+                        f"{len(rows)} checks",
+                        ", ".join(f"{key}={value}" for key, value in status_counts.items()),
+                    )
+                    if x
+                ),
+            )
+        )
+        append_example_sections(
+            sections,
+            group=group,
+            source="compliance-operator",
+            kind="ComplianceCheckResult",
+            title_prefix="ComplianceCheckResult",
+            items=rows,
+            title_key=lambda row: (row.get("metadata") or {}).get("name", "?"),
+            body_fn=trim_compliance_check_result,
+            summary_fn=lambda row: " · ".join(x for x in (row.get("status"), row.get("severity")) if x),
+        )
+
+    if remediation_items:
+        rows = sorted(remediation_items, key=lambda row: (row.get("metadata") or {}).get("name", ""))
+        sections.append(
+            make_section(
+                group,
+                "ComplianceRemediations",
+                {
+                    "kind": "ComplianceRemediation",
+                    "total": len(rows),
+                    "examplesShown": min(RESULT_EXAMPLE_CAP, len(rows)),
+                },
+                body_format="json",
+                source="compliance-operator",
+                kind="ComplianceRemediation",
+                summary=f"{len(rows)} remediation CRs",
+            )
+        )
+        append_example_sections(
+            sections,
+            group=group,
+            source="compliance-operator",
+            kind="ComplianceRemediation",
+            title_prefix="ComplianceRemediation",
+            items=rows,
+            title_key=lambda row: (row.get("metadata") or {}).get("name", "?"),
+            body_fn=trim_compliance_remediation,
+            summary_fn=lambda row: (row.get("metadata") or {}).get("name", "?"),
+        )
+
+
+def append_central_scan_result_sections(
+    sections: list[dict[str, Any]],
+    *,
+    group: str,
+    base: str | None,
+    token: str | None,
+    central_configs: list[dict[str, Any]],
+) -> None:
+    sections.append(
+        make_section(
+            group,
+            "About RHACS scan results",
+            prose_body(
+                "RHACS Central rows synced from cluster check results "
+                "(GET /v2/compliance/scan/results/{scanName}).",
+                f"Up to {RESULT_EXAMPLE_CAP} sample checks per schedule are tagged [example].",
+            ),
+            source="rhacs-central",
+            api_type="ComplianceCheckResult",
+            summary="Central check-level results",
+        )
+    )
+    if not base or not token:
+        return
+
+    for cfg in sorted(central_configs, key=lambda row: row.get("scanName") or ""):
+        scan_name = cfg.get("scanName") or cfg.get("id") or "?"
+        rows = central_scan_check_results(base, token, scan_name)
+        if not rows:
+            continue
+        status_counts = status_counts_for_checks(
+            [{"status": (row.get("result") or {}).get("status")} for row in rows]
+        )
+        sections.append(
+            make_section(
+                group,
+                f"ScanResults/{scan_name}",
+                {
+                    "source": "rhacs-central",
+                    "apiType": "ComplianceCheckResult",
+                    "apiPath": f"/v2/compliance/scan/results/{scan_name}",
+                    "scanName": scan_name,
+                    "total": len(rows),
+                    "byStatus": status_counts,
+                    "examplesShown": min(RESULT_EXAMPLE_CAP, len(rows)),
+                },
+                body_format="json",
+                source="rhacs-central",
+                api_type="ComplianceCheckResult",
+                tag="acs",
+                summary=f"{len(rows)} checks · "
+                + ", ".join(f"{key}={value}" for key, value in status_counts.items()),
+            )
+        )
+        append_example_sections(
+            sections,
+            group=group,
+            source="rhacs-central",
+            kind="ComplianceCheckResult",
+            title_prefix="CentralCheckResult",
+            items=rows,
+            title_key=lambda row: (row.get("result") or {}).get("checkName") or "?",
+            body_fn=trim_central_check_result,
+            summary_fn=lambda row: " · ".join(
+                x
+                for x in (
+                    (row.get("result") or {}).get("status"),
+                    ((row.get("result") or {}).get("labels") or {}).get(
+                        "compliance.openshift.io/check-severity"
+                    ),
+                )
+                if x
+            ),
+        )
+
+
+def title_suffix(title: str, prefix: str) -> str | None:
+    if title.startswith(prefix):
+        return title[len(prefix) :]
+    return None
+
+
+def rhacs_central_sort_key(row: dict[str, Any]) -> tuple:
+    """Scan settings block, then scan results block (per-schedule summary + examples)."""
+    title = row.get("title") or ""
+    if title == "About RHACS scan setting":
+        return (0, "", 0, title)
+    scan_name = title_suffix(title, "ComplianceScanConfiguration/")
+    if scan_name is not None:
+        return (1, scan_name, 0, title)
+    if title == "About RHACS scan results":
+        return (2, "", 0, title)
+    scan_name = title_suffix(title, "ScanResults/")
+    if scan_name is not None:
+        return (3, scan_name, 0, title)
+    if title.startswith("CentralCheckResult/"):
+        body = row.get("body")
+        scan_name = body.get("scanName", "") if isinstance(body, dict) else ""
+        check_name = title_suffix(title, "CentralCheckResult/") or title
+        return (3, scan_name, 1, check_name)
+    return (9, title, 0, title)
+
+
+def co_scan_results_sort_key(row: dict[str, Any]) -> tuple:
+    """Per-scan summary + examples; remediations last."""
+    title = row.get("title") or ""
+    if title == "About CO scan results":
+        return (0, "", 0, title)
+    if title == "Counts":
+        return (1, "", 0, title)
+    scan_name = title_suffix(title, "ComplianceCheckResults/")
+    if scan_name is not None:
+        return (2, scan_name, 0, title)
+    if title.startswith("ComplianceCheckResult/"):
+        body = row.get("body")
+        labels = ((body or {}).get("metadata") or {}).get("labels") or {}
+        scan_name = labels.get("compliance.openshift.io/scan-name", "")
+        check_name = title_suffix(title, "ComplianceCheckResult/") or title
+        return (2, scan_name, 1, check_name)
+    if title == "ComplianceRemediations":
+        return (3, "", 0, title)
+    if title.startswith("ComplianceRemediation/"):
+        name = title_suffix(title, "ComplianceRemediation/") or title
+        return (3, "", 1, name)
+    return (9, title, 0, title)
+
+
+def sort_overview_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    group_order: list[str] = []
+    seen_groups: set[str] = set()
+    for row in sections:
+        group = row.get("group") or ""
+        if group not in seen_groups:
+            group_order.append(group)
+            seen_groups.add(group)
+
+    def row_key(row: dict[str, Any]) -> tuple:
+        title = row.get("title") or ""
+        group = row.get("group") or ""
+        if group == "4. RHACS Central":
+            return rhacs_central_sort_key(row)
+        if group == "6. CO scan results":
+            return co_scan_results_sort_key(row)
+        about_rank = ABOUT_SECTION_ORDER.get(title)
+        if about_rank is not None:
+            return (0, about_rank, title)
+        if title in {"Counts", "Cluster API"}:
+            return (0, 50, title)
+        tag_rank = TAG_SORT_ORDER.get(row.get("tag") or "", 9)
+        return (1, tag_rank, title)
+
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for row in sections:
+        by_group.setdefault(row.get("group") or "", []).append(row)
+
+    ordered: list[dict[str, Any]] = []
+    for group in group_order:
+        ordered.extend(sorted(by_group.get(group, []), key=row_key))
+    return ordered
+
+
 def build_overview_sections() -> list[dict[str, Any]]:
     sections: list[dict[str, Any]] = []
     if not run_oc("whoami"):
-        return [make_section("Cluster", "OpenShift", {"error": "oc not logged in"})]
+        return [make_section("Cluster", "OpenShift", "oc not logged in")]
 
     server = (run_oc("whoami", "--show-server") or "?").strip()
     sections.append(
@@ -525,6 +1005,7 @@ def build_overview_sections() -> list[dict[str, Any]]:
             "Context",
             "Cluster API",
             {"server": server, "namespace": NS, "time": datetime.now().astimezone().isoformat()},
+            body_format="json",
         )
     )
 
@@ -533,12 +1014,10 @@ def build_overview_sections() -> list[dict[str, Any]]:
         make_section(
             group_workloads,
             "About workloads",
-            {
-                "intro": (
-                    "Running operator machinery installed by OLM: Subscription, ClusterServiceVersion, "
-                    "and Deployments (controller plus profile-parser pods)."
-                )
-            },
+            prose_body(
+                "Running operator machinery installed by OLM: Subscription, ClusterServiceVersion, "
+                "and Deployments (controller plus profile-parser pods)."
+            ),
         )
     )
 
@@ -557,6 +1036,7 @@ def build_overview_sections() -> list[dict[str, Any]]:
                 group_workloads,
                 f"Subscription/{name}",
                 body,
+                body_format="json",
                 summary=(body.get("status") or {}).get("state"),
             )
         )
@@ -572,6 +1052,7 @@ def build_overview_sections() -> list[dict[str, Any]]:
                 group_workloads,
                 f"ClusterServiceVersion/{name}",
                 body,
+                body_format="json",
                 summary=(body.get("status") or {}).get("phase"),
             )
         )
@@ -588,6 +1069,7 @@ def build_overview_sections() -> list[dict[str, Any]]:
                 group_workloads,
                 f"Deployment/{name}",
                 trim_deployment(item, role=deployment_role(name)),
+                body_format="json",
                 summary=deploy_summary(item),
             )
         )
@@ -602,6 +1084,7 @@ def build_overview_sections() -> list[dict[str, Any]]:
                 group_workloads,
                 f"Deployment/{name}",
                 trim_deployment(item, role=deployment_role(name)),
+                body_format="json",
                 summary=deploy_summary(item),
             )
         )
@@ -611,16 +1094,12 @@ def build_overview_sections() -> list[dict[str, Any]]:
         make_section(
             group_config,
             "About CO configuration",
-            {
-                "source": "compliance-operator",
-                "intro": (
-                    "Compliance Operator CRs on the secured cluster (not RHACS Central DB). "
-                    "ScanSetting holds schedule/suite settings; ScanSettingBinding binds profiles. "
-                    "RHACS sensor creates dedicated pairs (not cluster default). "
-                    "Sensor-managed CRs are tagged [ACS]; other on-cluster config is [local]."
-                ),
-                "tagLegend": {key: TAG_LEGEND[key] for key in ("acs", "local")},
-            },
+            prose_body(
+                "Compliance Operator CRs on the secured cluster (not RHACS Central DB). "
+                "ScanSetting holds schedule/suite settings; ScanSettingBinding binds profiles. "
+                "RHACS sensor creates dedicated pairs (not the cluster default).",
+                format_tag_legend_prose(("acs", "local")),
+            ),
             source="compliance-operator",
             summary="ScanSetting and ScanSettingBinding CRs",
         )
@@ -666,21 +1145,24 @@ def build_overview_sections() -> list[dict[str, Any]]:
         )
 
     group_profiles = "3. Profile catalog"
-    counts: dict[str, int] = {}
-    for resource, label in {
-        "profiles.compliance.openshift.io": "profiles",
-        "rules.compliance.openshift.io": "rules",
-        "tailoredprofiles.compliance.openshift.io": "tailoredProfiles",
-        "benchmarks.compliance.openshift.io": "benchmarks",
-    }.items():
-        raw = run_oc("get", resource, "-n", NS, "--no-headers")
-        counts[label] = len(raw.splitlines()) if raw else 0
+    example_profile = pick_example_profile("ocp4-cis", "ocp4-cis-node", *sorted(acs_schedule_names))
+    sections.append(
+        make_section(
+            group_profiles,
+            "About profile catalog",
+            profile_catalog_about_body(example_profile),
+            source="compliance-operator",
+            summary="Profiles, rules, and oc/jq examples",
+        )
+    )
+    counts = profile_catalog_counts()
     sections.append(
         make_section(
             group_profiles,
             "Counts",
             counts,
-            summary="Profile, Rule, TailoredProfile, Benchmark CR totals",
+            body_format="json",
+            summary="Profile, Rule, and TailoredProfile CR totals",
         )
     )
 
@@ -696,24 +1178,25 @@ def build_overview_sections() -> list[dict[str, Any]]:
                 cfg for cfg in central_scan_configs(base, token) if config_targets_cluster(cfg, cluster_id)
             ]
 
+    central_about_paragraphs = [
+        "RHACS Central database objects (REST API, not Kubernetes CRs). "
+        "No kind field — type is ComplianceScanConfiguration; primary id is UUID, "
+        "display name is scanName. Sensor reconciles each config to on-cluster "
+        "ScanSetting + ScanSettingBinding CRs (group 2) with matching scanName.",
+        "API path: GET /v2/compliance/scan/configurations",
+    ]
+    if secured_name:
+        central_about_paragraphs.append(f"Secured cluster name: {secured_name}")
+    if cluster_id:
+        central_about_paragraphs.append(f"Central cluster id: {cluster_id}")
+    if central_err:
+        central_about_paragraphs.append(f"Central API note: {central_err}")
+
     sections.append(
         make_section(
             group_central,
-            "About RHACS Central",
-            {
-                "source": "rhacs-central",
-                "apiType": "ComplianceScanConfiguration",
-                "apiPath": "/v2/compliance/scan/configurations",
-                "intro": (
-                    "RHACS Central database objects (REST API, not Kubernetes CRs). "
-                    "No kind field — type is ComplianceScanConfiguration; primary id is UUID, "
-                    "display name is scanName. Sensor reconciles each config to on-cluster "
-                    "ScanSetting + ScanSettingBinding CRs (group 2) with matching scanName."
-                ),
-                "securedClusterName": secured_name,
-                "centralClusterId": cluster_id,
-                "centralError": central_err,
-            },
+            "About RHACS scan setting",
+            prose_body(*central_about_paragraphs),
             source="rhacs-central",
             api_type="ComplianceScanConfiguration",
             summary="Central scan schedules (DB, not CRs)",
@@ -734,22 +1217,33 @@ def build_overview_sections() -> list[dict[str, Any]]:
             )
         )
 
+    append_central_scan_result_sections(
+        sections,
+        group=group_central,
+        base=base,
+        token=token,
+        central_configs=central_configs,
+    )
+
     group_scan = "5. CO scan activity"
+    scan_about_names = ", ".join(sorted(acs_schedule_names)) or "none"
+    scan_about_cluster = (
+        f"On this cluster, suites and scans from RHACS schedules ({scan_about_names}) "
+        "are tagged CO child of RHACS — same text as the pill on each row below."
+        if scan_about_names != "none"
+        else "No RHACS-managed schedule names detected; rows would show local (not RHACS) if present."
+    )
     sections.append(
         make_section(
             group_scan,
             "About CO scan activity",
-            {
-                "source": "compliance-operator",
-                "intro": (
-                    "Compliance Operator CRs created when a ScanSettingBinding runs. "
-                    "ComplianceSuite orchestrates; ComplianceScan is per-profile execution. "
-                    "Linked to RHACS Central by matching scanName (group 4). "
-                    "CO children of an RHACS schedule are [ACS-derived]; other scans are [local]."
-                ),
-                "tagLegend": TAG_LEGEND,
-                "acsScheduleNames": sorted(acs_schedule_names),
-            },
+            prose_body(
+                "ComplianceSuite orchestrates a scan run; ComplianceScan is one profile "
+                "(or node role) within it. Both are Compliance Operator CRs, created by the "
+                "operator when it reconciles a ScanSettingBinding (the scan itself runs on "
+                "the schedule in the referenced ScanSetting).",
+                scan_about_cluster,
+            ),
             source="compliance-operator",
             summary="ComplianceSuite and ComplianceScan CRs",
         )
@@ -807,7 +1301,9 @@ def build_overview_sections() -> list[dict[str, Any]]:
             )
         )
 
-    return sections
+    append_co_scan_result_sections(sections, acs_schedule_names=acs_schedule_names)
+
+    return sort_overview_sections(sections)
 
 
 def emit_sections_json() -> None:
@@ -827,27 +1323,27 @@ def print_checklist() -> None:
     print("           ScanSetting, ScanSettingBinding")
     print()
     print("  Group 3  Profile catalog (content library; large, mostly static)")
-    print("           Profile, Rule, TailoredProfile, Benchmark CR counts")
+    print("           Profile, Rule, TailoredProfile CR counts")
     print()
     print("  Group 4  RHACS Central (DB objects via REST API, not CRs)")
-    print("           ComplianceScanConfiguration (GET /v2/compliance/scan/configurations)")
+    print("           ComplianceScanConfiguration + Central scan results")
     print()
     print("  Group 5  CO scan activity (appears when a schedule runs)")
     print("           ComplianceSuite, ComplianceScan")
     print()
+    print("  Group 6  CO scan results (per-check CRs; examples capped)")
+    print("           ComplianceCheckResult, ComplianceRemediation")
+    print()
     print("  Origin tags:")
     print("    [ACS]          RHACS sensor applied the CR on-cluster")
-    print("    [ACS-derived]  CO suite/scan spawned for an RHACS schedule")
+    print("    [ACS-derived]  CO suite/scan/check spawned for an RHACS schedule")
     print("    [local]        On-cluster, not RHACS-managed")
+    print("    [example]      Sample row only (list capped)")
     print()
     print("  Not listed here (usually too noisy or secondary for before/after compare):")
-    print("    ComplianceCheckResult   per-check outcomes (hundreds per scan)")
-    print("    ComplianceRemediation   auto-remediation objects")
     print("    Scan pods / *-rs Deployments   ephemeral scan workloads")
-    print("    Result ConfigMaps       raw ARF/XCCDF blobs")
+    print("    Result PVC raw ARF blobs       see ScanSetting rawResultStorage")
     print("    Individual Profile/Rule objects   use counts in group 3")
-    print()
-    print("  RHACS Central also holds aggregated compliance results (not on-cluster).")
     print()
 
 

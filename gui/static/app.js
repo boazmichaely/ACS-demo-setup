@@ -146,6 +146,47 @@ function statusMapFromModules(modules) {
   return map;
 }
 
+function bindSelectableSummaries(root) {
+  if (!root) return;
+  root.querySelectorAll("details > summary").forEach((summary) => {
+    let pointerDown = null;
+    summary.addEventListener("pointerdown", (e) => {
+      pointerDown = { x: e.clientX, y: e.clientY };
+    });
+    summary.addEventListener("click", (e) => {
+      const selected = window.getSelection()?.toString() ?? "";
+      const dragged =
+        pointerDown &&
+        (Math.abs(e.clientX - pointerDown.x) > 4 || Math.abs(e.clientY - pointerDown.y) > 4);
+      pointerDown = null;
+      if (selected.length > 0 || dragged) {
+        e.preventDefault();
+      }
+    });
+  });
+}
+
+function renderSectionBody(item) {
+  const format = item.bodyFormat || "prose";
+  const body = item.body ?? "";
+
+  if (format === "json") {
+    const text = typeof body === "string" ? body : JSON.stringify(body, null, 2);
+    return `<pre class="status-section-body status-section-body--json">${escapeHtml(text)}</pre>`;
+  }
+
+  const text = typeof body === "string" ? body : String(body ?? "");
+  const paragraphs = text
+    .split(/\n\n+/)
+    .filter(Boolean)
+    .map(
+      (paragraph) =>
+        `<p class="status-section-body__p">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`
+    )
+    .join("");
+  return `<div class="status-section-body status-section-body--prose">${paragraphs}</div>`;
+}
+
 function renderSectionsHtml(sections) {
   if (!Array.isArray(sections) || !sections.length) return "";
 
@@ -167,14 +208,14 @@ function renderSectionsHtml(sections) {
     const summary = item.summary
       ? `<span class="status-section-summary">${escapeHtml(item.summary)}</span>`
       : "";
-    const body = escapeHtml(JSON.stringify(item.body ?? {}, null, 2));
+    const body = renderSectionBody(item);
 
     html += `<details class="status-section-json pf-block">
       <summary class="pf-block__summary status-section-json__summary">
         ${tag}<span class="status-section-json__title">${escapeHtml(item.title || "Section")}</span>${summary}
       </summary>
       <div class="pf-block__body">
-        <pre class="status-section-json__pre">${body}</pre>
+        ${body}
       </div>
     </details>`;
   }
@@ -394,7 +435,7 @@ function renderStatusModulesPanel() {
           ? `<p class="module-deps-hint">Depends on: ${row.dependsOn.map(escapeHtml).join(", ")}</p>`
           : "";
 
-      return `<details class="pf-block" data-module-id="${escapeHtml(id)}">
+      return `<details class="pf-block" data-module-id="${escapeHtml(id)}" open>
         <summary class="pf-block__summary module-block-summary">
           <span class="module-block-summary__label">${moduleLineHtml(row)}</span>
           <span class="module-block-summary__badge">${badgeHtml(id)}</span>
@@ -414,6 +455,8 @@ function renderStatusModulesPanel() {
     .join("");
 
   btnPreflightExpandAll.disabled = false;
+
+  bindSelectableSummaries(statusWrap);
 
   statusWrap.querySelectorAll(".js-mod-run").forEach((btn) => {
     btn.addEventListener("click", (e) => {

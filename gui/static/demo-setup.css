@@ -31,7 +31,7 @@ details.cred-panel {
   border: none;
   border-left: 3px solid var(--pf-v5-global--primary-color--100);
   border-radius: var(--pf-v5-global--BorderRadius--sm) var(--pf-v5-global--BorderRadius--sm) 0 0;
-  user-select: none;
+  user-select: text;
 }
 
 .cred-panel__toggle::-webkit-details-marker {
@@ -483,6 +483,38 @@ details.status-section-json > summary.status-section-json__summary {
   color: var(--pf-v5-global--palette--gold-700);
 }
 
+.status-section-tag--example {
+  background: var(--pf-v5-global--palette--blue-100);
+  color: var(--pf-v5-global--palette--blue-700);
+}
+
+.status-section-body--json {
+  margin: 0;
+  padding: var(--pf-v5-global--spacer--sm);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--pf-v5-global--palette--black-100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+}
+
+.status-section-body--prose {
+  font-size: var(--pf-v5-global--FontSize--md);
+  line-height: 1.5;
+  color: var(--pf-v5-global--Color--100);
+}
+
+.status-section-body__p {
+  margin: 0 0 var(--pf-v5-global--spacer--sm);
+}
+
+.status-section-body__p:last-child {
+  margin-bottom: 0;
+}
+
+/* Legacy alias — keep if referenced elsewhere */
 .status-section-json__pre {
   margin: 0;
   padding: var(--pf-v5-global--spacer--sm);
@@ -832,7 +864,7 @@ details.status-panel {
   border: none;
   border-left: 3px solid var(--pf-v5-global--primary-color--100);
   border-radius: var(--pf-v5-global--BorderRadius--sm) var(--pf-v5-global--BorderRadius--sm) 0 0;
-  user-select: none;
+  user-select: text;
 }
 
 .status-panel__toggle::-webkit-details-marker {
@@ -925,6 +957,17 @@ details.pf-block {
   background: var(--pf-v5-global--BackgroundColor--100);
   box-shadow: 0 0.0625rem 0.125rem rgba(3, 3, 3, 0.08);
   overflow: hidden;
+}
+
+.status-section-json__title,
+.status-section-summary,
+.status-section-tag,
+.module-block-summary__label,
+.module-line,
+.status-sections__group {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 details.pf-block > summary.pf-block__summary {
