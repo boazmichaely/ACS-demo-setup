@@ -443,11 +443,20 @@ def make_section(
     title: str,
     body: Any,
     *,
+    source: str | None = None,
+    kind: str | None = None,
+    api_type: str | None = None,
     tag: str | None = None,
     tag_label: str | None = None,
     summary: str | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {"group": group, "title": title, "body": body}
+    if source:
+        row["source"] = source
+    if kind:
+        row["kind"] = kind
+    if api_type:
+        row["apiType"] = api_type
     if tag:
         row["tag"] = tag
         label = tag_label or TAG_INFO.get(tag, {}).get("label")
@@ -456,6 +465,44 @@ def make_section(
     if summary:
         row["summary"] = summary
     return row
+
+
+def make_co_section(
+    group: str,
+    kind: str,
+    name: str,
+    body: Any,
+    *,
+    tag: str | None = None,
+    summary: str | None = None,
+) -> dict[str, Any]:
+    return make_section(
+        group,
+        f"{kind}/{name}",
+        body,
+        source="compliance-operator",
+        kind=kind,
+        tag=tag,
+        summary=summary,
+    )
+
+
+def make_central_section(
+    group: str,
+    scan_name: str,
+    body: Any,
+    *,
+    summary: str | None = None,
+) -> dict[str, Any]:
+    return make_section(
+        group,
+        f"ComplianceScanConfiguration/{scan_name}",
+        body,
+        source="rhacs-central",
+        api_type="ComplianceScanConfiguration",
+        tag="acs",
+        summary=summary,
+    )
 
 
 def deploy_summary(item: dict[str, Any]) -> str:
@@ -559,19 +606,22 @@ def build_overview_sections() -> list[dict[str, Any]]:
             )
         )
 
-    group_config = "2. Configuration"
+    group_config = "2. CO configuration"
     sections.append(
         make_section(
             group_config,
-            "About configuration",
+            "About CO configuration",
             {
+                "source": "compliance-operator",
                 "intro": (
-                    "ScanSetting and ScanSettingBinding CRs define schedules and profile bindings. "
-                    "RHACS creates dedicated objects (not the cluster default ScanSetting). "
+                    "Compliance Operator CRs on the secured cluster (not RHACS Central DB). "
+                    "ScanSetting holds schedule/suite settings; ScanSettingBinding binds profiles. "
+                    "RHACS sensor creates dedicated pairs (not cluster default). "
                     "Sensor-managed CRs are tagged [ACS]; other on-cluster config is [local]."
                 ),
                 "tagLegend": {key: TAG_LEGEND[key] for key in ("acs", "local")},
             },
+            source="compliance-operator",
             summary="ScanSetting and ScanSettingBinding CRs",
         )
     )
@@ -589,9 +639,10 @@ def build_overview_sections() -> list[dict[str, Any]]:
         tag = "acs" if is_acs_sensor_managed(item) else "local"
         body = trim_scan_setting(item)
         sections.append(
-            make_section(
+            make_co_section(
                 group_config,
-                f"ScanSetting/{name}",
+                "ScanSetting",
+                name,
                 body,
                 tag=tag,
                 summary=tag_summary(tag)
@@ -604,9 +655,10 @@ def build_overview_sections() -> list[dict[str, Any]]:
         tag = "acs" if is_acs_sensor_managed(item) else "local"
         body = trim_scan_setting_binding(item)
         sections.append(
-            make_section(
+            make_co_section(
                 group_config,
-                f"ScanSettingBinding/{name}",
+                "ScanSettingBinding",
+                name,
                 body,
                 tag=tag,
                 summary=tag_summary(tag),
@@ -632,7 +684,7 @@ def build_overview_sections() -> list[dict[str, Any]]:
         )
     )
 
-    group_scan = "4. Scan activity"
+    group_central = "4. RHACS Central"
     secured_name = secured_cluster_name_from_oc()
     base, token, central_err = central_context()
     cluster_id: str | None = None
@@ -646,35 +698,62 @@ def build_overview_sections() -> list[dict[str, Any]]:
 
     sections.append(
         make_section(
-            group_scan,
-            "RHACS correlation",
+            group_central,
+            "About RHACS Central",
             {
+                "source": "rhacs-central",
+                "apiType": "ComplianceScanConfiguration",
+                "apiPath": "/v2/compliance/scan/configurations",
                 "intro": (
-                    "Compares Central scan configurations with on-cluster ComplianceSuite and "
-                    "ComplianceScan objects. RHACS sensor-managed CRs are [ACS]; CO suites/scans "
-                    "spawned by an RHACS schedule are [ACS-derived]; everything else is [local]."
+                    "RHACS Central database objects (REST API, not Kubernetes CRs). "
+                    "No kind field — type is ComplianceScanConfiguration; primary id is UUID, "
+                    "display name is scanName. Sensor reconciles each config to on-cluster "
+                    "ScanSetting + ScanSettingBinding CRs (group 2) with matching scanName."
                 ),
-                "tagLegend": TAG_LEGEND,
                 "securedClusterName": secured_name,
                 "centralClusterId": cluster_id,
                 "centralError": central_err,
             },
-            summary="Central vs on-cluster scan linkage",
+            source="rhacs-central",
+            api_type="ComplianceScanConfiguration",
+            summary="Central scan schedules (DB, not CRs)",
         )
     )
 
     for cfg in sorted(central_configs, key=lambda row: row.get("scanName") or ""):
-        name = cfg.get("scanName") or cfg.get("id") or "?"
+        scan_name = cfg.get("scanName") or cfg.get("id") or "?"
         body = trim_central_scan_config(cfg, cluster_id)
+        config_id = body.get("id") or "?"
+        profiles = ", ".join(body.get("profiles") or []) or "no profiles"
         sections.append(
-            make_section(
-                group_scan,
-                f"Central scan configuration {name}",
+            make_central_section(
+                group_central,
+                scan_name,
                 body,
-                tag="acs",
-                summary=", ".join(body.get("profiles") or []) or "Central schedule",
+                summary=f"id={config_id} · {profiles}",
             )
         )
+
+    group_scan = "5. CO scan activity"
+    sections.append(
+        make_section(
+            group_scan,
+            "About CO scan activity",
+            {
+                "source": "compliance-operator",
+                "intro": (
+                    "Compliance Operator CRs created when a ScanSettingBinding runs. "
+                    "ComplianceSuite orchestrates; ComplianceScan is per-profile execution. "
+                    "Linked to RHACS Central by matching scanName (group 4). "
+                    "CO children of an RHACS schedule are [ACS-derived]; other scans are [local]."
+                ),
+                "tagLegend": TAG_LEGEND,
+                "acsScheduleNames": sorted(acs_schedule_names),
+            },
+            source="compliance-operator",
+            summary="ComplianceSuite and ComplianceScan CRs",
+        )
+    )
 
     for item in sorted(get_list("compliancesuite"), key=lambda row: (row.get("metadata") or {}).get("name", "")):
         name = (item.get("metadata") or {}).get("name", "?")
@@ -687,9 +766,10 @@ def build_overview_sections() -> list[dict[str, Any]]:
         body = trim_compliance_suite(item)
         status = body.get("status") or {}
         sections.append(
-            make_section(
+            make_co_section(
                 group_scan,
-                f"ComplianceSuite/{name}",
+                "ComplianceSuite",
+                name,
                 body,
                 tag=tag,
                 summary=" · ".join(
@@ -709,9 +789,10 @@ def build_overview_sections() -> list[dict[str, Any]]:
         body = trim_compliance_scan(item)
         status = body.get("status") or {}
         sections.append(
-            make_section(
+            make_co_section(
                 group_scan,
-                f"ComplianceScan/{name}",
+                "ComplianceScan",
+                name,
                 body,
                 tag=tag,
                 summary=" · ".join(
@@ -742,14 +823,17 @@ def print_checklist() -> None:
     print("           Subscription, CSV, compliance-operator Deployment,")
     print("           *-pp profile-parser Deployments")
     print()
-    print("  Group 2  Configuration (schedules and bindings)")
+    print("  Group 2  CO configuration (Compliance Operator CRs on cluster)")
     print("           ScanSetting, ScanSettingBinding")
     print()
     print("  Group 3  Profile catalog (content library; large, mostly static)")
     print("           Profile, Rule, TailoredProfile, Benchmark CR counts")
     print()
-    print("  Group 4  Scan activity (appears when a schedule runs)")
-    print("           Central scan configuration, ComplianceSuite, ComplianceScan")
+    print("  Group 4  RHACS Central (DB objects via REST API, not CRs)")
+    print("           ComplianceScanConfiguration (GET /v2/compliance/scan/configurations)")
+    print()
+    print("  Group 5  CO scan activity (appears when a schedule runs)")
+    print("           ComplianceSuite, ComplianceScan")
     print()
     print("  Origin tags:")
     print("    [ACS]          RHACS sensor applied the CR on-cluster")
@@ -769,8 +853,12 @@ def print_checklist() -> None:
 
 def trim_central_scan_config(cfg: dict[str, Any], cluster_id: str | None) -> dict[str, Any]:
     scan_cfg = cfg.get("scanConfig") or {}
+    config_id = cfg.get("id")
     out: dict[str, Any] = {
-        "id": cfg.get("id"),
+        "source": "rhacs-central",
+        "apiType": "ComplianceScanConfiguration",
+        "apiPath": f"/v2/compliance/scan/configurations/{config_id}" if config_id else None,
+        "id": config_id,
         "scanName": cfg.get("scanName"),
         "profiles": scan_cfg.get("profiles") or [],
         "oneTimeScan": scan_cfg.get("oneTimeScan"),
