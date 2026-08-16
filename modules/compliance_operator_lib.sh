@@ -244,8 +244,15 @@ metadata:
     openshift.io/cluster-monitoring: "true"
 EOF
 
+  # OpenShift may stamp openshift.io/node-selector on new namespaces when the
+  # cluster defines a default project node selector. Compliance Operator pods
+  # do not require a dedicated node pool; on restrictive clusters the operator
+  # or profile-parser workloads can sit Pending even after CSV Succeeded.
+  # Default: do not touch namespace scheduling (respect cluster policy).
+  # ACS_COMPLIANCE_PATCH_NODE_SELECTOR=1: clear the annotation so CO workloads
+  # are not pinned by that inherited selector (broader scheduling in this NS).
   if [[ "${ACS_COMPLIANCE_PATCH_NODE_SELECTOR:-}" == "1" ]]; then
-    echo "Annotate namespace ${ns} (clear default node selector)"
+    echo "Annotate namespace ${ns} (clear openshift.io/node-selector for broader scheduling)"
     oc annotate namespace "${ns}" openshift.io/node-selector="" --overwrite 2>/dev/null \
       || echo "  (annotate openshift.io/node-selector skipped)"
   fi

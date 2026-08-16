@@ -27,7 +27,17 @@ Environment:
   COMPLIANCE_OPERATOR_CHANNEL             Default stable
   COMPLIANCE_CSV_TIMEOUT_SECONDS          Default 600
   COMPLIANCE_ROLLOUT_TIMEOUT_SECONDS      Default 240
-  ACS_COMPLIANCE_PATCH_NODE_SELECTOR      Set to 1 to clear namespace node selector
+  ACS_COMPLIANCE_PATCH_NODE_SELECTOR
+      OpenShift clusters may apply a default project node selector to new
+      namespaces via the openshift.io/node-selector annotation. That limits
+      which nodes pods in openshift-compliance may use. The Compliance
+      Operator install does not need a special node pool on most labs, but
+      on clusters with a restrictive default the operator or profile-parser
+      pods can remain Pending while the CSV still reports Succeeded.
+      We leave the namespace alone by default so we do not override cluster
+      scheduling policy without intent. Set to 1 only when you want this
+      module to clear openshift.io/node-selector on openshift-compliance
+      during install (less restrictive scheduling for that namespace).
   ACS_COMPLIANCE_SCAN_NAME                Default acs-demo-setup
   ACS_COMPLIANCE_CLUSTER_NAME             Secured cluster name in Central (auto from SecuredCluster CR)
   ACS_COMPLIANCE_PROFILE_SYNC_TIMEOUT_SECONDS  Default 600 (poll every 3s on --run)
