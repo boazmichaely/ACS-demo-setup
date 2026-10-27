@@ -22,7 +22,10 @@ Equivalent: `./gui/serve.sh`. Default http://127.0.0.1:8765; if busy, the next f
 | GET | `/api/health` | Server up |
 | GET | `/api/modules` | Module registry |
 | GET | `/api/status` | Orchestrator `--status --json` |
-| GET/POST | `/api/credentials` | Read/save `lab-credentials.json` |
+| GET/POST | `/api/credentials` | Read/save `lab-credentials.json` (v2: `activeLabId` + `labs[]`) |
+| POST | `/api/credentials/active-lab` | Set `activeLabId` (`{ "labId": "…" }`); writes a `lab-switch` disk-log marker |
+
+Lab switch updates which Central/OpenShift credentials modules read. OpenShift access for modules uses **per-lab kubeconfigs** derived from `lab-credentials.json`. Troubleshoot with `./scripts/acs-setup.sh --oc-status` / `--oc-login` (see repo [README](../README.md)). The interactive `~/.kube/config` is not the source of truth.
 | GET | `/api/log` | Today's tee'd run log text (`logs/gui-YYYY-MM-DD.log`) |
 | POST | `/api/log/page-load` | Append a `page-load` timestamp divider (hard refresh / load) |
 | POST | `/api/run/{id}?dry_run=true` | Orchestrator `--run` (streamed to the browser and tee'd to today's log) |

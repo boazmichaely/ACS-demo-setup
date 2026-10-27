@@ -25,14 +25,14 @@ Implementation target: **PatternFly v5** + local layout CSS. The current custom-
 |----|-------------|
 | G-LAY-1 | **Wide main column:** header and content use `max-width: min(1600px, 98vw)`, centered. |
 | G-LAY-2 | Structure: `pf-v5-c-page` → main → **header** (title only) → **demo pad** (stacked sections). |
-| G-LAY-3 | Vertical order (top to bottom): **Lab credentials** → **Modules** card → **Status** card → **Log** card. |
+| G-LAY-3 | Vertical order (top to bottom): **Active lab** strip → **Lab credentials** → **Modules** card → **Status** card → **Log** card. |
 | G-LAY-4 | Section titles use `pf-v5-c-card__title-text` — xl, bold. Card headers: title left, actions right, wrap on narrow viewports. |
 
 ---
 
-## 3. Central credentials panel
+## 3. Lab credentials (multi-lab)
 
-Outer collapsible **"Lab credentials"** (`cred-panel`), **collapsed by default**. Inner layout: two **fieldset** blocks (Central cluster, Secured cluster). See `config/lab-credentials.schema.json` for the persisted JSON shape.
+Always-visible **Active lab** strip above a collapsible **"Lab credentials"** panel (`cred-panel`, **collapsed by default**). Persisted shape is schema **v2**: `activeLabId` + `labs[]`, each lab with `centralCluster`, `securedClusters[]`, and `activeSecuredClusterId`. See `config/lab-credentials.schema.json`. Modules always see a flattened view of the **active** lab / active secured cluster.
 
 | ID | Requirement |
 |----|-------------|
@@ -40,32 +40,33 @@ Outer collapsible **"Lab credentials"** (`cred-panel`), **collapsed by default**
 | G-CRED-2 | Toggle: left **3px primary accent**, chevron, title **"Lab credentials"**. |
 | G-CRED-3 | Show **file path** (`lab-credentials.json` or `ACS_LAB_CREDENTIALS_FILE`). |
 | G-CRED-4 | **Save** + inline feedback (`Saved` / error), `aria-live="polite"`. |
-| G-CRED-5 | Blank password or API token on save **keeps** the existing value; GET never returns raw secrets (masked hints only). |
-| G-CRED-6 | Checkbox **Skip TLS verify for Central (lab only)** maps to `insecureSkipTlsVerify` in `lab-credentials.json`. |
+| G-CRED-5 | Blank password or API token on save **keeps** the existing value. |
+| G-CRED-6 | Checkbox **Skip TLS verify for Central (lab only)** maps to per-lab `insecureSkipTlsVerify`. |
+| G-CRED-7 | **Active lab strip**: display name + Central host; `<select>` changes **active lab only** (modules). Persists the lab being edited first; disk-log `lab-switch`. Does **not** change the credentials form. |
+| G-CRED-8 | Compact toolbar: **Edit** select, inline **Name**, **Add** / **Use as active** / **Delete**, **Skip TLS**. Delete confirms; disabled for the active lab and when only one lab remains. Add does not auto-activate. |
 
-### 3.1 Central cluster fieldset
+### 3.1 Central (collapsed by default)
 
-| Block | Fields | UX |
-|-------|--------|-----|
-| **OpenShift** | Console URL, admin username, admin password | Subsection title "OpenShift". Hint: admin password **optional** if the user uses `oc login`. |
-| **RHACS Central** | Console URL, API token (plain text), admin username, admin password | Subsection title "RHACS Central". Radio: **Prefer API token** vs **Prefer admin password** when both are set. |
+Folded `<details>`: summary shows host · token set/no token. Expanded: OpenShift | RHACS Central side-by-side (`min-width: 900px`), including auth preference when both token and password are set.
 
-Short hint under fieldset legend: *Where RHACS Central runs (management cluster).*
+### 3.2 Secured clusters
 
-### 3.2 Secured cluster fieldset
+Folded list (open by default). Rows are OpenShift logins for sensor control planes under this Central - **not** a module target (no Active radio).
 
 | Control | Behavior |
 |---------|----------|
-| **Same OpenShift cluster as Central** | Checkbox, **checked by default**. When checked, Secured OpenShift fields are hidden/disabled. |
-| **OpenShift** (when not same) | Console URL, admin username, admin password — same optional admin semantics as Central cluster OCP block. |
+| **Row** | Collapsed by default: name, Same as Central / Remote badge, host hint, Remove. |
+| **Same as Central** | When checked, no separate OCP fields (uses Central OpenShift). |
+| **Remote OCP** | Name (inline), console URL, user, password. |
+| **Add / Remove** | Add inserts a remote SC (expanded); cannot remove the last row. |
 
-Short hint: *Cluster where the sensor runs, when different from Central.*
+Module `oc` prefers a same-as-Central SC, else the first SC (`lib/lab_doc.preferred_secured_cluster`).
 
 ### 3.3 Layout notes
 
-- Full-width credentials block above the Modules card (not a narrow sidebar).
+- Vertical stack: Active lab strip → Lab credentials panel → Modules → Status → Log.
+- Full-width credentials block (not a narrow sidebar).
 - Use paired username/password on one row at `min-width: 640px`.
-- When PatternFly is ported, map fieldsets to `pf-v5-c-form` / `pf-v5-c-card` per §1.
 
 ---
 

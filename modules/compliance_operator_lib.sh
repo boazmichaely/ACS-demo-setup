@@ -35,27 +35,38 @@ co_python() {
   fi
 }
 
-# Ensure oc works; uses lab-credentials OpenShift user/password when needed.
-# Prints error to stdout as "error\tmessage" style fragment for status helpers.
+# Ensure oc talks to the **active lab** via a per-lab kubeconfig.
+# Source of truth: lab-credentials.json (tool). ~/.kube/config is ignored for modules.
+# Exports KUBECONFIG for subsequent oc calls in this shell.
+# On failure prints a message to stdout (callers use it in status lines).
 co_ensure_oc() {
-  local py err
+  local py kc err errf
   if ! command -v oc >/dev/null 2>&1; then
     printf 'oc not on PATH\n'
     return 1
   fi
+  if [[ -z "${COMPLIANCE_MODULE_ROOT:-}" ]]; then
+    printf 'COMPLIANCE_MODULE_ROOT unset\n'
+    return 1
+  fi
   py="$(co_python)"
-  err="$("$py" -c "
-import sys
-sys.path.insert(0, r'${COMPLIANCE_MODULE_ROOT}')
-from lib.openshift import ensure_oc_message
-msg = ensure_oc_message()
-if msg:
-    print(msg)
-    sys.exit(1)
-" 2>&1)" || {
+  errf="$(mktemp)"
+  # stdout: kubeconfig path only; stderr: diagnostics
+  if ! kc="$(
+    cd "${COMPLIANCE_MODULE_ROOT}" || exit 1
+    "$py" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+  )"; then
+    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+    rm -f "${errf}"
     printf '%s\n' "${err:-OpenShift access failed}"
     return 1
-  }
+  fi
+  rm -f "${errf}"
+  if [[ -z "${kc}" || ! -f "${kc}" ]]; then
+    printf 'ensure_oc did not return a kubeconfig path\n'
+    return 1
+  fi
+  export KUBECONFIG="${kc}"
   return 0
 }
 

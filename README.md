@@ -22,7 +22,7 @@ Repeatable automation to **prepare a RHACS demo lab** after Central and a secure
 
 **Lab prerequisites:** OpenShift with `oc`, RHACS Operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
 
-**Secrets:** gitignored `lab-credentials.json` at the repo root. Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json). Override path with `ACS_LAB_CREDENTIALS_FILE`. Edit via the GUI **Lab credentials** panel or by hand.
+**Secrets:** gitignored `lab-credentials.json` at the repo root (schema v2: multi-lab + multi secured cluster). Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json). Override path with `ACS_LAB_CREDENTIALS_FILE`. Edit via the GUI **Active lab** strip / **Lab credentials** panel or by hand.
 
 ## Run the GUI
 
@@ -41,6 +41,17 @@ Opens on http://127.0.0.1:8765 by default. If that port is busy, the next free p
 ./scripts/acs-setup.sh --status --json
 ./scripts/acs-setup.sh --run --module registries
 ```
+
+### OpenShift kubeconfigs (per active lab)
+
+**Source of truth:** `lab-credentials.json`. Modules use a derived file under `.cache/kubeconfigs/<lab-id>.kubeconfig`, not your interactive `~/.kube/config`.
+
+| Need | Command |
+|------|---------|
+| Is oc ready for the active lab? | `./scripts/acs-setup.sh --oc-status` |
+| Create/refresh that kubeconfig | `./scripts/acs-setup.sh --oc-login` (add `--force` to redo login) |
+
+After a lab switch, if modules still look wrong: `--oc-status`, then `--oc-login --force` if needed. Empty OpenShift fields (e.g. ACSCS) correctly refuse leftover sessions from another lab.
 
 ## Status
 

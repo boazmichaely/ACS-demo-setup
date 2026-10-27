@@ -55,15 +55,17 @@ Not in scope: unattended multi-tenant provisioning, production installs, or teac
 
 Documented in an example env file (no real values in git). Primary store: gitignored **`lab-credentials.json`** at repo root (schema: `config/lab-credentials.schema.json`, example: `config/lab-credentials.example.json`). Override path: `ACS_LAB_CREDENTIALS_FILE`.
 
+Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster credentials, one or more `securedClusters`, and `activeSecuredClusterId`. The GUI and modules use the **active lab** and its **active secured cluster**. Helpers in `lib/lab_doc.py` migrate older shapes and flatten the active lab for modules (`centralCluster` + `securedCluster`).
+
 | Area | Fields | Notes |
 |------|--------|--------|
+| **Document** | `activeLabId`, `labs[]` | Switch active lab in the GUI strip; disk log records `lab-switch` / `page-load` with a short lab blurb |
+| **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password | OCP admin fields optional when the user relies on `oc login` |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **TLS (Central)** | `insecureSkipTlsVerify` | Lab-only skip of Central HTTPS cert verify; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
-| **Secured cluster** | `sameAsCentralCluster` (boolean) | Default `true` when Central and sensor share one cluster |
-| **Secured cluster → OpenShift** (when not same) | console URL, admin username, admin password | Same optional OCP admin semantics |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true`; modules use `activeSecuredClusterId` only |
 
-Legacy `central-credentials.json` (`endpoint` + `token`) is read once and migrated to the v1 shape on load.
+Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
 | Variable | Used by | Meaning |
 |----------|---------|---------|
@@ -134,7 +136,7 @@ Legacy `central-credentials.json` (`endpoint` + `token`) is read once and migrat
 | R-MOD-6 | **Entrypoint** implements the contract above. **Implementation:** prefer bash + jq for thin glue (`oc`, `curl`, file I/O). Use **Python 3** when it clearly reduces risk or complexity (structured Central API calls, non-trivial JSON transforms, validation). Avoid unmaintainable shell; avoid Python where a few lines of bash suffice |
 | R-MOD-7 | Module entrypoints are callable standalone without the orchestrator |
 | R-MOD-8 | **`--dry-run` on `--run`:** every module supports it. **Verify/read-only modules:** print what would be checked and with which inputs — no mutations. **Mutating modules:** print what would be applied/changed without applying. Exit `0`; use stderr/stdout for the plan |
-| R-MOD-9 | Modules that call **Central** must use **`lib/central.py`** (auth, TLS, file-first precedence). Modules that need **`oc`** must use **`lib/openshift.py`** (`ensure_oc` from saved OpenShift user/password when the current context is unusable). Do not reimplement credential loading or env override rules in module code |
+| R-MOD-9 | Modules that call **Central** must use **`lib/central.py`** (auth, TLS, file-first precedence). Modules that need **`oc`** must use **`lib/openshift.py`**: **`lab-credentials.json` is the source of truth**; `ensure_oc` maintains a **per-lab kubeconfig** under `.cache/kubeconfigs/` and must not rely on the user’s interactive `~/.kube/config`. Do not reimplement credential loading or env override rules in module code |
 
 ### 5.4 Aggregated status format
 
@@ -399,7 +401,7 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 
 | # | Question | Decision |
 |---|----------|----------|
-| D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json`**. ACS Central and OpenShift are independent blocks. Central: console URL, API token and/or admin password, `authPreference` when both set; `insecureSkipTlsVerify` for lab TLS. OpenShift: console URL + admin user/password used by `lib/openshift.ensure_oc` when `oc` is not already logged in. Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`, `ACS_INSECURE_SKIP_TLS_VERIFY`. |
+| D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json` v2** (`activeLabId` + `labs[]` with multi secured clusters). ACS Central and OpenShift are independent blocks per lab. Modules flatten the active lab. Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`, `ACS_INSECURE_SKIP_TLS_VERIFY`. |
 | D-2 | M3 `--run`: verify-only or also register/fix secured cluster? | **N/A:** `secured-cluster` removed from module list; registration is a manual prerequisite (§3.1 E-5). |
 | D-3 | GUI stack and how the local server is started | **Decided:** Python backend (FastAPI) + HTML/JS frontend; **`./serve.sh`** at repo root (wraps `gui/serve.sh`); REST API shells out to `scripts/acs-setup.sh`. Bind **`127.0.0.1` only**; port **8765**. No auth (solo laptop use). |
 | D-4 | M10: reimplement Splunk deploy or call existing `splunk-lab.sh`? | **Decided:** **Wrap first** — `modules/10-splunk.sh` delegates to `splunk-lab.sh` (default path documented; override via env e.g. `ACS_SPLUNK_LAB_SCRIPT`). Map module `--status` / `--run` to script `--status` / `install`. **Optional later:** vendor script into this repo if path coupling or sync becomes annoying. TA `.tgz` remains **user-supplied**; status reports if missing. |

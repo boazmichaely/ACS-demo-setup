@@ -13,6 +13,13 @@ const statusRefreshIndicator = document.getElementById("statusRefreshIndicator")
 const btnPreflightExpandAll = document.getElementById("btnPreflightExpandAll");
 const credFilePath = document.getElementById("credFilePath");
 const credSaveFeedback = document.getElementById("credSaveFeedback");
+const activeLabSelect = document.getElementById("activeLabSelect");
+const editLabSelect = document.getElementById("editLabSelect");
+const labStripName = document.getElementById("labStripName");
+const labStripHint = document.getElementById("labStripHint");
+const securedClusterList = document.getElementById("securedClusterList");
+const btnMakeActive = document.getElementById("btnMakeActive");
+const btnDeleteLab = document.getElementById("btnDeleteLab");
 
 let registryModules = [];
 let lastStatusModules = [];
@@ -20,7 +27,14 @@ let lastStatusMap = new Map();
 let moduleMetaById = new Map();
 let busy = false;
 
+/** In-memory v2 credentials document (activeLabId + labs[]). */
+let credDoc = { activeLabId: "", labs: [] };
+/** Lab id currently shown in the credentials form (independent of activeLabId). */
+let editingLabId = "";
+let labUiBusy = false;
+
 const fields = {
+  labName: document.getElementById("labName"),
   insecureSkipTlsVerify: document.getElementById("insecureSkipTlsVerify"),
   centralOcpConsole: document.getElementById("centralOcpConsole"),
   centralOcpUser: document.getElementById("centralOcpUser"),
@@ -31,12 +45,62 @@ const fields = {
   centralApiTokenExpires: document.getElementById("centralApiTokenExpires"),
   centralAdminUser: document.getElementById("centralAdminUser"),
   centralAdminPassword: document.getElementById("centralAdminPassword"),
-  securedSameAsCentral: document.getElementById("securedSameAsCentral"),
-  securedOcpSection: document.getElementById("securedOcpSection"),
-  securedOcpConsole: document.getElementById("securedOcpConsole"),
-  securedOcpUser: document.getElementById("securedOcpUser"),
-  securedOcpPassword: document.getElementById("securedOcpPassword"),
 };
+
+function newId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function emptyOpenshift() {
+  return { consoleUrl: "", adminUsername: "", adminPassword: "" };
+}
+
+function emptySecuredCluster(name = "production") {
+  return {
+    id: newId(),
+    name,
+    sameAsCentralCluster: true,
+    openshift: emptyOpenshift(),
+  };
+}
+
+function emptyLab(name = "new-lab") {
+  const sc = emptySecuredCluster("production");
+  return {
+    id: newId(),
+    name,
+    insecureSkipTlsVerify: false,
+    centralCluster: {
+      openshift: emptyOpenshift(),
+      central: {
+        consoleUrl: "",
+        apiToken: "",
+        apiTokenName: "",
+        apiTokenExpires: "",
+        adminUsername: "",
+        adminPassword: "",
+        authPreference: "apiToken",
+      },
+    },
+    securedClusters: [sc],
+    activeSecuredClusterId: sc.id,
+  };
+}
+
+function labById(labId) {
+  return (credDoc.labs || []).find((lab) => lab.id === labId) || null;
+}
+
+function activeLab() {
+  return labById(credDoc.activeLabId) || (credDoc.labs || [])[0] || null;
+}
+
+function editingLab() {
+  return labById(editingLabId) || activeLab();
+}
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -56,6 +120,20 @@ function logSection(title) {
   log(`\n── ${title} ${"─".repeat(Math.max(0, 48 - title.length))}\n`);
 }
 
+function labContextLine(reason, summary) {
+  const lab = activeLab();
+  const meta = summary || summaryFromLab(lab) || {};
+  const name = meta.name || lab?.name || lab?.id || "?";
+  const host = meta.centralHost || hostOnly(
+    ((lab?.centralCluster || {}).central || {}).consoleUrl || ""
+  ) || "?";
+  return `${reason} lab=${name} central=${host}`;
+}
+
+function logLabEvent(reason, summary) {
+  logSection(labContextLine(reason, summary));
+}
+
 function parseStreamExitCode(line) {
   if (!line.startsWith("__EXIT__:")) return null;
   const code = Number(line.slice(9));
@@ -70,6 +148,10 @@ function setBusy(on) {
   busy = on;
   const ids = [
     "btnCredSave",
+    "btnAddLab",
+    "btnDeleteLab",
+    "btnMakeActive",
+    "btnAddSecuredCluster",
     "btnRefreshSelected",
     "btnRun",
     "btnDryRun",
@@ -79,6 +161,12 @@ function setBusy(on) {
   for (const id of ids) {
     const el = document.getElementById(id);
     if (el) el.disabled = on;
+  }
+  if (activeLabSelect) activeLabSelect.disabled = on;
+  if (editLabSelect) editLabSelect.disabled = on;
+  if (!on) {
+    syncMakeActiveButton();
+    syncDeleteLabButton();
   }
 }
 
@@ -725,11 +813,8 @@ async function runModules(ids, dryRun = false) {
 async function saveCredentials() {
   setCredFeedback("");
   try {
-    await api("/api/credentials", {
-      method: "POST",
-      body: JSON.stringify(buildCredentialsPayload()),
-    });
-    await loadCredentials();
+    const data = await persistEditingLab();
+    applyCredentialsResponse(data, { keepEditingId: editingLabId });
     setCredFeedback("Saved.");
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
@@ -747,25 +832,6 @@ function setAuthPref(value) {
   );
   if (radio) radio.checked = true;
 }
-
-function setSecuredSectionVisible(same) {
-  const section = fields.securedOcpSection;
-  const inputs = [
-    fields.securedOcpConsole,
-    fields.securedOcpUser,
-    fields.securedOcpPassword,
-  ];
-  section.hidden = same;
-  section.classList.toggle("cred-subsection--muted", same);
-  inputs.forEach((el) => {
-    if (el) el.disabled = same;
-  });
-}
-
-fields.securedSameAsCentral.addEventListener("change", () => {
-  setSecuredSectionVisible(fields.securedSameAsCentral.checked);
-  syncCredentialCopyButtons();
-});
 
 function copyIconHtml(name) {
   return `<span class="material-symbols-outlined cred-copy-btn__icon" aria-hidden="true">${name}</span>`;
@@ -802,19 +868,23 @@ function createCopyButton(getText, label) {
   return btn;
 }
 
+function wrapInputWithCopy(input) {
+  if (!input || input.closest(".cred-field-wrap")) return;
+  const wrap = document.createElement("div");
+  wrap.className = "cred-field-wrap";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const label = input.labels?.[0]?.textContent?.trim() || "value";
+  wrap.appendChild(createCopyButton(() => input.value, label));
+  input.addEventListener("input", syncCredentialCopyButtons);
+}
+
 function setupCredentialCopyButtons() {
   const form = document.getElementById("credForm");
-  if (!form || form.dataset.copyWired === "1") return;
-  form.dataset.copyWired = "1";
+  if (!form) return;
 
   form.querySelectorAll("input.pf-v5-c-form-control").forEach((input) => {
-    const wrap = document.createElement("div");
-    wrap.className = "cred-field-wrap";
-    input.parentNode.insertBefore(wrap, input);
-    wrap.appendChild(input);
-    const label = input.labels?.[0]?.textContent?.trim() || "value";
-    wrap.appendChild(createCopyButton(() => input.value, label));
-    input.addEventListener("input", syncCredentialCopyButtons);
+    wrapInputWithCopy(input);
   });
 
   const pathLine = document.querySelector(".cred-path-line");
@@ -843,8 +913,355 @@ function syncCredentialCopyButtons() {
   }
 }
 
-function buildCredentialsPayload() {
+function hostOnly(url) {
+  return String(url || "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "");
+}
+
+function scSubLabel(sc) {
+  if (sc.sameAsCentralCluster) return "Same OpenShift as Central";
+  return hostOnly(sc.openshift?.consoleUrl) || "needs OCP login";
+}
+
+function preferredScId(clusters) {
+  const list = clusters || [];
+  const same = list.find((sc) => sc.sameAsCentralCluster !== false);
+  return (same || list[0] || {}).id || "";
+}
+
+function readSecuredClustersFromDom() {
+  if (!securedClusterList) return [];
+  return [...securedClusterList.querySelectorAll(".sc-row")].map((row) => {
+    const id = row.dataset.scId || newId();
+    const same = Boolean(row.querySelector(".js-sc-same")?.checked);
+    return {
+      id,
+      name: (row.querySelector(".js-sc-name")?.value || row.querySelector(".js-sc-title")?.textContent || "")
+        .trim() || "secured",
+      sameAsCentralCluster: same,
+      openshift: {
+        consoleUrl: row.querySelector(".js-sc-console")?.value || "",
+        adminUsername: row.querySelector(".js-sc-user")?.value || "",
+        adminPassword: row.querySelector(".js-sc-password")?.value || "",
+      },
+    };
+  });
+}
+
+function updateFoldMetas(lab) {
+  const centralMeta = document.getElementById("centralFoldMeta");
+  const scMeta = document.getElementById("scFoldMeta");
+  const central = ((lab?.centralCluster || {}).central || {});
+  const host = hostOnly(central.consoleUrl);
+  const tokenBit = (central.apiToken || "").trim() ? "token set" : "no token";
+  if (centralMeta) {
+    centralMeta.textContent = host ? `${host} · ${tokenBit}` : tokenBit;
+  }
+  const clusters = lab?.securedClusters || [];
+  const remote = clusters.filter((sc) => sc.sameAsCentralCluster === false).length;
+  if (scMeta) {
+    const n = clusters.length;
+    scMeta.textContent = `${n} cluster${n === 1 ? "" : "s"}${remote ? ` · ${remote} remote` : ""}`;
+  }
+}
+
+function renderSecuredClusters(lab) {
+  if (!securedClusterList) return;
+  const clusters = lab.securedClusters || [];
+
+  securedClusterList.innerHTML = clusters
+    .map((sc) => {
+      const same = sc.sameAsCentralCluster !== false;
+      const ocp = sc.openshift || emptyOpenshift();
+      const badge = same
+        ? `<span class="sc-row__badge">Same as Central</span>`
+        : `<span class="sc-row__badge sc-row__badge--remote">Remote</span>`;
+      const nameField = same
+        ? ""
+        : `<label class="sc-inline">
+            <span class="sc-inline__label">Name</span>
+            <input class="pf-v5-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(sc.name || "")}" spellcheck="false" />
+          </label>`;
+      const ocpFields = same
+        ? `<p class="sc-row__note">Uses Central OpenShift credentials above.</p>`
+        : `<div class="sc-row__ocp">
+            <div class="pf-v5-c-form__group">
+              <label class="pf-v5-c-form__label">Console URL</label>
+              <input class="pf-v5-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl || "")}" spellcheck="false" />
+            </div>
+            <div class="cred-form-row cred-form-row--pair">
+              <div class="pf-v5-c-form__group">
+                <label class="pf-v5-c-form__label">User</label>
+                <input class="pf-v5-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername || "")}" spellcheck="false" />
+              </div>
+              <div class="pf-v5-c-form__group">
+                <label class="pf-v5-c-form__label">Password</label>
+                <input class="pf-v5-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" placeholder="Optional if using oc login" spellcheck="false" />
+              </div>
+            </div>
+          </div>`;
+      return `<details class="sc-row" data-sc-id="${escapeHtml(sc.id)}">
+        <summary class="sc-row__summary">
+          <span class="sc-row__chev" aria-hidden="true"></span>
+          <span class="sc-row__title js-sc-title">${escapeHtml(sc.name || "secured")}</span>
+          ${badge}
+          <span class="sc-row__sub js-sc-sub">${escapeHtml(scSubLabel(sc))}</span>
+          <button type="button" class="pf-v5-c-button pf-m-plain sc-row__remove js-sc-remove"
+            title="Remove secured cluster">Remove</button>
+        </summary>
+        <div class="sc-row__body">
+          <div class="sc-row__top">
+            ${nameField}
+            <label class="pf-v5-c-check cred-same-cluster">
+              <input class="pf-v5-c-check__input js-sc-same" type="checkbox"${same ? " checked" : ""} />
+              <span class="pf-v5-c-check__label">Same as Central</span>
+            </label>
+          </div>
+          ${ocpFields}
+        </div>
+      </details>`;
+    })
+    .join("");
+
+  securedClusterList.querySelectorAll(".sc-row").forEach((row) => {
+    bindSecuredClusterRow(row);
+  });
+
+  updateFoldMetas(lab);
+  setupCredentialCopyButtons();
+}
+
+function refreshScRowChrome(row) {
+  const sameCb = row.querySelector(".js-sc-same");
+  const titleEl = row.querySelector(".js-sc-title");
+  const subEl = row.querySelector(".js-sc-sub");
+  const badgeEl = row.querySelector(".sc-row__badge");
+  const same = Boolean(sameCb?.checked);
+  const nameInput = row.querySelector(".js-sc-name");
+  const name = (nameInput?.value || titleEl?.textContent || "").trim() || "secured";
+  if (titleEl) titleEl.textContent = name;
+  if (subEl) {
+    subEl.textContent = scSubLabel({
+      sameAsCentralCluster: same,
+      openshift: { consoleUrl: row.querySelector(".js-sc-console")?.value || "" },
+    });
+  }
+  if (badgeEl) {
+    badgeEl.textContent = same ? "Same as Central" : "Remote";
+    badgeEl.classList.toggle("sc-row__badge--remote", !same);
+  }
+  const lab = editingLab();
+  if (lab) {
+    lab.securedClusters = readSecuredClustersFromDom();
+    lab.activeSecuredClusterId = preferredScId(lab.securedClusters);
+    updateFoldMetas(lab);
+  }
+}
+
+function wireScRowBodyControls(row) {
+  const sameCb = row.querySelector(".js-sc-same");
+  sameCb?.addEventListener("change", () => applyScSameToggle(row));
+  row.querySelector(".js-sc-name")?.addEventListener("input", () => refreshScRowChrome(row));
+  row.querySelector(".js-sc-console")?.addEventListener("input", () => refreshScRowChrome(row));
+}
+
+function applyScSameToggle(row) {
+  const sameCb = row.querySelector(".js-sc-same");
+  const titleEl = row.querySelector(".js-sc-title");
+  const body = row.querySelector(".sc-row__body");
+  if (!body || !sameCb) return;
+
+  const same = Boolean(sameCb.checked);
+  const name =
+    (row.querySelector(".js-sc-name")?.value || titleEl?.textContent || "").trim() || "secured";
+  const ocp = {
+    consoleUrl: row.querySelector(".js-sc-console")?.value || "",
+    adminUsername: row.querySelector(".js-sc-user")?.value || "",
+    adminPassword: row.querySelector(".js-sc-password")?.value || "",
+  };
+
+  if (same) {
+    body.innerHTML = `
+      <div class="sc-row__top">
+        <label class="pf-v5-c-check cred-same-cluster">
+          <input class="pf-v5-c-check__input js-sc-same" type="checkbox" checked />
+          <span class="pf-v5-c-check__label">Same as Central</span>
+        </label>
+      </div>
+      <p class="sc-row__note">Uses Central OpenShift credentials above.</p>`;
+  } else {
+    body.innerHTML = `
+      <div class="sc-row__top">
+        <label class="sc-inline">
+          <span class="sc-inline__label">Name</span>
+          <input class="pf-v5-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(name)}" spellcheck="false" />
+        </label>
+        <label class="pf-v5-c-check cred-same-cluster">
+          <input class="pf-v5-c-check__input js-sc-same" type="checkbox" />
+          <span class="pf-v5-c-check__label">Same as Central</span>
+        </label>
+      </div>
+      <div class="sc-row__ocp">
+        <div class="pf-v5-c-form__group">
+          <label class="pf-v5-c-form__label">Console URL</label>
+          <input class="pf-v5-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl)}" spellcheck="false" />
+        </div>
+        <div class="cred-form-row cred-form-row--pair">
+          <div class="pf-v5-c-form__group">
+            <label class="pf-v5-c-form__label">User</label>
+            <input class="pf-v5-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername)}" spellcheck="false" />
+          </div>
+          <div class="pf-v5-c-form__group">
+            <label class="pf-v5-c-form__label">Password</label>
+            <input class="pf-v5-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword)}" placeholder="Optional if using oc login" spellcheck="false" />
+          </div>
+        </div>
+      </div>`;
+  }
+
+  row.open = true;
+  wireScRowBodyControls(row);
+  refreshScRowChrome(row);
+  setupCredentialCopyButtons();
+}
+
+function bindSecuredClusterRow(row) {
+  wireScRowBodyControls(row);
+  row.querySelector(".js-sc-remove")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rows = securedClusterList.querySelectorAll(".sc-row");
+    if (rows.length <= 1) {
+      setCredFeedback("Keep at least one secured cluster.", true);
+      return;
+    }
+    row.remove();
+    const lab = editingLab();
+    if (lab) {
+      lab.securedClusters = readSecuredClustersFromDom();
+      lab.activeSecuredClusterId = preferredScId(lab.securedClusters);
+      updateFoldMetas(lab);
+    }
+  });
+}
+
+function summaryFromLab(lab) {
+  if (!lab) return null;
+  let centralHost = "";
+  try {
+    let cu = ((lab.centralCluster || {}).central || {}).consoleUrl || "";
+    if (cu) {
+      if (!/^https?:\/\//i.test(cu)) cu = `https://${cu}`;
+      centralHost = new URL(cu).hostname || cu;
+    }
+  } catch {
+    centralHost = "";
+  }
   return {
+    name: lab.name || lab.id || "",
+    centralHost,
+  };
+}
+
+function updateLabStrip(summary) {
+  const lab = activeLab();
+  const meta = summary || summaryFromLab(lab);
+  const name = meta?.name || lab?.name || lab?.id || "—";
+  if (labStripName) labStripName.textContent = name;
+  if (labStripHint) {
+    const host = meta?.centralHost || "";
+    labStripHint.textContent = host ? `Central · ${host}` : "";
+  }
+}
+
+function syncMakeActiveButton() {
+  if (!btnMakeActive) return;
+  const same = Boolean(editingLabId) && editingLabId === credDoc.activeLabId;
+  btnMakeActive.disabled = busy || labUiBusy || same || !editingLabId;
+  btnMakeActive.textContent = same ? "Already active" : "Use as active";
+}
+
+function syncDeleteLabButton() {
+  if (!btnDeleteLab) return;
+  const labs = credDoc.labs || [];
+  const editingIsActive =
+    Boolean(editingLabId) && editingLabId === credDoc.activeLabId;
+  let reason = "";
+  if (labs.length <= 1) {
+    reason = "Keep at least one lab.";
+  } else if (editingIsActive) {
+    reason = "Switch active to another lab before deleting this one.";
+  }
+  btnDeleteLab.disabled = busy || labUiBusy || Boolean(reason);
+  btnDeleteLab.title = reason || "Delete the lab being edited";
+}
+
+function fillLabSelects() {
+  const labs = credDoc.labs || [];
+  const options = labs
+    .map(
+      (lab) =>
+        `<option value="${escapeHtml(lab.id)}">${escapeHtml(lab.name || lab.id)}</option>`
+    )
+    .join("");
+
+  if (activeLabSelect) {
+    activeLabSelect.innerHTML = options;
+    activeLabSelect.value = credDoc.activeLabId || labs[0]?.id || "";
+  }
+  if (editLabSelect) {
+    editLabSelect.innerHTML = options;
+    editLabSelect.value = editingLabId || credDoc.activeLabId || labs[0]?.id || "";
+  }
+  syncMakeActiveButton();
+  syncDeleteLabButton();
+}
+
+function fillEditingLabForm() {
+  const lab = editingLab();
+  if (!lab) return;
+  editingLabId = lab.id;
+
+  if (fields.labName) fields.labName.value = lab.name || "";
+  if (fields.insecureSkipTlsVerify) {
+    fields.insecureSkipTlsVerify.checked = Boolean(lab.insecureSkipTlsVerify);
+  }
+
+  const cc = lab.centralCluster || {};
+  const ocp = cc.openshift || emptyOpenshift();
+  const central = cc.central || {};
+
+  fields.centralOcpConsole.value = ocp.consoleUrl || "";
+  fields.centralOcpUser.value = ocp.adminUsername || "";
+  fields.centralOcpPassword.value = ocp.adminPassword || "";
+
+  fields.centralConsole.value = central.consoleUrl || "";
+  fields.centralApiToken.value = central.apiToken || "";
+  fields.centralApiTokenName.value = central.apiTokenName || "";
+  fields.centralApiTokenExpires.value = central.apiTokenExpires || "";
+  fields.centralAdminUser.value = central.adminUsername || "";
+  fields.centralAdminPassword.value = central.adminPassword || "";
+  setAuthPref(central.authPreference);
+
+  const centralFold = document.getElementById("centralFold");
+  if (centralFold) centralFold.open = false;
+
+  renderSecuredClusters(lab);
+  updateFoldMetas(lab);
+  syncCredentialCopyButtons();
+  syncMakeActiveButton();
+  syncDeleteLabButton();
+}
+
+function buildCredentialsPayload() {
+  const lab = editingLab() || emptyLab();
+  const scRows = readSecuredClustersFromDom();
+  const activeSc = preferredScId(scRows) || lab.activeSecuredClusterId;
+
+  const updatedLab = {
+    id: lab.id,
+    name: (fields.labName?.value || lab.name || lab.id).trim(),
     insecureSkipTlsVerify: Boolean(fields.insecureSkipTlsVerify?.checked),
     centralCluster: {
       openshift: {
@@ -862,44 +1279,223 @@ function buildCredentialsPayload() {
         authPreference: authPrefValue(),
       },
     },
-    securedCluster: {
-      sameAsCentralCluster: fields.securedSameAsCentral.checked,
-      openshift: {
-        consoleUrl: fields.securedOcpConsole.value,
-        adminUsername: fields.securedOcpUser.value,
-        adminPassword: fields.securedOcpPassword.value,
-      },
-    },
+    securedClusters: scRows,
+    activeSecuredClusterId: activeSc,
   };
+
+  const labs = (credDoc.labs || []).map((existing) =>
+    existing.id === updatedLab.id ? updatedLab : existing
+  );
+  if (!labs.some((l) => l.id === updatedLab.id)) {
+    labs.push(updatedLab);
+  }
+
+  return {
+    activeLabId: credDoc.activeLabId || updatedLab.id,
+    labs,
+  };
+}
+
+function applyCredentialsResponse(data, { keepEditingId } = {}) {
+  credFilePath.textContent = data.filePath || "lab-credentials.json";
+  credDoc = {
+    activeLabId: data.activeLabId || "",
+    labs: Array.isArray(data.labs) ? data.labs : [],
+  };
+  if (!credDoc.labs.length) {
+    const lab = emptyLab("default");
+    credDoc = { activeLabId: lab.id, labs: [lab] };
+  }
+  if (keepEditingId && labById(keepEditingId)) {
+    editingLabId = keepEditingId;
+  } else if (!labById(editingLabId)) {
+    editingLabId = credDoc.activeLabId || credDoc.labs[0].id;
+  }
+  fillLabSelects();
+  fillEditingLabForm();
+  updateLabStrip(data.activeLabSummary);
 }
 
 async function loadCredentials() {
   const data = await api("/api/credentials");
-  credFilePath.textContent = data.filePath || "lab-credentials.json";
-  if (fields.insecureSkipTlsVerify) {
-    fields.insecureSkipTlsVerify.checked = Boolean(data.insecureSkipTlsVerify);
+  editingLabId = data.activeLabId || data.labs?.[0]?.id || "";
+  applyCredentialsResponse(data, { keepEditingId: editingLabId });
+}
+
+async function persistEditingLab() {
+  const payload = buildCredentialsPayload();
+  const data = await api("/api/credentials", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  credDoc = {
+    activeLabId: data.activeLabId || payload.activeLabId,
+    labs: Array.isArray(data.labs) ? data.labs : payload.labs,
+  };
+  return data;
+}
+
+async function setActiveLabOnly(labId) {
+  if (!labId || labId === credDoc.activeLabId) {
+    syncMakeActiveButton();
+    return;
   }
+  const data = await api("/api/credentials/active-lab", {
+    method: "POST",
+    body: JSON.stringify({ labId }),
+  });
+  credDoc.activeLabId = data.activeLabId || labId;
+  if (Array.isArray(data.labs)) {
+    credDoc.labs = data.labs;
+  }
+  fillLabSelects();
+  updateLabStrip(data.activeLabSummary);
+  logLabEvent("lab-switch", data.activeLabSummary);
+  log("Refreshing module status for the new active lab…\n");
+  await refreshAllStatus();
+  log("Status refresh finished.\n");
+}
 
-  const cc = data.centralCluster;
-  fields.centralOcpConsole.value = cc.openshift.consoleUrl || "";
-  fields.centralOcpUser.value = cc.openshift.adminUsername || "";
-  fields.centralOcpPassword.value = cc.openshift.adminPassword || "";
+async function switchActiveLab(labId) {
+  if (!labId || labId === credDoc.activeLabId || labUiBusy) return;
+  labUiBusy = true;
+  setCredFeedback("");
+  try {
+    // Keep credentials edits for the lab being edited; do not change the form.
+    await persistEditingLab();
+    await setActiveLabOnly(labId);
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
+    fillLabSelects();
+  } finally {
+    labUiBusy = false;
+    syncMakeActiveButton();
+    syncDeleteLabButton();
+  }
+}
 
-  fields.centralConsole.value = cc.central.consoleUrl || "";
-  fields.centralApiToken.value = cc.central.apiToken || "";
-  fields.centralApiTokenName.value = cc.central.apiTokenName || "";
-  fields.centralApiTokenExpires.value = cc.central.apiTokenExpires || "";
-  fields.centralAdminUser.value = cc.central.adminUsername || "";
-  fields.centralAdminPassword.value = cc.central.adminPassword || "";
-  setAuthPref(cc.central.authPreference);
+async function switchEditingLab(labId) {
+  if (!labId || labId === editingLabId || labUiBusy) return;
+  labUiBusy = true;
+  setCredFeedback("");
+  try {
+    await persistEditingLab();
+    editingLabId = labId;
+    fillLabSelects();
+    fillEditingLabForm();
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
+    fillLabSelects();
+  } finally {
+    labUiBusy = false;
+    syncMakeActiveButton();
+    syncDeleteLabButton();
+  }
+}
 
-  const sc = data.securedCluster;
-  fields.securedSameAsCentral.checked = sc.sameAsCentralCluster !== false;
-  setSecuredSectionVisible(fields.securedSameAsCentral.checked);
-  fields.securedOcpConsole.value = sc.openshift.consoleUrl || "";
-  fields.securedOcpUser.value = sc.openshift.adminUsername || "";
-  fields.securedOcpPassword.value = sc.openshift.adminPassword || "";
-  syncCredentialCopyButtons();
+async function makeEditingLabActive() {
+  if (!editingLabId || editingLabId === credDoc.activeLabId || labUiBusy) return;
+  labUiBusy = true;
+  setCredFeedback("");
+  try {
+    await persistEditingLab();
+    await setActiveLabOnly(editingLabId);
+    setCredFeedback("Active lab updated.");
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
+  } finally {
+    labUiBusy = false;
+    syncMakeActiveButton();
+    syncDeleteLabButton();
+  }
+}
+
+async function addLab() {
+  const name = window.prompt("Display name for the new lab?", "new-lab");
+  if (name == null) return;
+  const lab = emptyLab(name.trim() || "new-lab");
+  labUiBusy = true;
+  setCredFeedback("");
+  try {
+    const payload = buildCredentialsPayload();
+    payload.labs.push(lab);
+    // Do not activate the new lab unless it is the only one.
+    if (payload.labs.length === 1) {
+      payload.activeLabId = lab.id;
+    }
+    const data = await api("/api/credentials", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    editingLabId = lab.id;
+    applyCredentialsResponse(data, { keepEditingId: lab.id });
+    setCredFeedback("Lab added (not active). Edit it, then Use as active when ready.");
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
+  } finally {
+    labUiBusy = false;
+    syncMakeActiveButton();
+    syncDeleteLabButton();
+  }
+}
+
+async function deleteEditingLab() {
+  const lab = editingLab();
+  if (!lab) return;
+  if ((credDoc.labs || []).length <= 1) {
+    setCredFeedback("Keep at least one lab.", true);
+    return;
+  }
+  if (lab.id === credDoc.activeLabId) {
+    setCredFeedback("Switch active to another lab before deleting this one.", true);
+    syncDeleteLabButton();
+    return;
+  }
+  const label = lab.name || lab.id;
+  if (!window.confirm(`Delete lab “${label}”? This cannot be undone.`)) return;
+
+  labUiBusy = true;
+  setCredFeedback("");
+  try {
+    const payload = buildCredentialsPayload();
+    const remaining = payload.labs.filter((item) => item.id !== lab.id);
+    if (!remaining.length) {
+      setCredFeedback("Keep at least one lab.", true);
+      return;
+    }
+    const activeId = payload.activeLabId;
+    if (activeId === lab.id) {
+      setCredFeedback("Switch active to another lab before deleting this one.", true);
+      return;
+    }
+    const data = await api("/api/credentials", {
+      method: "POST",
+      body: JSON.stringify({ activeLabId: activeId, labs: remaining }),
+    });
+    editingLabId = activeId;
+    applyCredentialsResponse(data, { keepEditingId: activeId });
+    setCredFeedback("Lab deleted.");
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
+  } finally {
+    labUiBusy = false;
+    syncMakeActiveButton();
+    syncDeleteLabButton();
+  }
+}
+
+function addSecuredCluster() {
+  const lab = editingLab();
+  if (!lab) return;
+  const current = readSecuredClustersFromDom();
+  const sc = emptySecuredCluster(`secured-${current.length + 1}`);
+  sc.sameAsCentralCluster = false;
+  lab.securedClusters = [...current, sc];
+  lab.activeSecuredClusterId = preferredScId(lab.securedClusters);
+  renderSecuredClusters(lab);
+  // Expand the new remote SC for editing
+  const row = securedClusterList?.querySelector(`[data-sc-id="${CSS.escape(sc.id)}"]`);
+  if (row) row.open = true;
 }
 
 async function loadRegistry() {
@@ -908,9 +1504,57 @@ async function loadRegistry() {
   renderModuleRows();
 }
 
+function refreshFoldMetasFromForm() {
+  const lab = editingLab() || emptyLab();
+  lab.name = fields.labName?.value || lab.name;
+  lab.insecureSkipTlsVerify = Boolean(fields.insecureSkipTlsVerify?.checked);
+  lab.centralCluster = {
+    openshift: {
+      consoleUrl: fields.centralOcpConsole?.value || "",
+      adminUsername: fields.centralOcpUser?.value || "",
+      adminPassword: fields.centralOcpPassword?.value || "",
+    },
+    central: {
+      consoleUrl: fields.centralConsole?.value || "",
+      apiToken: fields.centralApiToken?.value || "",
+      apiTokenName: fields.centralApiTokenName?.value || "",
+      apiTokenExpires: fields.centralApiTokenExpires?.value || "",
+      adminUsername: fields.centralAdminUser?.value || "",
+      adminPassword: fields.centralAdminPassword?.value || "",
+      authPreference: authPrefValue(),
+    },
+  };
+  lab.securedClusters = readSecuredClustersFromDom();
+  updateFoldMetas(lab);
+}
+
+fields.centralConsole?.addEventListener("input", refreshFoldMetasFromForm);
+fields.centralApiToken?.addEventListener("input", refreshFoldMetasFromForm);
+
 document.getElementById("btnCredSave").addEventListener("click", saveCredentials);
+document.getElementById("btnAddLab")?.addEventListener("click", () => {
+  addLab().catch((e) => setCredFeedback(e.message, true));
+});
+document.getElementById("btnDeleteLab")?.addEventListener("click", () => {
+  deleteEditingLab().catch((e) => setCredFeedback(e.message, true));
+});
+document.getElementById("btnMakeActive")?.addEventListener("click", () => {
+  makeEditingLabActive().catch((e) => setCredFeedback(e.message, true));
+});
+document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSecuredCluster);
+activeLabSelect?.addEventListener("change", () => {
+  switchActiveLab(activeLabSelect.value).catch((e) => setCredFeedback(e.message, true));
+});
+editLabSelect?.addEventListener("change", () => {
+  switchEditingLab(editLabSelect.value).catch((e) => setCredFeedback(e.message, true));
+});
 document.getElementById("btnStatus").addEventListener("click", () => {
-  refreshAllStatus().catch((e) => log(`\n${e.message}\n`));
+  (async () => {
+    logLabEvent("status-refresh");
+    log("Refreshing module status…\n");
+    await refreshAllStatus();
+    log("Status refresh finished.\n");
+  })().catch((e) => log(`\n${e.message}\n`));
 });
 document.getElementById("btnRefreshSelected").addEventListener("click", () => {
   refreshSelectedStatus().catch((e) => setModuleRefreshFeedback(e.message));
@@ -946,7 +1590,10 @@ async function init() {
     setupCredentialCopyButtons();
     await loadRegistry();
     await loadCredentials();
+    logLabEvent("page-load");
+    log("Refreshing module status…\n");
     await refreshAllStatus();
+    log("Status refresh finished.\n");
   } catch (err) {
     log(`\n${err.message}\n`);
     modulesTbody.innerHTML =

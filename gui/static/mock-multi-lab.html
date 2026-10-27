@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACS demo setup — multi-lab mock</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@5.4.2/patternfly-addons.css"
+    />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=multi-lab-edit3" />
+    <link rel="stylesheet" href="/static/mock-multi-lab.css?v=4" />
+  </head>
+  <body>
+    <div class="pf-v5-c-page">
+      <main class="pf-v5-c-page__main" tabindex="-1">
+        <header class="pf-v5-c-page__main-section demo-page-header">
+          <h1 class="pf-v5-c-title pf-m-4xl demo-page-title">ACS demo setup</h1>
+        </header>
+
+        <div class="demo-pad">
+          <p class="mock-banner" role="status">
+            <strong>Visual mock v4</strong> - denser layout: Central collapsed by default; lab
+            name inline; SC rows compact. No Active-SC radio.
+            <a href="/">Back to live GUI</a>
+          </p>
+
+          <div class="lab-strip" aria-label="Active lab">
+            <div class="lab-strip__meta">
+              <span class="lab-strip__label">Active lab</span>
+              <span class="lab-strip__name" id="mockLabName">bm-50rc4 (OCP 5 lab)</span>
+              <span class="lab-strip__hint" id="mockLabHint"></span>
+            </div>
+            <div class="lab-strip__controls">
+              <label class="demo-sr-only" for="mockActiveLabSelect">Active lab for modules</label>
+              <select
+                id="mockActiveLabSelect"
+                class="pf-v5-c-form-control lab-strip__select"
+                aria-label="Active lab for modules"
+              >
+                <option value="bm-50rc4" selected>bm-50rc4 (OCP 5 lab)</option>
+                <option value="acscs">ACSCS</option>
+              </select>
+            </div>
+          </div>
+
+          <details class="cred-panel" open>
+            <summary class="cred-panel__toggle">
+              <span class="cred-panel__chev" aria-hidden="true"></span>
+              <span class="cred-panel__title">Lab credentials</span>
+            </summary>
+            <div class="cred-panel__body">
+              <div class="pf-v5-c-card">
+                <div class="pf-v5-c-card__body pf-m-pt-sm">
+                  <div class="cred-actions-row">
+                    <p class="pf-v5-c-helper-text cred-path-line">
+                      <span class="cred-path-label">File:</span>
+                      <code class="cred-file-path">…/lab-credentials.json</code>
+                    </p>
+                    <button class="pf-v5-c-button pf-m-primary" type="button" disabled>
+                      Save
+                    </button>
+                  </div>
+
+                  <form class="mock-cred-form" autocomplete="off" onsubmit="return false;">
+                    <!-- One compact toolbar: edit select + name + actions + TLS -->
+                    <div class="mock-lab-toolbar">
+                      <label class="mock-lab-toolbar__lab">
+                        <span class="mock-lab-toolbar__label">Edit</span>
+                        <select
+                          id="mockEditLabSelect"
+                          class="pf-v5-c-form-control"
+                          aria-label="Lab to edit"
+                        >
+                          <option value="bm-50rc4" selected>bm-50rc4 (OCP 5 lab)</option>
+                          <option value="acscs">ACSCS</option>
+                        </select>
+                      </label>
+                      <label class="mock-lab-toolbar__name">
+                        <span class="mock-lab-toolbar__label">Name</span>
+                        <input
+                          id="mockLabDisplayName"
+                          class="pf-v5-c-form-control"
+                          type="text"
+                          readonly
+                        />
+                      </label>
+                      <div class="mock-lab-toolbar__actions">
+                        <button type="button" class="pf-v5-c-button pf-m-secondary" disabled>
+                          Add
+                        </button>
+                        <button type="button" class="pf-v5-c-button pf-m-secondary" disabled>
+                          Use as active
+                        </button>
+                        <button type="button" class="pf-v5-c-button pf-m-danger" disabled>
+                          Delete
+                        </button>
+                      </div>
+                      <label class="pf-v5-c-check mock-lab-toolbar__tls">
+                        <input
+                          class="pf-v5-c-check__input"
+                          type="checkbox"
+                          id="mockSkipTls"
+                          checked
+                          disabled
+                        />
+                        <span class="pf-v5-c-check__label">Skip TLS</span>
+                      </label>
+                    </div>
+
+                    <!-- Central: collapsed by default -->
+                    <details class="fold-block">
+                      <summary class="fold-block__summary">
+                        <span class="fold-block__chev" aria-hidden="true"></span>
+                        <span class="fold-block__title">Central</span>
+                        <span class="fold-block__meta" id="mockCentralSummary"></span>
+                      </summary>
+                      <div class="fold-block__body">
+                        <div class="mock-central-cols">
+                          <div class="cred-subsection">
+                            <h3 class="cred-subsection__title">OpenShift</h3>
+                            <div class="pf-v5-c-form pf-v5-c-form--compact">
+                              <div class="pf-v5-c-form__group">
+                                <label class="pf-v5-c-form__label">Console URL</label>
+                                <input
+                                  id="mockOcpConsole"
+                                  class="pf-v5-c-form-control"
+                                  type="text"
+                                  readonly
+                                />
+                              </div>
+                              <div class="cred-form-row cred-form-row--pair">
+                                <div class="pf-v5-c-form__group">
+                                  <label class="pf-v5-c-form__label">User</label>
+                                  <input
+                                    id="mockOcpUser"
+                                    class="pf-v5-c-form-control"
+                                    type="text"
+                                    readonly
+                                  />
+                                </div>
+                                <div class="pf-v5-c-form__group">
+                                  <label class="pf-v5-c-form__label">Password</label>
+                                  <input
+                                    class="pf-v5-c-form-control"
+                                    type="text"
+                                    readonly
+                                    value="••••••••"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="cred-subsection">
+                            <h3 class="cred-subsection__title">RHACS Central</h3>
+                            <div class="pf-v5-c-form pf-v5-c-form--compact">
+                              <div class="pf-v5-c-form__group">
+                                <label class="pf-v5-c-form__label">Console URL</label>
+                                <input
+                                  id="mockCentralConsole"
+                                  class="pf-v5-c-form-control"
+                                  type="text"
+                                  readonly
+                                />
+                              </div>
+                              <div class="pf-v5-c-form__group">
+                                <label class="pf-v5-c-form__label">API token</label>
+                                <input
+                                  class="pf-v5-c-form-control"
+                                  type="text"
+                                  readonly
+                                  value="••••••••"
+                                />
+                              </div>
+                              <div class="cred-form-row cred-form-row--pair">
+                                <div class="pf-v5-c-form__group">
+                                  <label class="pf-v5-c-form__label">Token name</label>
+                                  <input
+                                    id="mockTokenName"
+                                    class="pf-v5-c-form-control"
+                                    type="text"
+                                    readonly
+                                  />
+                                </div>
+                                <div class="pf-v5-c-form__group">
+                                  <label class="pf-v5-c-form__label">Expires</label>
+                                  <input
+                                    class="pf-v5-c-form-control"
+                                    type="text"
+                                    readonly
+                                    value="2026-12-31"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+
+                    <!-- Secured clusters: open, compact rows -->
+                    <details class="fold-block" open>
+                      <summary class="fold-block__summary">
+                        <span class="fold-block__chev" aria-hidden="true"></span>
+                        <span class="fold-block__title">Secured clusters</span>
+                        <span class="fold-block__meta" id="mockScSummary"></span>
+                        <button
+                          type="button"
+                          class="pf-v5-c-button pf-m-secondary pf-m-small fold-block__action"
+                          disabled
+                          onclick="event.preventDefault(); event.stopPropagation();"
+                        >
+                          Add
+                        </button>
+                      </summary>
+                      <div class="fold-block__body">
+                        <p class="sc-list-head__hint">
+                          OpenShift logins for sensor clusters under this Central (control plane
+                          access). Not a module target.
+                        </p>
+                        <div id="mockScList" class="sc-list"></div>
+                      </div>
+                    </details>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <div class="mock-ghost-blocks">
+            <div class="pf-v5-c-card pf-m-mt-lg">
+              <div class="pf-v5-c-card__header">
+                <div class="pf-v5-c-card__title">
+                  <h2 class="pf-v5-c-card__title-text">Deploy / Status / Log</h2>
+                </div>
+              </div>
+              <div class="pf-v5-c-card__body">
+                <div id="mockLog" class="demo-log" role="log" aria-label="Mock log note"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="/static/mock-multi-lab.js?v=4"></script>
+  </body>
+</html>

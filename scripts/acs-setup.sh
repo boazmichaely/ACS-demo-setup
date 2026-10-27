@@ -12,6 +12,8 @@ usage() {
 Usage: acs-setup.sh --help
        acs-setup.sh --status [--module <id>] [--json]
        acs-setup.sh --run [--module <id>] [--dry-run]
+       acs-setup.sh --oc-status
+       acs-setup.sh --oc-login [--force]
 
 Options:
   --help          Show this help
@@ -20,7 +22,30 @@ Options:
   --module <id>   Limit to one module id from config/modules.json
   --json          With --status: emit JSON array (for GUI)
   --dry-run       With --run: pass through to module (planned actions only)
+
+OpenShift (active lab; lab-credentials.json is source of truth):
+  --oc-status     Is oc ready for the active lab? (OK/PROBLEM + next step)
+  --oc-login      Create/refresh the active lab kubeconfig from lab-credentials
+  --force         With --oc-login: force a fresh oc login
 EOF
+}
+
+acs_python() {
+  if [[ -n "${ACS_DEMO_PYTHON:-}" ]]; then
+    printf '%s' "$ACS_DEMO_PYTHON"
+  elif [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
+    printf '%s' "${ROOT}/gui/.venv/bin/python"
+  else
+    command -v python3
+  fi
+}
+
+run_openshift_cli() {
+  # Args are forwarded to: python -m lib.openshift …
+  local py
+  py="$(acs_python)"
+  [[ -n "$py" ]] || die "python3 not found (set ACS_DEMO_PYTHON or use gui/.venv)"
+  (cd "$ROOT" && "$py" -m lib.openshift "$@")
 }
 
 die() {
@@ -196,9 +221,8 @@ run_modules() {
 
 main() {
   [[ -f "$MODULES_JSON" ]] || die "missing $MODULES_JSON"
-  need_jq
 
-  local action="" module_id="" json=false dry_run=false
+  local action="" module_id="" json=false dry_run=false force=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -208,6 +232,9 @@ main() {
       --module) shift; module_id="${1:-}"; [[ -n "$module_id" ]] || die "--module requires an id" ;;
       --json) json=true ;;
       --dry-run) dry_run=true ;;
+      --force) force=true ;;
+      --oc-status) action=oc-status ;;
+      --oc-login) action=oc-login ;;
       *) die "unknown option: $1" ;;
     esac
     shift
@@ -215,9 +242,15 @@ main() {
 
   [[ -n "$action" ]] || { usage; exit 0; }
 
-  if [[ -n "$module_id" ]]; then
-    module_meta "$module_id" id >/dev/null || die "unknown module id: $module_id"
-  fi
+  case "$action" in
+    oc-status|oc-login) ;;
+    *)
+      need_jq
+      if [[ -n "$module_id" ]]; then
+        module_meta "$module_id" id >/dev/null || die "unknown module id: $module_id"
+      fi
+      ;;
+  esac
 
   case "$action" in
     status)
@@ -229,6 +262,14 @@ main() {
       ;;
     run)
       run_modules "$module_id" "$dry_run"
+      ;;
+    oc-status) run_openshift_cli status ;;
+    oc-login)
+      if [[ "$force" == true ]]; then
+        run_openshift_cli login --force
+      else
+        run_openshift_cli login
+      fi
       ;;
   esac
 }

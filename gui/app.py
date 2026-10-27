@@ -13,8 +13,13 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from lab_credentials import credentials_path, for_api_response, merge_and_save
-from run_log import append_today_log, begin_run, mark_page_load, read_today_log
+from lab_credentials import (
+    credentials_path,
+    for_api_response,
+    merge_and_save,
+    set_active_lab,
+)
+from run_log import append_today_log, begin_run, mark_lab_switch, mark_page_load, read_today_log
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GUI_DIR = Path(__file__).resolve().parent
@@ -49,14 +54,28 @@ class CentralClusterIn(BaseModel):
 
 
 class SecuredClusterIn(BaseModel):
+    id: str = ""
+    name: str = ""
     sameAsCentralCluster: bool = True
     openshift: OpenshiftAccessIn = Field(default_factory=OpenshiftAccessIn)
 
 
-class LabCredentialsIn(BaseModel):
+class LabIn(BaseModel):
+    id: str = ""
+    name: str = ""
     insecureSkipTlsVerify: bool = False
     centralCluster: CentralClusterIn = Field(default_factory=CentralClusterIn)
-    securedCluster: SecuredClusterIn = Field(default_factory=SecuredClusterIn)
+    securedClusters: list[SecuredClusterIn] = Field(default_factory=list)
+    activeSecuredClusterId: str = ""
+
+
+class LabCredentialsIn(BaseModel):
+    activeLabId: str = ""
+    labs: list[LabIn] = Field(default_factory=list)
+
+
+class ActiveLabIn(BaseModel):
+    labId: str
 
 
 def subprocess_env() -> dict[str, str]:
@@ -136,9 +155,22 @@ def get_credentials() -> dict[str, Any]:
 
 
 @app.post("/api/credentials")
-def save_credentials(body: LabCredentialsIn) -> dict[str, bool]:
-    merge_and_save(REPO_ROOT, body.model_dump())
-    return {"ok": True}
+def save_credentials(body: LabCredentialsIn) -> dict[str, Any]:
+    try:
+        merge_and_save(REPO_ROOT, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **for_api_response(REPO_ROOT)}
+
+
+@app.post("/api/credentials/active-lab")
+def post_active_lab(body: ActiveLabIn) -> dict[str, Any]:
+    try:
+        set_active_lab(REPO_ROOT, body.labId.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    mark_lab_switch(REPO_ROOT)
+    return {"ok": True, **for_api_response(REPO_ROOT)}
 
 
 @app.get("/api/credentials/path")
@@ -148,13 +180,11 @@ def get_credentials_path() -> dict[str, str]:
 
 @app.get("/api/log")
 def get_run_log() -> dict[str, str]:
-    """Today's tee'd run log (empty string if none yet)."""
     return {"text": read_today_log(REPO_ROOT)}
 
 
 @app.post("/api/log/page-load")
 def post_log_page_load() -> dict[str, bool]:
-    """Record a hard-refresh / page-load divider in today's tee'd log (not shown in the pane)."""
     mark_page_load(REPO_ROOT)
     return {"ok": True}
 

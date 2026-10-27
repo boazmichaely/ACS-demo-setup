@@ -37,11 +37,19 @@ def credentials_path(root: Path | None = None) -> Path:
 
 
 def load_lab_credentials(root: Path | None = None) -> dict[str, Any]:
+    """Load credentials as a v1-shaped view of the **active** lab (for modules).
+
+    On-disk format may be v2 (multi-lab); this returns centralCluster + securedCluster
+    for the active lab / active secured cluster only.
+    """
+    from lib.lab_doc import flatten_active_lab, normalize_document
+
     path = credentials_path(root)
     if not path.is_file():
         raise RuntimeError(f"lab credentials file not found: {path}")
     with path.open(encoding="utf-8") as handle:
-        return json.load(handle)
+        raw = json.load(handle)
+    return flatten_active_lab(normalize_document(raw))
 
 
 def insecure_skip_tls_verify(creds: dict[str, Any] | None = None) -> bool:

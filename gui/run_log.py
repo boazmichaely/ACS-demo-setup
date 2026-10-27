@@ -87,7 +87,35 @@ def begin_run(repo_root: Path, module_id: str, *, dry_run: bool) -> None:
     append_today_log(repo_root, header)
 
 
+def _lab_blurb(repo_root: Path) -> str:
+    try:
+        import json
+        import sys
+
+        gui_dir = Path(__file__).resolve().parent
+        if str(gui_dir) not in sys.path:
+            sys.path.insert(0, str(gui_dir))
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+        from lab_credentials import credentials_path
+        from lib.lab_doc import lab_log_blurb, normalize_document
+
+        path = credentials_path(repo_root)
+        raw = None
+        if path.is_file():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        return lab_log_blurb(normalize_document(raw))
+    except Exception:
+        return "lab=? central=? sc=?"
+
+
 def mark_page_load(repo_root: Path) -> None:
     """Divider for GUI hard refresh / page load (disk log only; pane stays empty)."""
-    header = f"\n── {_stamp()} page-load {'─' * 8}\n"
+    header = f"\n── {_stamp()} page-load {_lab_blurb(repo_root)} {'─' * 8}\n"
+    append_today_log(repo_root, header)
+
+
+def mark_lab_switch(repo_root: Path) -> None:
+    """Divider when the active lab changes."""
+    header = f"\n── {_stamp()} lab-switch {_lab_blurb(repo_root)} {'─' * 8}\n"
     append_today_log(repo_root, header)
