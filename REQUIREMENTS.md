@@ -26,7 +26,7 @@ Today those steps are scattered across ad hoc scripts, manual `oc` commands, and
 |------|------|
 | **Lab owner** (primary) | Prepare or refresh the demo cluster from the GUI; see module status at a glance and run steps without memorizing CLI flags |
 | **Future you** | After weeks away, open the GUI (or run `--status`) and know what to fix |
-| **Automation** | Same behavior via `acs-setup.sh` for scripting and for the GUI server to invoke |
+| **Automation** | Same behavior via `scripts/acs-setup.sh` for scripting and for the GUI server to invoke |
 
 Not in scope: unattended multi-tenant provisioning, production installs, or teaching someone OpenShift from zero.
 
@@ -59,6 +59,7 @@ Documented in an example env file (no real values in git). Primary store: gitign
 |------|--------|--------|
 | **Central cluster → OpenShift** | console URL, admin username, admin password | OCP admin fields optional when the user relies on `oc login` |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
+| **TLS (Central)** | `insecureSkipTlsVerify` | Lab-only skip of Central HTTPS cert verify; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Secured cluster** | `sameAsCentralCluster` (boolean) | Default `true` when Central and sensor share one cluster |
 | **Secured cluster → OpenShift** (when not same) | console URL, admin username, admin password | Same optional OCP admin semantics |
 
@@ -78,7 +79,7 @@ Legacy `central-credentials.json` (`endpoint` + `token`) is read once and migrat
 | Term | Meaning here |
 |------|----------------|
 | **Module** | One demo-prep concern (e.g. Slack integration), implemented as one script |
-| **Orchestrator** | `acs-setup.sh` — dispatches to modules, aggregates status |
+| **Orchestrator** | `scripts/acs-setup.sh` — dispatches to modules, aggregates status |
 | **Run** | Apply or refresh configuration toward the desired demo state |
 | **Status** | Read-only check: is this module’s desired state present and healthy? |
 | **ok** | Status state: nothing to do |
@@ -101,13 +102,13 @@ Legacy `central-credentials.json` (`endpoint` + `token`) is read once and migrat
 |----|-------------|
 | R-LAY-1 | `config/modules.json` is the single registry of module id, display label, numeric order, and `dependsOn` |
 | R-LAY-2 | Each module has a documented entrypoint: `modules/NN-<id>.sh` (may delegate to helpers in the same directory) |
-| R-LAY-3 | `acs-setup.sh` lives at repo root and is the only supported top-level CLI entrypoint |
+| R-LAY-3 | `./serve.sh` is the top-level GUI entrypoint; `scripts/acs-setup.sh` is the CLI orchestrator |
 | R-LAY-4 | `gui/` is part of the repo from the first shipped module; not a later add-on |
 | R-LAY-5 | `STATUS.md` is updated when module behavior ships (human changelog, not generated) |
 | R-LAY-6 | Secrets and local credential files are gitignored; example env documents variable names only |
 | R-LAY-7 | `lib/` holds thin shared helpers required by modules; modules must not duplicate that logic |
 
-### 5.2 Orchestrator (`acs-setup.sh`)
+### 5.2 Orchestrator (`scripts/acs-setup.sh`)
 
 | ID | Requirement |
 |----|-------------|
@@ -133,7 +134,7 @@ Legacy `central-credentials.json` (`endpoint` + `token`) is read once and migrat
 | R-MOD-6 | **Entrypoint** implements the contract above. **Implementation:** prefer bash + jq for thin glue (`oc`, `curl`, file I/O). Use **Python 3** when it clearly reduces risk or complexity (structured Central API calls, non-trivial JSON transforms, validation). Avoid unmaintainable shell; avoid Python where a few lines of bash suffice |
 | R-MOD-7 | Module entrypoints are callable standalone without the orchestrator |
 | R-MOD-8 | **`--dry-run` on `--run`:** every module supports it. **Verify/read-only modules:** print what would be checked and with which inputs — no mutations. **Mutating modules:** print what would be applied/changed without applying. Exit `0`; use stderr/stdout for the plan |
-| R-MOD-9 | Modules that call Central or read lab credentials must use **`lib/central.py`** (file-first precedence). Do not reimplement credential loading or env override rules in module code |
+| R-MOD-9 | Modules that call **Central** must use **`lib/central.py`** (auth, TLS, file-first precedence). Modules that need **`oc`** must use **`lib/openshift.py`** (`ensure_oc` from saved OpenShift user/password when the current context is unusable). Do not reimplement credential loading or env override rules in module code |
 
 ### 5.4 Aggregated status format
 
@@ -175,11 +176,11 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 **Purpose:** Configure RHACS image integrations needed for vulnerability scanning on the secured cluster. Reads registry credentials from the OpenShift cluster pull secret and applies them to Central.
 
-**Depends on:** none (uses Central API token from `lab-credentials.json` and `oc` on the secured cluster)
+**Depends on:** none (Central credentials via `lib/central`; OpenShift via `lib/openshift` / `oc`)
 
 **Status must verify:**
 
-1. Central API token is available and authenticates
+1. Central credentials authenticate (API token and/or admin password per `lib/central`)
 2. `pull-secret` in `openshift-config` is readable via `oc`
 3. `Public Quay.io` integration has robot credentials matching pull-secret `quay.io`
 4. `registry.redhat.io` docker registry integration exists and matches pull-secret
@@ -363,7 +364,7 @@ The GUI is **required from the first deliverable** (module M1 `registries`). No 
 | R-GUI-5 | For each shipped module: control to run that module (with confirmation when `--run` is destructive) |
 | R-GUI-6 | Refresh status on demand and after a run completes |
 | R-GUI-7 | Does not commit secrets; server-side gitignored storage preferred over browser localStorage for tokens |
-| R-GUI-8 | GUI backend invokes `acs-setup.sh` (or module entrypoints directly with the same contract); GUI does not reimplement module logic |
+| R-GUI-8 | GUI backend invokes `scripts/acs-setup.sh` (or module entrypoints directly with the same contract); GUI does not reimplement module logic |
 | R-GUI-9 | New modules add GUI affordances in the **same PR/change** as the module script |
 | R-GUI-10 | GUI server binds **`127.0.0.1` only**; no network exposure beyond the **user's** laptop |
 | R-GUI-11 | Visual and UX requirements in **REQUIREMENTS-GUI.md** are part of GUI acceptance |
@@ -374,7 +375,7 @@ Shipping M1 is not complete until all of the following work:
 
 1. `config/modules.json` includes module `registries` as M1
 2. `modules/01-registries.sh` meets R-MOD-* and M1 acceptance
-3. `acs-setup.sh` can `--status` and `--run --module registries`
+3. `scripts/acs-setup.sh` can `--status` and `--run --module registries`
 4. GUI lists module `registries`, shows its status, and triggers run
 5. Lab credentials form saves Central endpoint and API token (manual prerequisite)
 
@@ -398,9 +399,9 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 
 | # | Question | Decision |
 |---|----------|----------|
-| D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json`**. Two clusters: **centralCluster** (OpenShift + RHACS Central) and **securedCluster** (optional separate OpenShift when `sameAsCentralCluster` is false). OCP admin username/password optional per cluster. Central: console URL, API token, admin username/password, `authPreference` (`apiToken` \| `password`). GUI Save merges secrets (blank password/token keeps existing). Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN` may override per module `--help`. Legacy `central-credentials.json` migrated on read. |
+| D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json`**. ACS Central and OpenShift are independent blocks. Central: console URL, API token and/or admin password, `authPreference` when both set; `insecureSkipTlsVerify` for lab TLS. OpenShift: console URL + admin user/password used by `lib/openshift.ensure_oc` when `oc` is not already logged in. Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`, `ACS_INSECURE_SKIP_TLS_VERIFY`. |
 | D-2 | M3 `--run`: verify-only or also register/fix secured cluster? | **N/A:** `secured-cluster` removed from module list; registration is a manual prerequisite (§3.1 E-5). |
-| D-3 | GUI stack and how the local server is started | **Decided:** Python backend (Flask or FastAPI) + simple HTML/JS frontend; `./gui/serve.sh` or equivalent; REST API shells out to `acs-setup.sh`. Bind **`127.0.0.1` only** (localhost); fixed port documented in `gui/README` or `--help`. No auth (solo laptop use). |
+| D-3 | GUI stack and how the local server is started | **Decided:** Python backend (FastAPI) + HTML/JS frontend; **`./serve.sh`** at repo root (wraps `gui/serve.sh`); REST API shells out to `scripts/acs-setup.sh`. Bind **`127.0.0.1` only**; port **8765**. No auth (solo laptop use). |
 | D-4 | M10: reimplement Splunk deploy or call existing `splunk-lab.sh`? | **Decided:** **Wrap first** — `modules/10-splunk.sh` delegates to `splunk-lab.sh` (default path documented; override via env e.g. `ACS_SPLUNK_LAB_SCRIPT`). Map module `--status` / `--run` to script `--status` / `install`. **Optional later:** vendor script into this repo if path coupling or sync becomes annoying. TA `.tgz` remains **user-supplied**; status reports if missing. |
 | D-5 | Per-module `--dry-run` mandatory for all modules or only destructive ones? | **Decided:** **All modules** implement `--dry-run` for consistency. Verify/read-only modules describe checks and examination context only; mutating modules describe planned changes without applying. GUI may expose dry-run where useful. |
 

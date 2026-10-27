@@ -41,6 +41,7 @@ Outer collapsible **"Lab credentials"** (`cred-panel`), **collapsed by default**
 | G-CRED-3 | Show **file path** (`lab-credentials.json` or `ACS_LAB_CREDENTIALS_FILE`). |
 | G-CRED-4 | **Save** + inline feedback (`Saved` / error), `aria-live="polite"`. |
 | G-CRED-5 | Blank password or API token on save **keeps** the existing value; GET never returns raw secrets (masked hints only). |
+| G-CRED-6 | Checkbox **Skip TLS verify for Central (lab only)** maps to `insecureSkipTlsVerify` in `lab-credentials.json`. |
 
 ### 3.1 Central cluster fieldset
 
@@ -98,7 +99,7 @@ Additional badge styles for future use: `--deferred` (dashed), `--pending`, `--u
 | ID | Requirement |
 |----|-------------|
 | G-STAT-1 | Card title **"Status"**; header action **"Refresh status"** (secondary) + **refresh indicator** text (`aria-live="polite"`). |
-| G-STAT-2 | Outer **Preflight** panel: expandable `<details class="status-panel">`, **open by default**, same visual language as credentials (left accent, chevron). |
+| G-STAT-2 | Outer **Modules** panel: expandable `<details class="status-panel">`, **open by default** so the module list is visible. Each nested module block and its sections start **collapsed**. Lab credentials stay collapsed by default. Same visual language as credentials (left accent, chevron). |
 | G-STAT-3 | **Expand all** icon button in preflight summary (Material Symbols `unfold_more`), toggles nested sections only — does **not** toggle the outer panel. Disabled when no nested sections. |
 | G-STAT-4 | Nested sections use `details.pf-block` — chevron via CSS, left accent, light grey body background. |
 | G-STAT-5 | **Preflight checks table:** compact bordered table; fixed column widths for Name / OK / Detail; long text wraps in Detail column only. |
@@ -115,6 +116,8 @@ Additional badge styles for future use: `--deferred` (dashed), `--pending`, `--u
 | G-LOG-2 | **Dark monospace** stream: PF black-850 background, light text, `pre-wrap`, scrollable **`min-height: 12rem`**, **`max-height: 22rem`**. |
 | G-LOG-3 | Append **stdout/stderr** from run and refresh operations; clear or separate runs with a visible delimiter (implementation choice). |
 | G-LOG-4 | `role="log"` and `aria-label="Script output"`. |
+| G-LOG-5 | While streaming to the pane, **tee** the same run output to a dated file under gitignored `logs/` (`gui-YYYY-MM-DD.log`). Keep at most **3** calendar days: on first write of a new day, create today's file and delete logs older than today-2; if today's file already exists, append. First run ever: create today's file only. |
+| G-LOG-6 | Hard refresh / page load leaves the Log **pane empty** (session console) and appends a **`page-load` timestamp divider** to today's tee'd file (`POST /api/log/page-load`) for troubleshooting. History remains in the tee'd files; `GET /api/log` returns today's file. No GUI controls for log file management. |
 
 ---
 

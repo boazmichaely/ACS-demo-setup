@@ -2,7 +2,7 @@
 # ACS demo setup orchestrator — dispatches to modules/NN-<id>.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODULES_JSON="${ROOT}/config/modules.json"
 MODULE_LAST_SECTIONS_JSON=""
 MODULE_LAST_CAPTURE_ROW=""
@@ -115,7 +115,10 @@ status_json() {
   if [[ -n "$filter_id" ]]; then
     ids=("$filter_id")
   else
-    mapfile -t ids < <(module_ids_sorted)
+    # Bash 3.2 (macOS /bin/bash) has no mapfile
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && ids+=("$id")
+    done < <(module_ids_sorted)
   fi
 
   local rows=()
@@ -168,7 +171,10 @@ run_modules() {
   if [[ -n "$filter_id" ]]; then
     ids=("$filter_id")
   else
-    mapfile -t ids < <(module_ids_sorted)
+    # Bash 3.2 (macOS /bin/bash) has no mapfile
+    while IFS= read -r id; do
+      [[ -n "$id" ]] && ids+=("$id")
+    done < <(module_ids_sorted)
   fi
 
   local id script args=()

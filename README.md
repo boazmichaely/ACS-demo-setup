@@ -13,30 +13,39 @@ Repeatable automation to **prepare a RHACS demo lab** after Central and a secure
 
 | Piece | Role |
 |-------|------|
-| `gui/` | Primary interface — [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
-| `acs-setup.sh` | CLI + GUI backend (`--status`, `--run`, `--help`) |
+| `./serve.sh` | **Primary entrypoint** — starts the GUI |
+| `gui/` | Web UI (FastAPI + static front end) |
+| `scripts/acs-setup.sh` | CLI orchestrator + GUI backend (`--status`, `--run`, `--help`) |
 | `config/modules.json` | Module registry |
 | `config/lab-credentials.schema.json` | Credentials file shape (see `lab-credentials.example.json`) |
 | `modules/NN-<id>.sh` | Module entrypoints (bash/jq; Python where it helps) |
 
 **Lab prerequisites:** OpenShift with `oc`, RHACS Operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
 
-**Secrets:** `lab-credentials.json` is gitignored. Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json).
+**Secrets:** gitignored `lab-credentials.json` at the repo root. Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json). Override path with `ACS_LAB_CREDENTIALS_FILE`. Edit via the GUI **Lab credentials** panel or by hand.
 
 ## Run the GUI
 
 ```bash
-cd ~/code/ACS-demo-setup
-./gui/serve.sh
+cd ~/code/acs-demo-setup
+./serve.sh
+./serve.sh --help
 ```
 
-Open http://127.0.0.1:8765
+Opens on http://127.0.0.1:8765 by default. If that port is busy, the next free port is used - use the URL printed at startup.
+
+## CLI
+
+```bash
+./scripts/acs-setup.sh --help
+./scripts/acs-setup.sh --status --json
+./scripts/acs-setup.sh --run --module registries
+```
 
 ## Status
 
 | Area | State |
 |------|--------|
 | Requirements | Approved ([§9](REQUIREMENTS.md)) |
-| GUI backend | FastAPI stub — shells out to `acs-setup.sh` |
 | GUI | PatternFly v5 per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
-| Module scripts | Not implemented (M1 next) |
+| Modules | `registries`, `compliance-operator` implemented; others listed in `config/modules.json` |

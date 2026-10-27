@@ -25,6 +25,7 @@ def empty_document(repo_root: Path) -> dict[str, Any]:
     return {
         "$schema": "./config/lab-credentials.schema.json",
         "version": 1,
+        "insecureSkipTlsVerify": False,
         "centralCluster": {
             "openshift": {
                 "consoleUrl": "",
@@ -181,9 +182,15 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
         existing["securedCluster"]["openshift"],
     )
 
+    if "insecureSkipTlsVerify" in incoming:
+        skip_tls = bool(incoming.get("insecureSkipTlsVerify"))
+    else:
+        skip_tls = bool(existing.get("insecureSkipTlsVerify", False))
+
     doc = {
         "$schema": "./config/lab-credentials.schema.json",
         "version": 1,
+        "insecureSkipTlsVerify": skip_tls,
         "centralCluster": {"openshift": central_ocp, "central": central},
         "securedCluster": {"sameAsCentralCluster": same, "openshift": secured_ocp},
     }
@@ -205,6 +212,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
         "filePath": str(credentials_path(repo_root)),
         "saved": credentials_path(repo_root).is_file()
         or (repo_root / LEGACY_RELATIVE_PATH).is_file(),
+        "insecureSkipTlsVerify": bool(raw.get("insecureSkipTlsVerify", False)),
         "centralCluster": {
             "openshift": {
                 "consoleUrl": central["openshift"].get("consoleUrl") or "",
@@ -233,13 +241,15 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
 
 
 def central_api_token(repo_root: Path) -> str:
-    """Convenience for modules: preferred Central API credential."""
+    """Bearer token when that is the resolved auth; empty if password-only."""
     raw = load_raw(repo_root)
     central = raw["centralCluster"]["central"]
-    pref = central.get("authPreference") or "apiToken"
-    if pref == "apiToken" and central.get("apiToken"):
-        return central["apiToken"]
-    return central.get("apiToken") or ""
+    token = (central.get("apiToken") or "").strip()
+    password = (central.get("adminPassword") or "").strip()
+    pref = (central.get("authPreference") or "apiToken").strip()
+    if token and password:
+        return token if pref != "password" else ""
+    return token
 
 
 def central_console_url(repo_root: Path) -> str:

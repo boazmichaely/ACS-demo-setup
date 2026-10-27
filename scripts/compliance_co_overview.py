@@ -424,7 +424,7 @@ def secured_cluster_name_from_oc() -> str | None:
 
 
 def central_context() -> tuple[str | None, str | None, str | None]:
-    """Return (base_url, token, error_message)."""
+    """Return (base_url, authorization_header, error_message)."""
     creds_path = os.environ.get("ACS_LAB_CREDENTIALS_FILE", "").strip()
     path = Path(creds_path).expanduser() if creds_path else ROOT / "lab-credentials.json"
     if not path.is_file():
@@ -433,8 +433,7 @@ def central_context() -> tuple[str | None, str | None, str | None]:
     sys.path.insert(0, str(ROOT))
     try:
         from lib.central import (  # noqa: WPS433
-            central_api_base,
-            central_api_token,
+            central_connection,
             check_central_auth,
             load_lab_credentials,
         )
@@ -443,12 +442,11 @@ def central_context() -> tuple[str | None, str | None, str | None]:
 
     try:
         creds = load_lab_credentials(ROOT)
-        base = central_api_base(creds)
-        token = central_api_token(creds)
-        auth_err = check_central_auth(base, token)
+        base, authorization = central_connection(creds)
+        auth_err = check_central_auth(base, authorization, creds=creds)
         if auth_err:
             return None, None, auth_err
-        return base, token, None
+        return base, authorization, None
     except Exception as exc:
         return None, None, str(exc)
 

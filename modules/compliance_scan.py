@@ -198,7 +198,7 @@ def scan_status_message(*, matched: bool, exists: bool) -> str:
 def evaluate_scan() -> dict[str, Any]:
     creds = load_lab_credentials()
     base, token = central_connection(creds)
-    auth_err = check_central_auth(base, token)
+    auth_err = check_central_auth(base, token, creds=creds)
     if auth_err:
         return {"state": "error", "message": auth_err}
 

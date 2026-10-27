@@ -16,13 +16,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lib.central import (  # noqa: E402
-    central_api_base,
-    central_api_token,
     central_connection,
     central_request,
     check_central_auth,
     load_lab_credentials,
 )
+from lib.openshift import ensure_oc  # noqa: E402
 
 MODULE_ID = "registries"
 QUAY_INTEGRATION_NAME = "Public Quay.io"
@@ -62,8 +61,12 @@ def auth_entry(auths: dict[str, dict[str, str]], host: str) -> tuple[str, str]:
     return user, password
 
 
-def list_integrations(base: str, token: str) -> list[dict[str, Any]]:
-    code, body = central_request(base, token, "GET", "/v1/imageintegrations")
+def list_integrations(
+    base: str, authorization: str, *, creds: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
+    code, body = central_request(
+        base, authorization, "GET", "/v1/imageintegrations", creds=creds
+    )
     if code != 200:
         raise RuntimeError(f"GET /v1/imageintegrations failed ({code}): {body}")
     return body.get("integrations") or []
@@ -140,12 +143,16 @@ def build_rhel_payload(username: str, password: str, *, skip_test: bool) -> dict
 
 def evaluate() -> dict[str, Any]:
     creds = load_lab_credentials()
-    base = central_api_base(creds)
-    token = central_api_token(creds)
+    base, authorization = central_connection(creds)
 
-    auth_error = check_central_auth(base, token)
+    auth_error = check_central_auth(base, authorization, creds=creds)
     if auth_error:
         return {"state": "error", "message": auth_error}
+
+    try:
+        ensure_oc(creds)
+    except RuntimeError as exc:
+        return {"state": "error", "message": str(exc)}
 
     auths = load_pull_secret_auths()
     missing_hosts = [host for host in REQUIRED_PULL_SECRET_HOSTS if host not in auths]
@@ -157,7 +164,7 @@ def evaluate() -> dict[str, Any]:
 
     quay_user, quay_password = auth_entry(auths, "quay.io")
     rhel_user, rhel_password = auth_entry(auths, "registry.redhat.io")
-    integrations = list_integrations(base, token)
+    integrations = list_integrations(base, authorization, creds=creds)
     quay = find_quay_integration(integrations)
     rhel = find_rhel_integration(integrations)
 

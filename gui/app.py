@@ -14,11 +14,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from lab_credentials import credentials_path, for_api_response, merge_and_save
+from run_log import append_today_log, begin_run, mark_page_load, read_today_log
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GUI_DIR = Path(__file__).resolve().parent
 MODULES_JSON = REPO_ROOT / "config" / "modules.json"
-ACS_SETUP = REPO_ROOT / "acs-setup.sh"
+ACS_SETUP = REPO_ROOT / "scripts" / "acs-setup.sh"
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -53,15 +54,9 @@ class SecuredClusterIn(BaseModel):
 
 
 class LabCredentialsIn(BaseModel):
+    insecureSkipTlsVerify: bool = False
     centralCluster: CentralClusterIn = Field(default_factory=CentralClusterIn)
     securedCluster: SecuredClusterIn = Field(default_factory=SecuredClusterIn)
-
-
-class RunResult(BaseModel):
-    ok: bool
-    exit_code: int
-    stdout: str
-    stderr: str
 
 
 def subprocess_env() -> dict[str, str]:
@@ -151,6 +146,19 @@ def get_credentials_path() -> dict[str, str]:
     return {"path": str(credentials_path(REPO_ROOT))}
 
 
+@app.get("/api/log")
+def get_run_log() -> dict[str, str]:
+    """Today's tee'd run log (empty string if none yet)."""
+    return {"text": read_today_log(REPO_ROOT)}
+
+
+@app.post("/api/log/page-load")
+def post_log_page_load() -> dict[str, bool]:
+    """Record a hard-refresh / page-load divider in today's tee'd log (not shown in the pane)."""
+    mark_page_load(REPO_ROOT)
+    return {"ok": True}
+
+
 @app.post("/api/run/{module_id}")
 def run_module(module_id: str, dry_run: bool = False) -> StreamingResponse:
     args = ["--run", "--module", module_id]
@@ -158,6 +166,7 @@ def run_module(module_id: str, dry_run: bool = False) -> StreamingResponse:
         args.append("--dry-run")
 
     def stream_output():
+        begin_run(REPO_ROOT, module_id, dry_run=dry_run)
         proc = subprocess.Popen(
             [str(ACS_SETUP), *args],
             cwd=REPO_ROOT,
@@ -169,10 +178,14 @@ def run_module(module_id: str, dry_run: bool = False) -> StreamingResponse:
         )
         assert proc.stdout is not None
         try:
-            yield from proc.stdout
+            for chunk in proc.stdout:
+                append_today_log(REPO_ROOT, chunk)
+                yield chunk
         finally:
             proc.wait()
-        yield f"\n__EXIT__:{proc.returncode}\n"
+        trailer = f"\n__EXIT__:{proc.returncode}\n"
+        append_today_log(REPO_ROOT, trailer)
+        yield trailer
 
     return StreamingResponse(stream_output(), media_type="text/plain; charset=utf-8")
 

@@ -21,6 +21,7 @@ let moduleMetaById = new Map();
 let busy = false;
 
 const fields = {
+  insecureSkipTlsVerify: document.getElementById("insecureSkipTlsVerify"),
   centralOcpConsole: document.getElementById("centralOcpConsole"),
   centralOcpUser: document.getElementById("centralOcpUser"),
   centralOcpPassword: document.getElementById("centralOcpPassword"),
@@ -187,11 +188,57 @@ function renderSectionBody(item) {
   return `<div class="status-section-body status-section-body--prose">${paragraphs}</div>`;
 }
 
-function renderSectionsHtml(sections) {
+function sectionExpandKey(moduleId, index, title) {
+  return `${moduleId}::${index}::${title || ""}`;
+}
+
+function captureStatusExpandState() {
+  const moduleIds = new Set();
+  const sectionKeys = new Set();
+  if (!statusWrap) return { moduleIds, sectionKeys };
+
+  statusWrap.querySelectorAll("details.pf-block[data-module-id]").forEach((mod) => {
+    const moduleId = mod.dataset.moduleId;
+    if (!moduleId) return;
+    if (mod.open) moduleIds.add(moduleId);
+    mod.querySelectorAll("details.status-section-json").forEach((sec, index) => {
+      if (!sec.open) return;
+      const title =
+        sec.querySelector(".status-section-json__title")?.textContent?.trim() || "";
+      sectionKeys.add(sectionExpandKey(moduleId, index, title));
+    });
+  });
+  return { moduleIds, sectionKeys };
+}
+
+function applyStatusExpandState(state, { defaultModulesOpen = false } = {}) {
+  if (!statusWrap) return;
+  const moduleIds = state?.moduleIds;
+  const sectionKeys = state?.sectionKeys;
+
+  statusWrap.querySelectorAll("details.pf-block[data-module-id]").forEach((mod) => {
+    const moduleId = mod.dataset.moduleId;
+    if (!moduleId) return;
+    if (moduleIds) {
+      mod.open = moduleIds.has(moduleId);
+    } else {
+      mod.open = defaultModulesOpen;
+    }
+    mod.querySelectorAll("details.status-section-json").forEach((sec, index) => {
+      const title =
+        sec.querySelector(".status-section-json__title")?.textContent?.trim() || "";
+      const key = sectionExpandKey(moduleId, index, title);
+      sec.open = Boolean(sectionKeys && sectionKeys.has(key));
+    });
+  });
+}
+
+function renderSectionsHtml(sections, moduleId = "") {
   if (!Array.isArray(sections) || !sections.length) return "";
 
   let currentGroup = null;
   let html = '<div class="status-sections">';
+  let index = 0;
 
   for (const item of sections) {
     const group = item.group || "";
@@ -209,15 +256,18 @@ function renderSectionsHtml(sections) {
       ? `<span class="status-section-summary">${escapeHtml(item.summary)}</span>`
       : "";
     const body = renderSectionBody(item);
+    const title = item.title || "Section";
+    const key = sectionExpandKey(moduleId, index, title);
 
-    html += `<details class="status-section-json pf-block">
+    html += `<details class="status-section-json pf-block" data-section-key="${escapeHtml(key)}">
       <summary class="pf-block__summary status-section-json__summary">
-        ${tag}<span class="status-section-json__title">${escapeHtml(item.title || "Section")}</span>${summary}
+        ${tag}<span class="status-section-json__title">${escapeHtml(title)}</span>${summary}
       </summary>
       <div class="pf-block__body">
         ${body}
       </div>
     </details>`;
+    index += 1;
   }
 
   html += "</div>";
@@ -419,12 +469,15 @@ function renderStatusModulesPanel() {
     return;
   }
 
+  const hadModules = Boolean(statusWrap.querySelector("details.pf-block[data-module-id]"));
+  const savedExpand = hadModules ? captureStatusExpandState() : null;
+
   statusWrap.innerHTML = modules
     .map((row) => {
       const id = row.id;
       const st = lastStatusMap.get(id);
       const msg = escapeHtml(st?.message || row.message || "—");
-      const sectionsHtml = renderSectionsHtml(st?.sections || row.sections || []);
+      const sectionsHtml = renderSectionsHtml(st?.sections || row.sections || [], id);
       const missing = missingDeps(id);
       const canRun = missing.length === 0;
       const lockHint = missing.length
@@ -435,7 +488,7 @@ function renderStatusModulesPanel() {
           ? `<p class="module-deps-hint">Depends on: ${row.dependsOn.map(escapeHtml).join(", ")}</p>`
           : "";
 
-      return `<details class="pf-block" data-module-id="${escapeHtml(id)}" open>
+      return `<details class="pf-block" data-module-id="${escapeHtml(id)}">
         <summary class="pf-block__summary module-block-summary">
           <span class="module-block-summary__label">${moduleLineHtml(row)}</span>
           <span class="module-block-summary__badge">${badgeHtml(id)}</span>
@@ -453,6 +506,9 @@ function renderStatusModulesPanel() {
       </details>`;
     })
     .join("");
+
+  // Hard refresh / first paint: leave modules collapsed. Later refreshes keep user expand state.
+  applyStatusExpandState(savedExpand, { defaultModulesOpen: false });
 
   btnPreflightExpandAll.disabled = false;
 
@@ -789,6 +845,7 @@ function syncCredentialCopyButtons() {
 
 function buildCredentialsPayload() {
   return {
+    insecureSkipTlsVerify: Boolean(fields.insecureSkipTlsVerify?.checked),
     centralCluster: {
       openshift: {
         consoleUrl: fields.centralOcpConsole.value,
@@ -819,6 +876,9 @@ function buildCredentialsPayload() {
 async function loadCredentials() {
   const data = await api("/api/credentials");
   credFilePath.textContent = data.filePath || "lab-credentials.json";
+  if (fields.insecureSkipTlsVerify) {
+    fields.insecureSkipTlsVerify.checked = Boolean(data.insecureSkipTlsVerify);
+  }
 
   const cc = data.centralCluster;
   fields.centralOcpConsole.value = cc.openshift.consoleUrl || "";
@@ -870,8 +930,19 @@ modSelectAll.addEventListener("change", () => applySelectAll(modSelectAll.checke
 
 setupExpandAll();
 
+async function markPageLoadInDiskLog() {
+  try {
+    await fetch("/api/log/page-load", { method: "POST" });
+  } catch {
+    /* disk marker is best-effort */
+  }
+}
+
 async function init() {
   try {
+    // Hard refresh starts with an empty Log pane; tee'd files under logs/ keep history.
+    if (logEl) logEl.textContent = "";
+    await markPageLoadInDiskLog();
     setupCredentialCopyButtons();
     await loadRegistry();
     await loadCredentials();

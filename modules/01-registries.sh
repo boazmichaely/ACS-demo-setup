@@ -26,7 +26,7 @@ Purpose:
     - registry.redhat.io (docker registry from pull-secret)
 
 Depends on:
-  - lab-credentials.json Central API token (or ROX_API_TOKEN)
+  - lab-credentials.json Central API token and/or admin password (or ROX_API_TOKEN)
   - oc logged into the secured OpenShift cluster (pull-secret in openshift-config)
 
 Environment:

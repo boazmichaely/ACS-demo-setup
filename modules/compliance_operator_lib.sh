@@ -35,6 +35,30 @@ co_python() {
   fi
 }
 
+# Ensure oc works; uses lab-credentials OpenShift user/password when needed.
+# Prints error to stdout as "error\tmessage" style fragment for status helpers.
+co_ensure_oc() {
+  local py err
+  if ! command -v oc >/dev/null 2>&1; then
+    printf 'oc not on PATH\n'
+    return 1
+  fi
+  py="$(co_python)"
+  err="$("$py" -c "
+import sys
+sys.path.insert(0, r'${COMPLIANCE_MODULE_ROOT}')
+from lib.openshift import ensure_oc_message
+msg = ensure_oc_message()
+if msg:
+    print(msg)
+    sys.exit(1)
+" 2>&1)" || {
+    printf '%s\n' "${err:-OpenShift access failed}"
+    return 1
+  }
+  return 0
+}
+
 co_scan_helper() {
   printf '%s' "${COMPLIANCE_MODULE_ROOT}/modules/compliance_scan.py"
 }
@@ -53,8 +77,9 @@ co_operator_status_line() {
     printf 'error\toc not on PATH\n'
     return 1
   fi
-  if ! oc whoami >/dev/null 2>&1; then
-    printf 'error\toc not logged in (secured cluster)\n'
+  local oc_err
+  if ! oc_err="$(co_ensure_oc)"; then
+    printf 'error\t%s\n' "${oc_err:-OpenShift access failed}"
     return 1
   fi
   if ! oc get "namespace/${ns}" >/dev/null 2>&1; then
@@ -133,7 +158,10 @@ compliance_operator_emit_overview_sections() {
   if [[ ! -f "$overview" ]]; then
     return 0
   fi
-  if ! command -v oc >/dev/null 2>&1 || ! oc whoami >/dev/null 2>&1; then
+  if ! command -v oc >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! co_ensure_oc >/dev/null; then
     return 0
   fi
   "$py" "$overview" --sections-json 2>/dev/null || true
@@ -320,7 +348,7 @@ compliance_operator_wait_ready() {
         echo "CSV Succeeded: ${csv_name}"
         break
       fi
-      echo "Waiting for Compliance Operator CSV… (${SECONDS - start}s elapsed)" >&2
+      echo "Waiting for Compliance Operator CSV… ($((SECONDS - start))s elapsed)" >&2
       sleep 10
     done
   fi
@@ -362,8 +390,9 @@ compliance_operator_run() {
     compliance_operator_emit_status
     return 1
   fi
-  if ! oc whoami >/dev/null 2>&1; then
-    echo "oc not logged in — log in to the secured cluster" >&2
+  local oc_err
+  if ! oc_err="$(co_ensure_oc)"; then
+    echo "${oc_err:-OpenShift access failed}" >&2
     compliance_operator_emit_status
     return 1
   fi
@@ -392,16 +421,17 @@ compliance_operator_run() {
     compliance_operator_run_scan "$dry_run" || rc=1
   fi
 
-  local status_line state
-  status_line="$(compliance_operator_emit_status || true)"
-  printf '%s\n' "$status_line"
+  local status_out module_row state
+  # emit_status also prints ACS_SECTIONS_JSON=... for the GUI; only the module row is authoritative.
+  status_out="$(compliance_operator_emit_status || true)"
+  printf '%s\n' "$status_out"
+  module_row="$(printf '%s\n' "$status_out" | awk -F'\t' -v id="$MODULE_ID" '$1 == id { print; exit }')"
+  state="$(printf '%s' "$module_row" | awk -F'\t' '{ print $2 }')"
 
   if [[ "$dry_run" == "true" ]]; then
-    state="$(printf '%s' "$status_line" | awk -F'\t' '{print $2}')"
     [[ "$state" != "error" ]] && [[ "$rc" -eq 0 ]]
     return
   fi
 
-  state="$(printf '%s' "$status_line" | awk -F'\t' '{print $2}')"
   [[ "$state" == "ok" ]] && [[ "$rc" -eq 0 ]]
 }

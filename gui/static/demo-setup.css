@@ -8,6 +8,15 @@
   min-width: 0;
 }
 
+.cred-tls-skip {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-v5-global--spacer--sm);
+  margin: 0 0 var(--pf-v5-global--spacer--md);
+  /* Full-width row above the Central | Secured two-column grid */
+  grid-column: 1 / -1;
+}
+
 /* Central credentials: standalone collapsible (not part of status preflight expand-all) */
 details.cred-panel {
   margin: 0 0 var(--pf-v5-global--spacer--lg);
