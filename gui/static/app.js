@@ -1,5 +1,5 @@
 /**
- * ACS demo setup GUI — PatternFly v5 (see REQUIREMENTS-GUI.md)
+ * ACS demo setup GUI — PatternFly v6 + Felt (see REQUIREMENTS-GUI.md)
  */
 
 const logEl = document.getElementById("log");
@@ -501,25 +501,25 @@ function applySelectAll(on) {
 function renderModuleRows() {
   if (!registryModules.length) {
     modulesTbody.innerHTML =
-      '<tr class="pf-v5-c-table__tr"><td class="pf-v5-c-table__td module-row-td" colspan="2">No modules.</td></tr>';
+      '<tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td module-row-td" colspan="2">No modules.</td></tr>';
     return;
   }
 
   modulesTbody.innerHTML = registryModules
     .map((m) => {
       const id = escapeHtml(m.id);
-      return `<tr class="pf-v5-c-table__tr" data-module-id="${id}">
-        <td class="pf-v5-c-table__td module-row-td module-module-col">
+      return `<tr class="pf-v6-c-table__tr" data-module-id="${id}">
+        <td class="pf-v6-c-table__td module-row-td module-module-col">
           <div class="module-row">
-            <label class="module-row__check pf-v5-c-check">
-              <input class="pf-v5-c-check__input js-mod-cb" type="checkbox" data-module-id="${id}" />
+            <label class="module-row__check pf-v6-c-check">
+              <input class="pf-v6-c-check__input js-mod-cb" type="checkbox" data-module-id="${id}" />
             </label>
             <div class="module-row__label-wrap">
               <label class="module-row__label" for="mod-cb-${id}">${moduleCellHtml(m)}</label>
             </div>
           </div>
         </td>
-        <td class="pf-v5-c-table__td module-row-td module-status-col js-status-cell" data-module-id="${id}">
+        <td class="pf-v6-c-table__td module-row-td module-status-col js-status-cell" data-module-id="${id}">
           ${moduleStatusCellHtml(m.id)}
         </td>
       </tr>`;
@@ -552,7 +552,7 @@ function renderStatusModulesPanel() {
   const modules = lastStatusModules.length ? lastStatusModules : registryModules;
   if (!modules.length) {
     statusWrap.innerHTML =
-      '<p class="pf-v5-c-helper-text">No status yet. Click Refresh status.</p>';
+      '<p class="pf-v6-c-helper-text">No status yet. Click Refresh status.</p>';
     btnPreflightExpandAll.disabled = true;
     return;
   }
@@ -587,8 +587,8 @@ function renderStatusModulesPanel() {
           ${depsHint}
           ${lockHint}
           <div class="demo-actions-row">
-            <button type="button" class="pf-v5-c-button pf-m-primary js-mod-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Run</button>
-            <button type="button" class="pf-v5-c-button pf-m-secondary js-mod-dry-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Dry run</button>
+            <button type="button" class="pf-v6-c-button pf-m-primary js-mod-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Run</button>
+            <button type="button" class="pf-v6-c-button pf-m-secondary js-mod-dry-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Dry run</button>
           </div>
         </div>
       </details>`;
@@ -883,7 +883,7 @@ function setupCredentialCopyButtons() {
   const form = document.getElementById("credForm");
   if (!form) return;
 
-  form.querySelectorAll("input.pf-v5-c-form-control").forEach((input) => {
+  form.querySelectorAll("input.pf-v6-c-form-control").forEach((input) => {
     wrapInputWithCopy(input);
   });
 
@@ -901,7 +901,7 @@ function syncCredentialCopyButtons() {
   const form = document.getElementById("credForm");
   if (!form) return;
   form.querySelectorAll(".cred-field-wrap").forEach((wrap) => {
-    const input = wrap.querySelector("input.pf-v5-c-form-control");
+    const input = wrap.querySelector("input.pf-v6-c-form-control");
     const btn = wrap.querySelector(".cred-copy-btn");
     if (!input || !btn) return;
     btn.disabled = input.disabled || !input.value.trim();
@@ -981,23 +981,23 @@ function renderSecuredClusters(lab) {
         ? ""
         : `<label class="sc-inline">
             <span class="sc-inline__label">Name</span>
-            <input class="pf-v5-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(sc.name || "")}" spellcheck="false" />
+            <input class="pf-v6-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(sc.name || "")}" spellcheck="false" />
           </label>`;
       const ocpFields = same
         ? `<p class="sc-row__note">Uses Central OpenShift credentials above.</p>`
         : `<div class="sc-row__ocp">
-            <div class="pf-v5-c-form__group">
-              <label class="pf-v5-c-form__label">Console URL</label>
-              <input class="pf-v5-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl || "")}" spellcheck="false" />
+            <div class="pf-v6-c-form__group">
+              <label class="pf-v6-c-form__label">Console URL</label>
+              <input class="pf-v6-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl || "")}" spellcheck="false" />
             </div>
             <div class="cred-form-row cred-form-row--pair">
-              <div class="pf-v5-c-form__group">
-                <label class="pf-v5-c-form__label">User</label>
-                <input class="pf-v5-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername || "")}" spellcheck="false" />
+              <div class="pf-v6-c-form__group">
+                <label class="pf-v6-c-form__label">User</label>
+                <input class="pf-v6-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername || "")}" spellcheck="false" />
               </div>
-              <div class="pf-v5-c-form__group">
-                <label class="pf-v5-c-form__label">Password</label>
-                <input class="pf-v5-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" placeholder="Optional if using oc login" spellcheck="false" />
+              <div class="pf-v6-c-form__group">
+                <label class="pf-v6-c-form__label">Password</label>
+                <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" placeholder="Optional if using oc login" spellcheck="false" />
               </div>
             </div>
           </div>`;
@@ -1007,15 +1007,15 @@ function renderSecuredClusters(lab) {
           <span class="sc-row__title js-sc-title">${escapeHtml(sc.name || "secured")}</span>
           ${badge}
           <span class="sc-row__sub js-sc-sub">${escapeHtml(scSubLabel(sc))}</span>
-          <button type="button" class="pf-v5-c-button pf-m-plain sc-row__remove js-sc-remove"
+          <button type="button" class="pf-v6-c-button pf-m-plain sc-row__remove js-sc-remove"
             title="Remove secured cluster">Remove</button>
         </summary>
         <div class="sc-row__body">
           <div class="sc-row__top">
             ${nameField}
-            <label class="pf-v5-c-check cred-same-cluster">
-              <input class="pf-v5-c-check__input js-sc-same" type="checkbox"${same ? " checked" : ""} />
-              <span class="pf-v5-c-check__label">Same as Central</span>
+            <label class="pf-v6-c-check cred-same-cluster">
+              <input class="pf-v6-c-check__input js-sc-same" type="checkbox"${same ? " checked" : ""} />
+              <span class="pf-v6-c-check__label">Same as Central</span>
             </label>
           </div>
           ${ocpFields}
@@ -1084,9 +1084,9 @@ function applyScSameToggle(row) {
   if (same) {
     body.innerHTML = `
       <div class="sc-row__top">
-        <label class="pf-v5-c-check cred-same-cluster">
-          <input class="pf-v5-c-check__input js-sc-same" type="checkbox" checked />
-          <span class="pf-v5-c-check__label">Same as Central</span>
+        <label class="pf-v6-c-check cred-same-cluster">
+          <input class="pf-v6-c-check__input js-sc-same" type="checkbox" checked />
+          <span class="pf-v6-c-check__label">Same as Central</span>
         </label>
       </div>
       <p class="sc-row__note">Uses Central OpenShift credentials above.</p>`;
@@ -1095,26 +1095,26 @@ function applyScSameToggle(row) {
       <div class="sc-row__top">
         <label class="sc-inline">
           <span class="sc-inline__label">Name</span>
-          <input class="pf-v5-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(name)}" spellcheck="false" />
+          <input class="pf-v6-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(name)}" spellcheck="false" />
         </label>
-        <label class="pf-v5-c-check cred-same-cluster">
-          <input class="pf-v5-c-check__input js-sc-same" type="checkbox" />
-          <span class="pf-v5-c-check__label">Same as Central</span>
+        <label class="pf-v6-c-check cred-same-cluster">
+          <input class="pf-v6-c-check__input js-sc-same" type="checkbox" />
+          <span class="pf-v6-c-check__label">Same as Central</span>
         </label>
       </div>
       <div class="sc-row__ocp">
-        <div class="pf-v5-c-form__group">
-          <label class="pf-v5-c-form__label">Console URL</label>
-          <input class="pf-v5-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl)}" spellcheck="false" />
+        <div class="pf-v6-c-form__group">
+          <label class="pf-v6-c-form__label">Console URL</label>
+          <input class="pf-v6-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl)}" spellcheck="false" />
         </div>
         <div class="cred-form-row cred-form-row--pair">
-          <div class="pf-v5-c-form__group">
-            <label class="pf-v5-c-form__label">User</label>
-            <input class="pf-v5-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername)}" spellcheck="false" />
+          <div class="pf-v6-c-form__group">
+            <label class="pf-v6-c-form__label">User</label>
+            <input class="pf-v6-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername)}" spellcheck="false" />
           </div>
-          <div class="pf-v5-c-form__group">
-            <label class="pf-v5-c-form__label">Password</label>
-            <input class="pf-v5-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword)}" placeholder="Optional if using oc login" spellcheck="false" />
+          <div class="pf-v6-c-form__group">
+            <label class="pf-v6-c-form__label">Password</label>
+            <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword)}" placeholder="Optional if using oc login" spellcheck="false" />
           </div>
         </div>
       </div>`;
@@ -1597,7 +1597,7 @@ async function init() {
   } catch (err) {
     log(`\n${err.message}\n`);
     modulesTbody.innerHTML =
-      '<tr class="pf-v5-c-table__tr"><td class="pf-v5-c-table__td module-row-td" colspan="2">Failed to load.</td></tr>';
+      '<tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td module-row-td" colspan="2">Failed to load.</td></tr>';
   }
 }
 

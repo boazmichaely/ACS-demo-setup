@@ -26,6 +26,8 @@ Equivalent: `./gui/serve.sh`. Default http://127.0.0.1:8765; if busy, the next f
 | POST | `/api/credentials/active-lab` | Set `activeLabId` (`{ "labId": "…" }`); writes a `lab-switch` disk-log marker |
 
 Lab switch updates which Central/OpenShift credentials modules read. OpenShift access for modules uses **per-lab kubeconfigs** derived from `lab-credentials.json`. Troubleshoot with `./scripts/acs-setup.sh --oc-status` / `--oc-login` (see repo [README](../README.md)). The interactive `~/.kube/config` is not the source of truth.
+
+UI shell: PatternFly 6 + Project Felt (masthead, theme toggle, log drawer). Visual contract while porting: `/static/mock-modern.html`. Look/feel rules: [REQUIREMENTS-GUI.md](../REQUIREMENTS-GUI.md).
 | GET | `/api/log` | Today's tee'd run log text (`logs/gui-YYYY-MM-DD.log`) |
 | POST | `/api/log/page-load` | Append a `page-load` timestamp divider (hard refresh / load) |
 | POST | `/api/run/{id}?dry_run=true` | Orchestrator `--run` (streamed to the browser and tee'd to today's log) |

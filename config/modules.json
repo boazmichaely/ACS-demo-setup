@@ -89,6 +89,12 @@
       "id": "prometheus",
       "label": "prometheus — Prometheus on cluster + ACS monitoring wiring",
       "dependsOn": []
+    },
+    {
+      "number": 16,
+      "id": "secrets-manager",
+      "label": "secrets-manager — HashiCorp Vault, ESM console plugin, ESO, demo app",
+      "dependsOn": []
     }
   ]
 }

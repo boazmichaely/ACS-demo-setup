@@ -5,7 +5,7 @@ Repeatable automation to **prepare a RHACS demo lab** after Central and a secure
 | Doc | Contents |
 |-----|----------|
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Problem, lab assumptions, modules, CLI contract, functional GUI behavior |
-| [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) | **Look and feel** — PatternFly v5, layout, credentials panel, module table, status, log |
+| [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) | **Look and feel** — PatternFly v6 + Felt, masthead, credentials, modules, status, log |
 
 **Repo:** https://github.com/boazmichaely/ACS-demo-setup (private)
 
@@ -58,5 +58,5 @@ After a lab switch, if modules still look wrong: `--oc-status`, then `--oc-login
 | Area | State |
 |------|--------|
 | Requirements | Approved ([§9](REQUIREMENTS.md)) |
-| GUI | PatternFly v5 per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
+| GUI | PatternFly v6 + Felt shell per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
 | Modules | `registries`, `compliance-operator` implemented; others listed in `config/modules.json` |

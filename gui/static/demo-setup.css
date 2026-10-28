@@ -1,6 +1,172 @@
 /*
- * ACS demo setup GUI — PatternFly tokens + local layout (no external repo links).
+ * ACS demo setup GUI — PatternFly 6 + Felt layout.
+ * Bridge: legacy --pf-v5-global-* names used below map to PF6 tokens.
  */
+
+html.pf-v6-theme-felt {
+  font-size: 112.5%;
+}
+
+:root,
+.pf-v6-theme-felt {
+  --pf-v5-global--BackgroundColor--100: var(--pf-t--global--background--color--primary--default, #fff);
+  --pf-v5-global--BorderColor--100: var(--pf-t--global--border--color--default, #c7c7c7);
+  --pf-v5-global--BorderColor--200: var(--pf-t--global--border--color--hover, #8a8d90);
+  --pf-v5-global--BorderRadius--sm: var(--pf-t--global--border--radius--sm, 4px);
+  --pf-v5-global--BorderRadius--lg: var(--pf-t--global--border--radius--lg, 16px);
+  --pf-v5-global--Color--100: var(--pf-t--global--text--color--regular, #151515);
+  --pf-v5-global--Color--200: var(--pf-t--global--text--color--subtle, #6a6e73);
+  --pf-v5-global--FontFamily--monospace: var(--pf-t--global--font--family--mono, ui-monospace, monospace);
+  --pf-v5-global--FontSize--xs: var(--pf-t--global--font--size--xs, 0.75rem);
+  --pf-v5-global--FontSize--sm: var(--pf-t--global--font--size--sm, 0.875rem);
+  --pf-v5-global--FontSize--md: var(--pf-t--global--font--size--body--md, 1rem);
+  --pf-v5-global--FontSize--lg: var(--pf-t--global--font--size--lg, 1.125rem);
+  --pf-v5-global--FontSize--xl: var(--pf-t--global--font--size--xl, 1.25rem);
+  --pf-v5-global--FontWeight--normal: var(--pf-t--global--font--weight--body--default, 400);
+  --pf-v5-global--FontWeight--semibold: var(--pf-t--global--font--weight--body--bold, 600);
+  --pf-v5-global--FontWeight--bold: var(--pf-t--global--font--weight--body--bold, 700);
+  --pf-v5-global--danger-color--100: var(--pf-t--global--color--status--danger--default, #c9190b);
+  --pf-v5-global--danger-color--200: var(--pf-t--global--text--color--status--danger--default, #a30000);
+  --pf-v5-global--success-color--200: var(--pf-t--global--text--color--status--success--default, #3e8635);
+  --pf-v5-global--link--Color: var(--pf-t--global--text--color--link--default, #0066cc);
+  --pf-v5-global--primary-color--100: var(--pf-t--global--color--brand--default, #ee0000);
+  --pf-v5-global--spacer--xs: var(--pf-t--global--spacer--xs, 0.25rem);
+  --pf-v5-global--spacer--sm: var(--pf-t--global--spacer--sm, 0.5rem);
+  --pf-v5-global--spacer--md: var(--pf-t--global--spacer--md, 1rem);
+  --pf-v5-global--spacer--lg: var(--pf-t--global--spacer--lg, 1.5rem);
+  --pf-v5-global--palette--black-50: #fafafa;
+  --pf-v5-global--palette--black-100: #f0f0f0;
+  --pf-v5-global--palette--black-150: #f5f5f5;
+  --pf-v5-global--palette--black-200: #e0e0e0;
+  --pf-v5-global--palette--black-600: #6a6e73;
+  --pf-v5-global--palette--black-850: #212427;
+  --pf-v5-global--palette--blue-50: #e7f1fa;
+  --pf-v5-global--palette--blue-100: #bee1f4;
+  --pf-v5-global--palette--blue-200: #7dc3e8;
+  --pf-v5-global--palette--blue-600: #0066cc;
+  --pf-v5-global--palette--blue-700: #004080;
+  --pf-v5-global--palette--gold-50: #fdf7e7;
+  --pf-v5-global--palette--gold-100: #f9e0a2;
+  --pf-v5-global--palette--gold-200: #f0ab00;
+  --pf-v5-global--palette--gold-500: #c58c00;
+  --pf-v5-global--palette--gold-700: #795600;
+  --pf-v5-global--palette--green-50: #f3faf2;
+  --pf-v5-global--palette--green-200: #bde5b8;
+  --pf-v5-global--palette--green-500: #3e8635;
+  --pf-v5-global--palette--green-600: #1e4f18;
+  --pf-v5-global--palette--red-50: #faeae8;
+  --pf-v5-global--palette--red-100: #c9190b;
+  --pf-v5-global--palette--red-400: #a30000;
+}
+
+/* Masthead brand + active lab (shell port) */
+.demo-mh-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-v5-global--spacer--sm);
+  text-decoration: none;
+  color: inherit;
+}
+.demo-mh-brand:hover { text-decoration: none; color: inherit; }
+.demo-mh-logo { width: 2rem; height: 2rem; object-fit: contain; }
+.demo-mh-title {
+  font-size: var(--pf-v5-global--FontSize--lg);
+  font-weight: var(--pf-v5-global--FontWeight--bold);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.demo-mh-lab {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-v5-global--spacer--sm);
+  min-width: 0;
+}
+.demo-mh-lab__label {
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+  white-space: nowrap;
+}
+.demo-mh-lab select { min-width: 12rem; max-width: 20rem; }
+.demo-mh-lab__hint {
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.demo-oc-chip { font-size: var(--pf-v5-global--FontSize--sm); white-space: nowrap; }
+
+/* Log bottom drawer (shell port) */
+.demo-log-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 200;
+  border-top: 1px solid var(--pf-v5-global--BorderColor--100);
+  background: var(--pf-v5-global--BackgroundColor--100);
+  box-shadow: 0 -0.25rem 0.75rem rgba(0, 0, 0, 0.08);
+}
+.demo-log-drawer__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-v5-global--spacer--sm);
+  width: 100%;
+  padding: var(--pf-v5-global--spacer--sm) var(--pf-v5-global--spacer--lg);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.demo-log-drawer__title { font-weight: var(--pf-v5-global--FontWeight--semibold); }
+.demo-log-drawer__preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--pf-v5-global--FontFamily--monospace);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+}
+.demo-log-drawer__chev {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.demo-log-drawer.is-open .demo-log-drawer__chev { transform: rotate(-135deg); }
+.demo-log-drawer__panel {
+  display: none;
+  max-height: min(40vh, 22rem);
+  overflow: auto;
+  border-top: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+.demo-log-drawer.is-open .demo-log-drawer__panel { display: block; }
+.demo-log-drawer .demo-log {
+  min-height: 8rem;
+  max-height: min(40vh, 22rem);
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+.demo-pad {
+  padding-bottom: calc(4.5rem + var(--pf-v5-global--spacer--lg)) !important;
+}
+
+/* Avoid Felt pill radius on tall panels */
+.cred-panel,
+.status-panel,
+.pf-block,
+.fold-block {
+  border-radius: var(--pf-v5-global--BorderRadius--sm) !important;
+}
 
 .cred-path-line {
   margin: 0;
