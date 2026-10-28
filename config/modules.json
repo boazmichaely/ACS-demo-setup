@@ -59,6 +59,36 @@
       "id": "roxctl-env",
       "label": "roxctl-env — ~/.roxctl route + API token",
       "dependsOn": []
+    },
+    {
+      "number": 11,
+      "id": "openshift-mcp",
+      "label": "openshift-mcp — OpenShift MCP server + agent wiring",
+      "dependsOn": []
+    },
+    {
+      "number": 12,
+      "id": "openshift-mcp-gateway",
+      "label": "openshift-mcp-gateway — MCP Gateway on designated cluster",
+      "dependsOn": []
+    },
+    {
+      "number": 13,
+      "id": "acs-lightspeed",
+      "label": "acs-lightspeed — OpenShift Lightspeed + ACS MCP integration",
+      "dependsOn": []
+    },
+    {
+      "number": 14,
+      "id": "acs-mcp",
+      "label": "acs-mcp — ACS MCP server + agent wiring",
+      "dependsOn": []
+    },
+    {
+      "number": 15,
+      "id": "prometheus",
+      "label": "prometheus — Prometheus on cluster + ACS monitoring wiring",
+      "dependsOn": []
     }
   ]
 }
