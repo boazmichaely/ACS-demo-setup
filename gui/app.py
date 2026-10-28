@@ -112,7 +112,13 @@ def list_modules() -> list[dict]:
     if not MODULES_JSON.is_file():
         raise HTTPException(status_code=500, detail=f"missing {MODULES_JSON}")
     data = json.loads(MODULES_JSON.read_text(encoding="utf-8"))
-    return sorted(data.get("modules", []), key=lambda m: m.get("number", 0))
+    modules = sorted(data.get("modules", []), key=lambda m: m.get("number", 0))
+    for mod in modules:
+        num = mod.get("number")
+        mid = (mod.get("id") or "").strip()
+        script = REPO_ROOT / "modules" / f"{int(num):02d}-{mid}.sh"
+        mod["scriptInstalled"] = script.is_file() and os.access(script, os.X_OK)
+    return modules
 
 
 @app.get("/api/status")
@@ -225,4 +231,11 @@ app.mount("/static", StaticFiles(directory=GUI_DIR / "static"), name="static")
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(GUI_DIR / "static" / "index.html")
+    # HTML must not stick in the browser; asset URLs inside it carry ?v= cache busts.
+    return FileResponse(
+        GUI_DIR / "static" / "index.html",
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )

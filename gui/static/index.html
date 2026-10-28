@@ -15,9 +15,9 @@
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=unfold_more,content_copy,done"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=content_copy,done,open_in_new"
     />
-    <link rel="stylesheet" href="/static/demo-setup.css?v=shell-pf6-1" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell16" />
   </head>
   <body>
     <div class="pf-v6-c-page pf-m-no-sidebar" id="page">
@@ -52,18 +52,7 @@
                         class="pf-v6-c-form-control"
                         aria-label="Active lab for modules"
                       ></select>
-                      <span class="demo-mh-lab__hint" id="labStripHint"></span>
-                      <span class="demo-sr-only" id="labStripName">—</span>
                     </div>
-                  </div>
-                  <div class="pf-v6-c-toolbar__item">
-                    <span
-                      class="pf-v6-c-label pf-m-grey demo-oc-chip"
-                      id="ocStatusChip"
-                      title="OpenShift readiness for the active lab (CLI: ./scripts/acs-setup.sh --oc-status)"
-                    >
-                      <span class="pf-v6-c-label__content">oc</span>
-                    </span>
                   </div>
                   <div class="pf-v6-c-toolbar__item">
                     <div class="pf-v6-c-toggle-group" role="group" aria-label="Color scheme">
@@ -107,39 +96,80 @@
       </header>
 
       <div class="pf-v6-c-page__main-container pf-m-fill">
-      <main class="pf-v6-c-page__main" tabindex="-1" id="main-content">
-        <section class="pf-v6-c-page__main-section">
-        <div class="pf-v6-c-page__main-body demo-pad">
-          <details class="cred-panel" id="credPanel">
-            <summary class="cred-panel__toggle">
-              <span class="cred-panel__chev" aria-hidden="true"></span>
-              <span class="cred-panel__title">Lab credentials</span>
-            </summary>
-            <div class="cred-panel__body">
-              <div class="pf-v6-c-card">
-                <div class="pf-v6-c-card__body pf-m-pt-sm">
-                  <div class="cred-actions-row">
-                    <p class="pf-v6-c-helper-text cred-path-line">
-                      <span class="cred-path-label">File:</span>
-                      <code id="credFilePath" class="cred-file-path">—</code>
+        <main class="pf-v6-c-page__main" tabindex="-1" id="main-content">
+          <section class="pf-v6-c-page__main-section">
+            <div class="pf-v6-c-page__main-body demo-pad">
+              <details class="demo-cred" id="credPanel">
+                <summary class="demo-cred__summary">
+                  <span class="demo-cred__chev" aria-hidden="true"></span>
+                  <span class="demo-cred__title">Lab credentials</span>
+                </summary>
+                <div class="demo-cred__body">
+                  <div
+                    class="pf-v6-c-alert pf-m-warning pf-m-inline"
+                    id="credDualMismatch"
+                    hidden
+                    role="alert"
+                    aria-label="Warning"
+                  >
+                    <div class="pf-v6-c-alert__icon">
+                      <svg
+                        class="pf-v6-svg"
+                        fill="currentColor"
+                        viewBox="0 0 32 32"
+                        aria-hidden="true"
+                        role="img"
+                        width="1em"
+                        height="1em"
+                      >
+                        <path
+                          d="m31.874 28.514-15.011-27a1.001 1.001 0 0 0-1.748 0l-15.011 27A1 1 0 0 0 .978 30H31a1 1 0 0 0 .874-1.486ZM14.5 12a1.5 1.5 0 0 1 3 0v5a1.5 1.5 0 0 1-3 0v-5ZM16 26.001a2 2 0 1 1-.001-3.999A2 2 0 0 1 16 26.001Z"
+                        />
+                      </svg>
+                    </div>
+                    <p class="pf-v6-c-alert__title">
+                      <span class="pf-v6-screen-reader">Warning:</span>
+                      You are editing the active lab.
                     </p>
-                    <span id="credSaveFeedback" class="cred-save-feedback" aria-live="polite"></span>
-                    <button class="pf-v6-c-button pf-m-primary" type="button" id="btnCredSave">
-                      Save
-                    </button>
                   </div>
-                  <form id="credForm" class="cred-form" autocomplete="off">
-                    <div class="mock-lab-toolbar">
-                      <label class="mock-lab-toolbar__lab">
-                        <span class="mock-lab-toolbar__label">Edit</span>
+
+                  <div class="demo-cred-top">
+                    <p class="demo-cred-path" id="credPathLine">
+                      <span>File:</span>
+                      <code id="credFilePath">—</code>
+                    </p>
+                    <span id="credSaveFeedback" class="demo-cred-feedback" aria-live="polite"></span>
+                    <div class="demo-cred-top__actions">
+                      <button
+                        class="pf-v6-c-button pf-m-secondary pf-m-small"
+                        type="button"
+                        id="btnCredCancel"
+                        title="Discard edits and reload from file"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        class="pf-v6-c-button pf-m-primary pf-m-small"
+                        type="button"
+                        id="btnCredSave"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+
+                  <form id="credForm" class="demo-cred-form" autocomplete="off">
+                    <div class="demo-lab-toolbar">
+                      <label class="demo-lab-toolbar__lab">
+                        <span class="demo-lab-toolbar__label">Edit</span>
                         <select
                           id="editLabSelect"
                           class="pf-v6-c-form-control"
                           aria-label="Lab to edit"
                         ></select>
                       </label>
-                      <label class="mock-lab-toolbar__name">
-                        <span class="mock-lab-toolbar__label">Name</span>
+                      <label class="demo-lab-toolbar__name">
+                        <span class="demo-lab-toolbar__label">Name</span>
                         <input
                           class="pf-v6-c-form-control"
                           type="text"
@@ -147,12 +177,8 @@
                           spellcheck="false"
                         />
                       </label>
-                      <div class="mock-lab-toolbar__actions">
-                        <button
-                          type="button"
-                          class="pf-v6-c-button pf-m-secondary"
-                          id="btnAddLab"
-                        >
+                      <div class="demo-lab-toolbar__actions">
+                        <button type="button" class="pf-v6-c-button pf-m-secondary" id="btnAddLab">
                           Add
                         </button>
                         <button
@@ -167,12 +193,12 @@
                           type="button"
                           class="pf-v6-c-button pf-m-danger"
                           id="btnDeleteLab"
-                          title="Delete the lab being edited (disabled for the active lab, or when only one lab remains)"
+                          title="Delete the lab being edited"
                         >
                           Delete
                         </button>
                       </div>
-                      <label class="pf-v6-c-check mock-lab-toolbar__tls">
+                      <label class="pf-v6-c-check demo-lab-toolbar__tls">
                         <input
                           class="pf-v6-c-check__input"
                           type="checkbox"
@@ -182,309 +208,313 @@
                       </label>
                     </div>
 
-                    <details class="fold-block" id="centralFold">
-                      <summary class="fold-block__summary">
-                        <span class="fold-block__chev" aria-hidden="true"></span>
-                        <span class="fold-block__title">Central</span>
-                        <span class="fold-block__meta" id="centralFoldMeta"></span>
+                    <details class="demo-fold" id="centralFold">
+                      <summary class="demo-fold__summary">
+                        <span class="demo-fold__chev" aria-hidden="true"></span>
+                        <span class="demo-fold__title">Central</span>
+                        <span class="demo-fold__meta" id="centralFoldMeta"></span>
                       </summary>
-                      <div class="fold-block__body">
-                        <div class="cred-cluster__cols">
-                          <div class="cred-subsection">
-                            <h3 class="cred-subsection__title">OpenShift</h3>
-                            <div class="pf-v6-c-form pf-v6-c-form--compact">
-                              <div class="pf-v6-c-form__group">
-                                <label class="pf-v6-c-form__label" for="centralOcpConsole"
-                                  >Console URL</label
-                                >
+                      <div class="demo-fold__body">
+                        <div class="demo-central-cols">
+                          <div class="demo-sub">
+                            <h3 class="demo-sub__title">OpenShift</h3>
+                            <label class="demo-field">
+                              <span>Console URL</span>
+                              <input
+                                class="pf-v6-c-form-control"
+                                id="centralOcpConsole"
+                                type="url"
+                                spellcheck="false"
+                              />
+                            </label>
+                            <div class="demo-field-row">
+                              <label class="demo-field">
+                                <span>User</span>
                                 <input
                                   class="pf-v6-c-form-control"
-                                  type="url"
-                                  id="centralOcpConsole"
+                                  id="centralOcpUser"
+                                  type="text"
                                   spellcheck="false"
                                 />
-                              </div>
-                              <div class="cred-form-row cred-form-row--pair">
-                                <div class="pf-v6-c-form__group">
-                                  <label class="pf-v6-c-form__label" for="centralOcpUser"
-                                    >User</label
-                                  >
-                                  <input
-                                    class="pf-v6-c-form-control"
-                                    type="text"
-                                    id="centralOcpUser"
-                                    spellcheck="false"
-                                  />
-                                </div>
-                                <div class="pf-v6-c-form__group">
-                                  <label class="pf-v6-c-form__label" for="centralOcpPassword"
-                                    >Password</label
-                                  >
-                                  <input
-                                    class="pf-v6-c-form-control"
-                                    type="text"
-                                    id="centralOcpPassword"
-                                    placeholder="Optional if using oc login"
-                                    spellcheck="false"
-                                  />
-                                </div>
-                              </div>
+                              </label>
+                              <label class="demo-field">
+                                <span>Password</span>
+                                <input
+                                  class="pf-v6-c-form-control"
+                                  id="centralOcpPassword"
+                                  type="text"
+                                  spellcheck="false"
+                                  autocomplete="off"
+                                  placeholder="Optional if using oc login"
+                                />
+                              </label>
                             </div>
                           </div>
-                          <div class="cred-subsection">
-                            <h3 class="cred-subsection__title">RHACS Central</h3>
-                            <div class="pf-v6-c-form pf-v6-c-form--compact">
-                              <div class="pf-v6-c-form__group">
-                                <label class="pf-v6-c-form__label" for="centralConsole"
-                                  >Console URL</label
-                                >
+                          <div class="demo-sub">
+                            <h3 class="demo-sub__title">RHACS Central</h3>
+                            <label class="demo-field">
+                              <span>Console URL</span>
+                              <input
+                                class="pf-v6-c-form-control"
+                                id="centralConsole"
+                                type="url"
+                                spellcheck="false"
+                                placeholder="https://central-stackrox.apps…"
+                              />
+                            </label>
+                            <label class="demo-field">
+                              <span>API token</span>
+                              <input
+                                class="pf-v6-c-form-control"
+                                id="centralApiToken"
+                                type="text"
+                                spellcheck="false"
+                                autocomplete="off"
+                              />
+                            </label>
+                            <div class="demo-field-row">
+                              <label class="demo-field">
+                                <span>Token name</span>
                                 <input
                                   class="pf-v6-c-form-control"
-                                  type="url"
-                                  id="centralConsole"
-                                  placeholder="https://central-stackrox.apps…"
-                                  spellcheck="false"
-                                />
-                              </div>
-                              <div class="pf-v6-c-form__group">
-                                <label class="pf-v6-c-form__label" for="centralApiToken"
-                                  >API token</label
-                                >
-                                <input
-                                  class="pf-v6-c-form-control"
+                                  id="centralApiTokenName"
                                   type="text"
-                                  id="centralApiToken"
+                                  placeholder="e.g. Cursor-exp-2026-12-31"
+                                />
+                              </label>
+                              <label class="demo-field">
+                                <span>Expires</span>
+                                <input
+                                  class="pf-v6-c-form-control"
+                                  id="centralApiTokenExpires"
+                                  type="text"
+                                  placeholder="YYYY-MM-DD"
+                                />
+                              </label>
+                            </div>
+                            <div class="demo-field-row">
+                              <label class="demo-field">
+                                <span>Admin user</span>
+                                <input
+                                  class="pf-v6-c-form-control"
+                                  id="centralAdminUser"
+                                  type="text"
                                   spellcheck="false"
                                 />
-                              </div>
-                              <div class="cred-form-row cred-form-row--pair">
-                                <div class="pf-v6-c-form__group">
-                                  <label class="pf-v6-c-form__label" for="centralApiTokenName"
-                                    >Token name</label
-                                  >
-                                  <input
-                                    class="pf-v6-c-form-control"
-                                    type="text"
-                                    id="centralApiTokenName"
-                                    placeholder="e.g. Cursor-exp-2026-12-31"
-                                    spellcheck="false"
-                                  />
-                                </div>
-                                <div class="pf-v6-c-form__group">
-                                  <label class="pf-v6-c-form__label" for="centralApiTokenExpires"
-                                    >Expires</label
-                                  >
-                                  <input
-                                    class="pf-v6-c-form-control"
-                                    type="date"
-                                    id="centralApiTokenExpires"
-                                  />
-                                </div>
-                              </div>
-                              <div class="cred-form-row cred-form-row--pair">
-                                <div class="pf-v6-c-form__group">
-                                  <label class="pf-v6-c-form__label" for="centralAdminUser"
-                                    >Admin user</label
-                                  >
-                                  <input
-                                    class="pf-v6-c-form-control"
-                                    type="text"
-                                    id="centralAdminUser"
-                                    spellcheck="false"
-                                  />
-                                </div>
-                                <div class="pf-v6-c-form__group">
-                                  <label class="pf-v6-c-form__label" for="centralAdminPassword"
-                                    >Admin password</label
-                                  >
-                                  <input
-                                    class="pf-v6-c-form-control"
-                                    type="text"
-                                    id="centralAdminPassword"
-                                    spellcheck="false"
-                                  />
-                                </div>
-                              </div>
-                              <div class="pf-v6-c-form__group">
-                                <span class="pf-v6-c-form__label" id="centralAuthPrefLabel"
-                                  >When both token and password are set</span
-                                >
-                                <fieldset
-                                  class="cred-auth-pref"
-                                  aria-labelledby="centralAuthPrefLabel"
-                                >
-                                  <label class="pf-v6-c-check">
-                                    <input
-                                      class="pf-v6-c-check__input"
-                                      type="radio"
-                                      name="centralAuthPref"
-                                      value="apiToken"
-                                      checked
-                                    />
-                                    <span class="pf-v6-c-check__label">Prefer API token</span>
-                                  </label>
-                                  <label class="pf-v6-c-check">
-                                    <input
-                                      class="pf-v6-c-check__input"
-                                      type="radio"
-                                      name="centralAuthPref"
-                                      value="password"
-                                    />
-                                    <span class="pf-v6-c-check__label">Prefer admin password</span>
-                                  </label>
-                                </fieldset>
-                              </div>
+                              </label>
+                              <label class="demo-field">
+                                <span>Admin password</span>
+                                <input
+                                  class="pf-v6-c-form-control"
+                                  id="centralAdminPassword"
+                                  type="text"
+                                  spellcheck="false"
+                                  autocomplete="off"
+                                />
+                              </label>
                             </div>
+                            <fieldset class="demo-auth-pref">
+                              <label class="pf-v6-c-radio">
+                                <input
+                                  class="pf-v6-c-radio__input"
+                                  type="radio"
+                                  name="authPreference"
+                                  value="apiToken"
+                                  checked
+                                />
+                                <span class="pf-v6-c-radio__label">Prefer API token</span>
+                              </label>
+                              <label class="pf-v6-c-radio">
+                                <input
+                                  class="pf-v6-c-radio__input"
+                                  type="radio"
+                                  name="authPreference"
+                                  value="password"
+                                />
+                                <span class="pf-v6-c-radio__label">Prefer admin password</span>
+                              </label>
+                            </fieldset>
                           </div>
                         </div>
                       </div>
                     </details>
 
-                    <details class="fold-block" id="scFold" open>
-                      <summary class="fold-block__summary">
-                        <span class="fold-block__chev" aria-hidden="true"></span>
-                        <span class="fold-block__title">Secured clusters</span>
-                        <span class="fold-block__meta" id="scFoldMeta"></span>
+                    <details class="demo-fold" id="scFold" open>
+                      <summary class="demo-fold__summary">
+                        <span class="demo-fold__chev" aria-hidden="true"></span>
+                        <span class="demo-fold__title">Secured clusters</span>
+                        <span class="demo-fold__meta" id="scFoldMeta"></span>
                         <button
                           type="button"
-                          class="pf-v6-c-button pf-m-secondary pf-m-small fold-block__action"
+                          class="pf-v6-c-button pf-m-secondary pf-m-small"
                           id="btnAddSecuredCluster"
                           onclick="event.preventDefault(); event.stopPropagation();"
                         >
                           Add
                         </button>
                       </summary>
-                      <div class="fold-block__body">
-                        <p class="sc-list-head__hint">
-                          OpenShift logins for sensor clusters under this Central (control plane
-                          access). Not a module target.
-                        </p>
-                        <div id="securedClusterList" class="sc-list"></div>
+                      <div class="demo-fold__body">
+                        <div id="securedClusterList" class="demo-sc-list"></div>
                       </div>
                     </details>
                   </form>
                 </div>
-              </div>
-            </div>
-          </details>
-
-          <div class="pf-v6-c-card pf-m-mt-lg">
-            <div class="pf-v6-c-card__header">
-              <div class="pf-v6-c-card__header-main">
-                <div class="pf-v6-c-card__title">
-                  <h2 class="pf-v6-c-card__title-text pf-m-0">Deploy</h2>
-                </div>
-              </div>
-              <div class="pf-v6-c-card__actions demo-status-actions">
-                <button
-                  class="pf-v6-c-button pf-m-secondary"
-                  type="button"
-                  id="btnStatus"
-                  title="Refresh all module status rows"
-                >
-                  Refresh status
-                </button>
-                <span id="statusRefreshIndicator" class="status-refresh-indicator" aria-live="polite"></span>
-              </div>
-            </div>
-            <div class="pf-v6-c-card__body pf-m-pt-0">
-              <div class="bulk-toolbar" id="moduleBulkBar" aria-label="Module selection">
-                <label class="pf-v6-c-check" for="modSelectAll">
-                  <input
-                    class="pf-v6-c-check__input"
-                    type="checkbox"
-                    id="modSelectAll"
-                    name="select-all-modules"
-                  />
-                  <span class="pf-v6-c-check__label">Select all</span>
-                </label>
-                <div class="bulk-toolbar__results">
-                  <span id="modSelectionCount" class="bulk-toolbar__count">0 of 0 selected</span>
-                  <span id="modRefreshFeedback" class="bulk-toolbar__feedback" aria-live="polite"></span>
-                </div>
-              </div>
-              <div class="modules-table-scroll">
-                <table class="pf-v6-c-table modules-table" aria-label="Demo modules">
-                  <thead class="pf-v6-c-table__thead">
-                    <tr class="pf-v6-c-table__tr">
-                      <th class="pf-v6-c-table__th modules-th-module" scope="col">Module</th>
-                      <th class="pf-v6-c-table__th modules-th-status" scope="col">State</th>
-                    </tr>
-                  </thead>
-                  <tbody class="pf-v6-c-table__tbody" id="modulesTbody">
-                    <tr class="pf-v6-c-table__tr">
-                      <td class="pf-v6-c-table__td module-row-td" colspan="2">Loading…</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="demo-actions-row">
-                <button
-                  class="pf-v6-c-button pf-m-secondary"
-                  type="button"
-                  id="btnRefreshSelected"
-                  title="Status for checked modules only"
-                >
-                  Refresh selected
-                </button>
-                <button class="pf-v6-c-button pf-m-primary" type="button" id="btnRun">
-                  Run selected
-                </button>
-                <button
-                  class="pf-v6-c-button pf-m-secondary"
-                  type="button"
-                  id="btnDryRun"
-                  title="Dry run for checked modules"
-                >
-                  Dry run selected
-                </button>
-                <button
-                  class="pf-v6-c-button pf-m-secondary"
-                  type="button"
-                  id="btnRunFull"
-                  title="All modules in registry order"
-                >
-                  Run full install
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="pf-v6-c-card pf-m-mt-lg">
-            <div class="pf-v6-c-card__header">
-              <div class="pf-v6-c-card__header-main">
-                <div class="pf-v6-c-card__title">
-                  <h2 class="pf-v6-c-card__title-text pf-m-0">Status</h2>
-                </div>
-              </div>
-            </div>
-            <div class="pf-v6-c-card__body pf-m-pt-sm">
-              <details id="statusOuter" class="status-panel" open>
-                <summary class="status-panel__toggle">
-                  <span class="status-panel__chev" aria-hidden="true"></span>
-                  <button
-                    type="button"
-                    id="btnPreflightExpandAll"
-                    class="status-panel__expand-all"
-                    disabled
-                    aria-label="Expand all modules"
-                  >
-                    <span
-                      class="material-symbols-outlined status-panel__expand-all-ms"
-                      aria-hidden="true"
-                      >unfold_more</span
-                    >
-                  </button>
-                  <span class="status-panel__title">Modules</span>
-                </summary>
-                <div id="statusWrap" class="status-panel__body"></div>
               </details>
-            </div>
-          </div>
 
-        </div>
-        </section>
-      </main>
+              <div class="pf-v6-c-card pf-m-compact demo-workbench">
+                <div class="pf-v6-c-card__header">
+                  <div class="pf-v6-c-card__title">
+                    <h2 class="pf-v6-c-card__title-text">Modules</h2>
+                  </div>
+                  <div class="pf-v6-c-card__actions">
+                    <span
+                      id="statusRefreshBusy"
+                      class="demo-status-refresh"
+                      hidden
+                      aria-hidden="true"
+                    >
+                      <svg
+                        class="pf-v6-c-spinner pf-m-md"
+                        role="progressbar"
+                        viewBox="0 0 100 100"
+                        aria-label="Refreshing status"
+                        aria-valuetext="Refreshing"
+                      >
+                        <circle
+                          class="pf-v6-c-spinner__path"
+                          cx="50"
+                          cy="50"
+                          r="45"
+                          fill="none"
+                        ></circle>
+                      </svg>
+                      <span id="statusRefreshIndicator" aria-live="polite">Refreshing status…</span>
+                    </span>
+                    <button
+                      class="pf-v6-c-button pf-m-link"
+                      type="button"
+                      id="btnStatus"
+                      title="Refresh all module status rows"
+                    >
+                      Refresh status
+                    </button>
+                  </div>
+                </div>
+                <div
+                  id="statusRefreshProgress"
+                  class="demo-status-progress"
+                  hidden
+                  aria-hidden="true"
+                >
+                  <div
+                    class="pf-v6-c-progress pf-m-sm"
+                    id="statusRefreshProgressBar"
+                    role="progressbar"
+                    aria-label="Status refresh in progress"
+                    aria-valuetext="Refreshing"
+                  >
+                    <div class="pf-v6-c-progress__bar">
+                      <div class="pf-v6-c-progress__indicator demo-status-progress__indicator"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="pf-v6-c-card__body">
+                  <div class="demo-bulk" id="moduleBulkBar" aria-label="Module selection">
+                    <label class="pf-v6-c-check" for="modSelectAll">
+                      <input
+                        class="pf-v6-c-check__input"
+                        type="checkbox"
+                        id="modSelectAll"
+                        name="select-all-modules"
+                      />
+                      <span class="pf-v6-c-check__label">Select all</span>
+                    </label>
+                    <div class="demo-bulk__results">
+                      <span id="modSelectionCount">0 of 0 selected</span>
+                      <span id="modRefreshFeedback" aria-live="polite"></span>
+                    </div>
+                  </div>
+
+                  <table class="demo-modules" id="modulesTable" aria-label="Demo modules">
+                    <thead>
+                      <tr>
+                        <th scope="col">Module</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">State</th>
+                      </tr>
+                    </thead>
+                    <tbody id="modulesTbody">
+                      <tr>
+                        <td colspan="3">Loading…</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div class="demo-actions">
+                    <button class="pf-v6-c-button pf-m-primary" type="button" id="btnRun">
+                      Run selected
+                    </button>
+                    <div class="demo-actions__secondary">
+                      <button
+                        class="pf-v6-c-button pf-m-secondary"
+                        type="button"
+                        id="btnDryRun"
+                        title="Dry run for checked modules"
+                      >
+                        Dry run
+                      </button>
+                      <button
+                        class="pf-v6-c-button pf-m-secondary"
+                        type="button"
+                        id="btnRunFull"
+                        title="All modules in registry order"
+                      >
+                        Run full install
+                      </button>
+                      <button
+                        class="pf-v6-c-button pf-m-link"
+                        type="button"
+                        id="btnRefreshSelected"
+                        title="Status for checked modules only"
+                      >
+                        Refresh selected
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pf-v6-c-card pf-m-compact demo-status-card">
+                <div class="pf-v6-c-card__header">
+                  <div class="pf-v6-c-card__title">
+                    <h2 class="pf-v6-c-card__title-text">Status</h2>
+                  </div>
+                  <div class="pf-v6-c-card__actions">
+                    <button
+                      type="button"
+                      id="btnPreflightExpandAll"
+                      class="pf-v6-c-button pf-m-link"
+                      disabled
+                      aria-label="Expand all modules"
+                    >
+                      Expand all
+                    </button>
+                  </div>
+                </div>
+                <div class="pf-v6-c-card__body">
+                  <details id="statusOuter" class="demo-status-outer" open>
+                    <summary class="demo-status-outer__toggle">
+                      <span class="demo-status-outer__chev" aria-hidden="true"></span>
+                      <span class="demo-status-outer__title">Modules</span>
+                      <span class="demo-status-outer__meta" id="statusPanelMeta"></span>
+                    </summary>
+                    <div id="statusWrap" class="demo-status-body"></div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
       </div>
     </div>
 
@@ -501,7 +531,7 @@
         <span class="demo-log-drawer__preview" id="logDrawerPreview">Session console</span>
       </button>
       <div class="demo-log-drawer__panel" id="logDrawerPanel">
-        <div id="log" class="demo-log" role="log" aria-label="Script output"></div>
+        <div id="log" role="log" aria-label="Script output"></div>
       </div>
     </div>
 
@@ -546,12 +576,13 @@
           toggle.setAttribute("aria-expanded", open ? "true" : "false");
         });
         var obs = new MutationObserver(function () {
-          var text = (logEl.textContent || "").trim().split("\n").filter(Boolean).pop() || "Session console";
+          var text =
+            (logEl.textContent || "").trim().split("\n").filter(Boolean).pop() || "Session console";
           preview.textContent = text.slice(0, 120);
         });
         obs.observe(logEl, { childList: true, characterData: true, subtree: true });
       })();
     </script>
-    <script src="/static/app.js?v=shell-pf6-1" type="module"></script>
+    <script src="/static/app.js?v=shell16" type="module"></script>
   </body>
 </html>

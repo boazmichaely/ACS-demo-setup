@@ -55,7 +55,7 @@ Not in scope: unattended multi-tenant provisioning, production installs, or teac
 
 Documented in an example env file (no real values in git). Primary store: gitignored **`lab-credentials.json`** at repo root (schema: `config/lab-credentials.schema.json`, example: `config/lab-credentials.example.json`). Override path: `ACS_LAB_CREDENTIALS_FILE`.
 
-Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster credentials, one or more `securedClusters`, and `activeSecuredClusterId`. The GUI and modules use the **active lab** and its **active secured cluster**. Helpers in `lib/lab_doc.py` migrate older shapes and flatten the active lab for modules (`centralCluster` + `securedCluster`).
+Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster credentials, zero or more `securedClusters`, and `activeSecuredClusterId`. The GUI and modules use the **active lab** (and a secured cluster when present; otherwise Central OpenShift). Helpers in `lib/lab_doc.py` migrate older shapes and flatten the active lab for modules (`centralCluster` + `securedCluster`).
 
 | Area | Fields | Notes |
 |------|--------|--------|

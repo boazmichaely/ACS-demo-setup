@@ -15,7 +15,7 @@ const credFilePath = document.getElementById("credFilePath");
 const credSaveFeedback = document.getElementById("credSaveFeedback");
 const activeLabSelect = document.getElementById("activeLabSelect");
 const editLabSelect = document.getElementById("editLabSelect");
-const labStripName = document.getElementById("labStripName");
+const labStripName = document.getElementById("labStripName"); // optional / absent in shell
 const labStripHint = document.getElementById("labStripHint");
 const securedClusterList = document.getElementById("securedClusterList");
 const btnMakeActive = document.getElementById("btnMakeActive");
@@ -26,6 +26,10 @@ let lastStatusModules = [];
 let lastStatusMap = new Map();
 let moduleMetaById = new Map();
 let busy = false;
+/** True after at least one successful /api/status response this page load. */
+let statusReady = false;
+/** True while a status refresh is in flight. */
+let statusRefreshing = false;
 
 /** In-memory v2 credentials document (activeLabId + labs[]). */
 let credDoc = { activeLabId: "", labs: [] };
@@ -148,6 +152,7 @@ function setBusy(on) {
   busy = on;
   const ids = [
     "btnCredSave",
+    "btnCredCancel",
     "btnAddLab",
     "btnDeleteLab",
     "btnMakeActive",
@@ -167,24 +172,37 @@ function setBusy(on) {
   if (!on) {
     syncMakeActiveButton();
     syncDeleteLabButton();
+    syncCredCancelButton();
   }
 }
 
 function setCredFeedback(text, isError = false) {
   if (!credSaveFeedback) return;
   credSaveFeedback.textContent = text || "";
-  credSaveFeedback.classList.toggle("cred-save-feedback--err", Boolean(isError));
+  credSaveFeedback.classList.toggle("is-error", Boolean(isError));
 }
 
 function setModuleRefreshFeedback(text) {
   if (modRefreshFeedback) modRefreshFeedback.textContent = text || "";
 }
 
-function setStatusIndicator(text) {
-  if (statusRefreshIndicator) {
-    statusRefreshIndicator.textContent = text || "";
-    statusRefreshIndicator.classList.toggle("status-refresh-loading", Boolean(text));
+function setStatusRefreshing(on, label = "Refreshing status…") {
+  statusRefreshing = Boolean(on);
+  const wrap = document.getElementById("statusRefreshBusy");
+  const progress = document.getElementById("statusRefreshProgress");
+  if (wrap) {
+    wrap.hidden = !statusRefreshing;
+    wrap.setAttribute("aria-hidden", statusRefreshing ? "false" : "true");
   }
+  if (progress) {
+    progress.hidden = !statusRefreshing;
+    progress.setAttribute("aria-hidden", statusRefreshing ? "false" : "true");
+  }
+  if (statusRefreshIndicator) {
+    statusRefreshIndicator.textContent = statusRefreshing ? label : "";
+  }
+  document.getElementById("modulesTable")?.setAttribute("aria-busy", statusRefreshing ? "true" : "false");
+  document.querySelector(".demo-workbench")?.classList.toggle("is-status-refreshing", statusRefreshing);
 }
 
 async function api(path, options = {}) {
@@ -220,6 +238,19 @@ function uiStateFromOrchestrator(state) {
         icon: "◐",
       };
   }
+}
+
+function isScriptInstalled(moduleId) {
+  const meta = moduleMetaById.get(moduleId);
+  if (meta && typeof meta.scriptInstalled === "boolean") {
+    return meta.scriptInstalled;
+  }
+  const st = lastStatusMap.get(moduleId);
+  if (st?.message && /module script not installed/i.test(st.message)) {
+    return false;
+  }
+  // Unknown until /api/modules loads — treat as installed so we do not flash-disable.
+  return true;
 }
 
 function statusMapFromModules(modules) {
@@ -261,19 +292,11 @@ function renderSectionBody(item) {
 
   if (format === "json") {
     const text = typeof body === "string" ? body : JSON.stringify(body, null, 2);
-    return `<pre class="status-section-body status-section-body--json">${escapeHtml(text)}</pre>`;
+    return `<pre class="demo-sec__body">${escapeHtml(text)}</pre>`;
   }
 
   const text = typeof body === "string" ? body : String(body ?? "");
-  const paragraphs = text
-    .split(/\n\n+/)
-    .filter(Boolean)
-    .map(
-      (paragraph) =>
-        `<p class="status-section-body__p">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`
-    )
-    .join("");
-  return `<div class="status-section-body status-section-body--prose">${paragraphs}</div>`;
+  return `<div class="demo-sec__body">${escapeHtml(text).replace(/\n/g, "<br>")}</div>`;
 }
 
 function sectionExpandKey(moduleId, index, title) {
@@ -285,14 +308,14 @@ function captureStatusExpandState() {
   const sectionKeys = new Set();
   if (!statusWrap) return { moduleIds, sectionKeys };
 
-  statusWrap.querySelectorAll("details.pf-block[data-module-id]").forEach((mod) => {
+  statusWrap.querySelectorAll("details.demo-pf-block[data-module-id]").forEach((mod) => {
     const moduleId = mod.dataset.moduleId;
     if (!moduleId) return;
     if (mod.open) moduleIds.add(moduleId);
-    mod.querySelectorAll("details.status-section-json").forEach((sec, index) => {
+    mod.querySelectorAll("details.demo-sec").forEach((sec, index) => {
       if (!sec.open) return;
       const title =
-        sec.querySelector(".status-section-json__title")?.textContent?.trim() || "";
+        sec.querySelector(".demo-sec__title")?.textContent?.trim() || "";
       sectionKeys.add(sectionExpandKey(moduleId, index, title));
     });
   });
@@ -304,7 +327,7 @@ function applyStatusExpandState(state, { defaultModulesOpen = false } = {}) {
   const moduleIds = state?.moduleIds;
   const sectionKeys = state?.sectionKeys;
 
-  statusWrap.querySelectorAll("details.pf-block[data-module-id]").forEach((mod) => {
+  statusWrap.querySelectorAll("details.demo-pf-block[data-module-id]").forEach((mod) => {
     const moduleId = mod.dataset.moduleId;
     if (!moduleId) return;
     if (moduleIds) {
@@ -312,9 +335,9 @@ function applyStatusExpandState(state, { defaultModulesOpen = false } = {}) {
     } else {
       mod.open = defaultModulesOpen;
     }
-    mod.querySelectorAll("details.status-section-json").forEach((sec, index) => {
+    mod.querySelectorAll("details.demo-sec").forEach((sec, index) => {
       const title =
-        sec.querySelector(".status-section-json__title")?.textContent?.trim() || "";
+        sec.querySelector(".demo-sec__title")?.textContent?.trim() || "";
       const key = sectionExpandKey(moduleId, index, title);
       sec.open = Boolean(sectionKeys && sectionKeys.has(key));
     });
@@ -325,69 +348,96 @@ function renderSectionsHtml(sections, moduleId = "") {
   if (!Array.isArray(sections) || !sections.length) return "";
 
   let currentGroup = null;
-  let html = '<div class="status-sections">';
+  let html = "";
   let index = 0;
 
   for (const item of sections) {
     const group = item.group || "";
     if (group && group !== currentGroup) {
       currentGroup = group;
-      html += `<p class="status-sections__group">${escapeHtml(group)}</p>`;
+      html += `<p class="demo-sec-group">${escapeHtml(group)}</p>`;
     }
 
-    const tagKey = item.tag || "";
+    const tagKey = String(item.tag || "").toLowerCase();
     const tagText = item.tagLabel || item.tag || "";
-    const tag = tagKey
-      ? `<span class="status-section-tag status-section-tag--${escapeHtml(tagKey)}">${escapeHtml(tagText)}</span>`
+    let tagClass = "demo-sec__tag";
+    if (tagKey === "ok" || tagKey === "ready") tagClass += " demo-sec__tag--ok";
+    else if (tagKey === "error" || tagKey === "fail") tagClass += " demo-sec__tag--error";
+    else if (tagKey) tagClass += " demo-sec__tag--warn";
+    const tag = tagText
+      ? `<span class="${tagClass}">${escapeHtml(tagText)}</span>`
       : "";
     const summary = item.summary
-      ? `<span class="status-section-summary">${escapeHtml(item.summary)}</span>`
+      ? `<span class="demo-sec__sum">${escapeHtml(item.summary)}</span>`
       : "";
     const body = renderSectionBody(item);
     const title = item.title || "Section";
     const key = sectionExpandKey(moduleId, index, title);
 
-    html += `<details class="status-section-json pf-block" data-section-key="${escapeHtml(key)}">
-      <summary class="pf-block__summary status-section-json__summary">
-        ${tag}<span class="status-section-json__title">${escapeHtml(title)}</span>${summary}
+    html += `<details class="demo-sec" data-section-key="${escapeHtml(key)}">
+      <summary>
+        ${tag}<span class="demo-sec__title">${escapeHtml(title)}</span>${summary}
       </summary>
-      <div class="pf-block__body">
-        ${body}
-      </div>
+      ${body}
     </details>`;
     index += 1;
   }
 
-  html += "</div>";
   return html;
 }
 
 function dependsOnHintHtml(m) {
   const deps = m.dependsOn;
   if (!Array.isArray(deps) || deps.length === 0) return "";
-  return `<div class="module-deps-hint">Requires: ${deps.map(escapeHtml).join(", ")}</div>`;
+  return `<span class="demo-mod__deps">Requires: ${deps.map(escapeHtml).join(", ")}</span>`;
 }
 
-function moduleLineHtml(m) {
+function moduleLabelParts(m) {
   const label = String(m.label ?? m.id ?? "");
-  const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
-  const parts = label.split(/\s+—\s+/);
-  if (parts.length >= 2) {
-    return `<span class="module-line">
-      <span class="module-line__idx">${idx}</span>
-      <strong class="module-line__slug">${escapeHtml(parts[0].trim())}</strong>
-      <span class="module-line__sep"> - </span>
-      <span class="module-line__desc">${escapeHtml(parts.slice(1).join(" — ").trim())}</span>
-    </span>`;
-  }
-  return `<span class="module-line">
-    <span class="module-line__idx">${idx}</span>
-    <strong class="module-line__slug">${escapeHtml(label.trim())}</strong>
-  </span>`;
+  const parts = label.split(/\s+[—-]\s+/);
+  const slug = (parts[0] || m.id || "").trim();
+  const desc = parts.length >= 2 ? parts.slice(1).join(" - ").trim() : "";
+  return { slug, desc };
 }
 
 function moduleCellHtml(m) {
-  return `${moduleLineHtml(m)}${dependsOnHintHtml(m)}<div class="js-deps-lock-hint module-deps-lock-hint" hidden></div>`;
+  const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
+  const { slug } = moduleLabelParts(m);
+  return `<div class="demo-mod__line">
+    <span class="demo-mod__idx">${idx}</span>
+    <span class="demo-mod__slug">${escapeHtml(slug)}</span>
+    <span class="js-deps-lock-hint demo-mod__lock" hidden></span>
+  </div>`;
+}
+
+function moduleDescriptionCellHtml(m) {
+  const { desc } = moduleLabelParts(m);
+  const text = desc || "—";
+  // title = native tooltip when ellipsis clips the text
+  return `<span title="${escapeHtml(text)}">${escapeHtml(text)}</span>`;
+}
+
+/** Size Module + State columns to content; Description keeps the leftover (ellipsis). */
+function syncModulesColumnWidths() {
+  const table = document.getElementById("modulesTable");
+  if (!table || !table.tBodies?.[0]?.rows?.length) return;
+
+  table.classList.add("is-measuring");
+  table.style.removeProperty("--demo-mod-col");
+  table.style.removeProperty("--demo-state-col");
+
+  let mod = 0;
+  let state = 0;
+  table.querySelectorAll("thead th:nth-child(1), tbody td:nth-child(1)").forEach((el) => {
+    mod = Math.max(mod, el.scrollWidth);
+  });
+  table.querySelectorAll("thead th:nth-child(3), tbody td:nth-child(3)").forEach((el) => {
+    state = Math.max(state, el.scrollWidth);
+  });
+
+  table.classList.remove("is-measuring");
+  table.style.setProperty("--demo-mod-col", `${Math.ceil(mod) + 4}px`);
+  table.style.setProperty("--demo-state-col", `${Math.ceil(state) + 4}px`);
 }
 
 function missingDeps(moduleId) {
@@ -396,21 +446,37 @@ function missingDeps(moduleId) {
   return meta.dependsOn.filter((dep) => lastStatusMap.get(dep)?.state !== "ok");
 }
 
-function badgeHtml(moduleId) {
-  const st = lastStatusMap.get(moduleId);
-  if (!st) {
-    return `<span class="module-status-badge module-status-badge--pending">…</span>`;
+function badgeHtml(moduleId, { linkToStatus = false } = {}) {
+  let tone = "pf-m-grey";
+  let label = "…";
+  let title = "";
+  if (!isScriptInstalled(moduleId)) {
+    label = "not installed";
+    title = "module script not installed";
+  } else if (!statusReady) {
+    label = "checking";
+    title = "Refreshing status…";
+  } else {
+    const st = lastStatusMap.get(moduleId);
+    if (st) {
+      const mapped = uiStateFromOrchestrator(st.state);
+      tone =
+        mapped.ui === "ready" ? "pf-m-green" : mapped.ui === "blocked" ? "pf-m-red" : "pf-m-orange";
+      label =
+        mapped.ui === "ready" ? "ready" : mapped.ui === "blocked" ? "error" : "needs run";
+      title = String(st.message || "");
+    }
   }
-  const mapped = uiStateFromOrchestrator(st.state);
-  const title = escapeHtml(st.message);
-  return `<span class="module-status-badge ${mapped.badge}" title="${title}">
-    <span class="module-status-badge__icon" aria-hidden="true">${mapped.icon}</span>
-    ${escapeHtml(mapped.label)}
-  </span>`;
+  const inner = `<span class="pf-v6-c-label__content">${escapeHtml(label)}</span>`;
+  const canJump = linkToStatus && isScriptInstalled(moduleId) && statusReady;
+  if (canJump) {
+    return `<a class="pf-v6-c-label ${tone} pf-m-compact demo-mod__status-link" href="#status-mod-${escapeHtml(moduleId)}" title="${escapeHtml(title || `Jump to ${moduleId} in Status`)}" data-status-jump="${escapeHtml(moduleId)}">${inner}</a>`;
+  }
+  return `<span class="pf-v6-c-label ${tone} pf-m-compact" title="${escapeHtml(title)}">${inner}</span>`;
 }
 
 function moduleStatusCellHtml(moduleId) {
-  return `<div class="module-status-split module-status-split--badge-only">${badgeHtml(moduleId)}</div>`;
+  return badgeHtml(moduleId, { linkToStatus: true });
 }
 
 function getModuleCheckboxes() {
@@ -443,20 +509,41 @@ function syncDependencyLocks() {
     const hint = tr.querySelector(".js-deps-lock-hint");
     if (!cb) continue;
 
+    if (!isScriptInstalled(id)) {
+      cb.checked = false;
+      cb.disabled = true;
+      tr.classList.add("demo-mod--unavailable");
+      tr.classList.remove("demo-mod--locked");
+      tr.setAttribute("aria-disabled", "true");
+      if (hint) hint.hidden = true;
+      continue;
+    }
+
+    tr.classList.remove("demo-mod--unavailable");
+    tr.removeAttribute("aria-disabled");
+
+    // Do not lock on missing deps until we have real status (avoids flash of false locks).
+    if (!statusReady) {
+      cb.disabled = false;
+      tr.classList.remove("demo-mod--locked");
+      if (hint) hint.hidden = true;
+      continue;
+    }
+
     const missing = (meta.dependsOn || []).filter(
       (dep) => !prereqMet(dep, lastStatusMap, cbById)
     );
     if (missing.length) {
       cb.checked = false;
       cb.disabled = true;
-      tr.classList.add("module-row--locked");
+      tr.classList.add("demo-mod--locked");
       if (hint) {
         hint.textContent = `Locked: needs ${missing.join(", ")} ready or selected.`;
         hint.hidden = false;
       }
     } else {
       cb.disabled = false;
-      tr.classList.remove("module-row--locked");
+      tr.classList.remove("demo-mod--locked");
       if (hint) hint.hidden = true;
     }
   }
@@ -464,13 +551,17 @@ function syncDependencyLocks() {
 
 function syncMasterCheckbox() {
   const all = getModuleCheckboxes();
-  const enabled = all.filter((c) => !c.disabled);
-  const checked = enabled.filter((c) => c.checked).length;
-  const n = enabled.length;
+  const selectable = all.filter((c) => !c.disabled);
+  const checked = selectable.filter((c) => c.checked).length;
+  const n = selectable.length;
+  const unavailable = all.length - n;
   modSelectAll.checked = n > 0 && checked === n;
   modSelectAll.indeterminate = checked > 0 && checked < n;
-  modSelectionCount.textContent = `${checked} of ${all.length} selected`;
-  moduleBulkBar.classList.toggle("bulk-toolbar--has-selection", checked > 0);
+  modSelectionCount.textContent =
+    unavailable > 0
+      ? `${checked} of ${n} selectable selected (${unavailable} not installed)`
+      : `${checked} of ${n} selected`;
+  moduleBulkBar.classList.toggle("has-selection", checked > 0);
 }
 
 function applySelectAll(on) {
@@ -500,26 +591,26 @@ function applySelectAll(on) {
 
 function renderModuleRows() {
   if (!registryModules.length) {
-    modulesTbody.innerHTML =
-      '<tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td module-row-td" colspan="2">No modules.</td></tr>';
+    modulesTbody.innerHTML = '<tr><td colspan="3">No modules.</td></tr>';
     return;
   }
 
   modulesTbody.innerHTML = registryModules
     .map((m) => {
       const id = escapeHtml(m.id);
-      return `<tr class="pf-v6-c-table__tr" data-module-id="${id}">
-        <td class="pf-v6-c-table__td module-row-td module-module-col">
-          <div class="module-row">
-            <label class="module-row__check pf-v6-c-check">
-              <input class="pf-v6-c-check__input js-mod-cb" type="checkbox" data-module-id="${id}" />
-            </label>
-            <div class="module-row__label-wrap">
-              <label class="module-row__label" for="mod-cb-${id}">${moduleCellHtml(m)}</label>
-            </div>
+      const unavailable = m.scriptInstalled === false;
+      const rowClass = unavailable ? "demo-mod--unavailable" : "";
+      const disabledAttr = unavailable ? " disabled" : "";
+      const aria = unavailable ? ' aria-disabled="true"' : "";
+      return `<tr class="${rowClass}" data-module-id="${id}"${aria}>
+        <td>
+          <div class="demo-mod__check">
+            <input class="js-mod-cb" type="checkbox" data-module-id="${id}" id="mod-cb-${id}" aria-label="Select ${id}"${disabledAttr} />
+            ${moduleCellHtml(m)}
           </div>
         </td>
-        <td class="pf-v6-c-table__td module-row-td module-status-col js-status-cell" data-module-id="${id}">
+        <td class="demo-mod__desc-cell">${moduleDescriptionCellHtml(m)}</td>
+        <td class="js-status-cell" data-module-id="${id}">
           ${moduleStatusCellHtml(m.id)}
         </td>
       </tr>`;
@@ -527,16 +618,36 @@ function renderModuleRows() {
     .join("");
 
   modulesTbody.querySelectorAll("input.js-mod-cb").forEach((cb) => {
-    cb.id = `mod-cb-${cb.dataset.moduleId}`;
     cb.addEventListener("change", () => {
       syncDependencyLocks();
       syncMasterCheckbox();
     });
   });
+  bindStatusJumpLinks(modulesTbody);
 
   syncDependencyLocks();
   syncMasterCheckbox();
   refreshStatusCells();
+  syncModulesColumnWidths();
+}
+
+function jumpToStatusModule(moduleId) {
+  if (!moduleId) return;
+  const outer = document.getElementById("statusOuter");
+  if (outer) outer.open = true;
+  const target = document.getElementById(`status-mod-${moduleId}`);
+  if (!target) return;
+  target.open = true;
+  target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function bindStatusJumpLinks(root) {
+  (root || modulesTbody).querySelectorAll("a.demo-mod__status-link").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      jumpToStatusModule(a.dataset.statusJump);
+    });
+  });
 }
 
 function refreshStatusCells() {
@@ -544,49 +655,82 @@ function refreshStatusCells() {
     const id = td.dataset.moduleId;
     if (id) td.innerHTML = moduleStatusCellHtml(id);
   });
+  bindStatusJumpLinks(modulesTbody);
+  syncModulesColumnWidths();
 }
 
 function renderStatusModulesPanel() {
   if (!statusWrap) return;
 
-  const modules = lastStatusModules.length ? lastStatusModules : registryModules;
-  if (!modules.length) {
-    statusWrap.innerHTML =
-      '<p class="pf-v6-c-helper-text">No status yet. Click Refresh status.</p>';
-    btnPreflightExpandAll.disabled = true;
+  const statusPanelMeta = document.getElementById("statusPanelMeta");
+  if (!statusReady) {
+    statusWrap.innerHTML = statusRefreshing
+      ? `<p class="pf-v6-c-helper-text demo-status-pending">
+          <svg class="pf-v6-c-spinner pf-m-md" role="presentation" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="pf-v6-c-spinner__path" cx="50" cy="50" r="45" fill="none"></circle>
+          </svg>
+          Checking module status…
+        </p>`
+      : '<p class="pf-v6-c-helper-text">No status yet. Click Refresh status.</p>';
+    if (btnPreflightExpandAll) btnPreflightExpandAll.disabled = true;
+    if (statusPanelMeta) statusPanelMeta.textContent = statusRefreshing ? "refreshing…" : "";
     return;
   }
 
-  const hadModules = Boolean(statusWrap.querySelector("details.pf-block[data-module-id]"));
+  const rawModules = lastStatusModules.length ? lastStatusModules : registryModules;
+  const modules = rawModules.filter((row) => isScriptInstalled(row.id));
+  if (!rawModules.length) {
+    statusWrap.innerHTML =
+      '<p class="pf-v6-c-helper-text">No status yet. Click Refresh status.</p>';
+    if (btnPreflightExpandAll) btnPreflightExpandAll.disabled = true;
+    if (statusPanelMeta) statusPanelMeta.textContent = "";
+    return;
+  }
+  if (!modules.length) {
+    statusWrap.innerHTML =
+      '<p class="pf-v6-c-helper-text">No installed module scripts to show.</p>';
+    if (btnPreflightExpandAll) btnPreflightExpandAll.disabled = true;
+    if (statusPanelMeta) statusPanelMeta.textContent = "0 installed";
+    return;
+  }
+
+  const hadModules = Boolean(statusWrap.querySelector("details.demo-pf-block[data-module-id]"));
   const savedExpand = hadModules ? captureStatusExpandState() : null;
+
+  if (statusPanelMeta) {
+    const n = modules.length;
+    statusPanelMeta.textContent = `${n} installed`;
+  }
 
   statusWrap.innerHTML = modules
     .map((row) => {
       const id = row.id;
       const st = lastStatusMap.get(id);
-      const msg = escapeHtml(st?.message || row.message || "—");
+      const rawMsg = String(st?.message || row.message || "").trim();
+      const msg = escapeHtml(rawMsg || "—");
       const sectionsHtml = renderSectionsHtml(st?.sections || row.sections || [], id);
       const missing = missingDeps(id);
       const canRun = missing.length === 0;
-      const lockHint = missing.length
-        ? `<p class="module-deps-lock-hint">Requires ready: ${escapeHtml(missing.join(", "))}</p>`
+      const lockHtml = missing.length
+        ? `<p class="demo-mod__lock">Requires ready: ${escapeHtml(missing.join(", "))}</p>`
         : "";
-      const depsHint =
+      const depsHtml =
         Array.isArray(row.dependsOn) && row.dependsOn.length
-          ? `<p class="module-deps-hint">Depends on: ${row.dependsOn.map(escapeHtml).join(", ")}</p>`
+          ? `<p class="demo-mod__deps">Depends on: ${row.dependsOn.map(escapeHtml).join(", ")}</p>`
           : "";
 
-      return `<details class="pf-block" data-module-id="${escapeHtml(id)}">
-        <summary class="pf-block__summary module-block-summary">
-          <span class="module-block-summary__label">${moduleLineHtml(row)}</span>
-          <span class="module-block-summary__badge">${badgeHtml(id)}</span>
+      return `<details class="demo-pf-block" id="status-mod-${escapeHtml(id)}" data-module-id="${escapeHtml(id)}">
+        <summary class="demo-pf-block__summary">
+          <span class="demo-pf-block__chev" aria-hidden="true"></span>
+          <span class="demo-pf-block__name">${escapeHtml(id)}</span>
+          ${badgeHtml(id)}
+          <span class="demo-pf-block__msg">${msg}</span>
         </summary>
-        <div class="pf-block__body">
-          <p class="module-block-message">${msg}</p>
-          ${sectionsHtml}
-          ${depsHint}
-          ${lockHint}
-          <div class="demo-actions-row">
+        <div class="demo-pf-block__body">
+          ${sectionsHtml || `<p class="demo-pf-block__body--empty">No section details.</p>`}
+          ${depsHtml}
+          ${lockHtml}
+          <div class="demo-status-actions-row">
             <button type="button" class="pf-v6-c-button pf-m-primary js-mod-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Run</button>
             <button type="button" class="pf-v6-c-button pf-m-secondary js-mod-dry-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Dry run</button>
           </div>
@@ -598,7 +742,7 @@ function renderStatusModulesPanel() {
   // Hard refresh / first paint: leave modules collapsed. Later refreshes keep user expand state.
   applyStatusExpandState(savedExpand, { defaultModulesOpen: false });
 
-  btnPreflightExpandAll.disabled = false;
+  if (btnPreflightExpandAll) btnPreflightExpandAll.disabled = false;
 
   bindSelectableSummaries(statusWrap);
 
@@ -623,13 +767,14 @@ function setupExpandAll() {
     e.preventDefault();
     e.stopPropagation();
     expanded = !expanded;
-    statusWrap.querySelectorAll("details.pf-block, details.status-section-json").forEach((d) => {
+    statusWrap.querySelectorAll("details.demo-pf-block, details.demo-sec").forEach((d) => {
       d.open = expanded;
     });
     btnPreflightExpandAll.setAttribute(
       "aria-label",
       expanded ? "Collapse all modules" : "Expand all modules"
     );
+    btnPreflightExpandAll.textContent = expanded ? "Collapse all" : "Expand all";
   });
 }
 
@@ -685,15 +830,20 @@ async function fetchStatus(moduleIds = null) {
 
 async function refreshAllStatus() {
   setBusy(true);
-  setStatusIndicator("Refreshing…");
+  setStatusRefreshing(true);
+  refreshStatusCells();
+  renderStatusModulesPanel();
   try {
     await fetchStatus();
-    refreshStatusCells();
-    renderStatusModulesPanel();
+    statusReady = true;
     setModuleRefreshFeedback("Status updated.");
   } finally {
     setBusy(false);
-    setStatusIndicator("");
+    setStatusRefreshing(false);
+    refreshStatusCells();
+    syncDependencyLocks();
+    syncMasterCheckbox();
+    renderStatusModulesPanel();
   }
 }
 
@@ -704,15 +854,19 @@ async function refreshSelectedStatus() {
     return;
   }
   setBusy(true);
-  setStatusIndicator("Refreshing…");
+  setStatusRefreshing(true);
+  refreshStatusCells();
   try {
     await fetchStatus(ids);
-    refreshStatusCells();
-    renderStatusModulesPanel();
+    statusReady = true;
     setModuleRefreshFeedback(`Refreshed ${ids.length} module(s).`);
   } finally {
     setBusy(false);
-    setStatusIndicator("");
+    setStatusRefreshing(false);
+    refreshStatusCells();
+    syncDependencyLocks();
+    syncMasterCheckbox();
+    renderStatusModulesPanel();
   }
 }
 
@@ -819,6 +973,7 @@ async function saveCredentials() {
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
   }
+  syncCredCancelButton();
 }
 
 function authPrefValue() {
@@ -868,6 +1023,22 @@ function createCopyButton(getText, label) {
   return btn;
 }
 
+function createLaunchButton(getUrl, label) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "cred-copy-btn cred-launch-btn";
+  btn.setAttribute("aria-label", `Open ${label}`);
+  btn.title = `Open ${label}`;
+  btn.innerHTML = copyIconHtml("open_in_new");
+  btn.addEventListener("click", () => {
+    const raw = String(getUrl() || "").trim();
+    if (!raw) return;
+    const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    window.open(href, "_blank", "noopener,noreferrer");
+  });
+  return btn;
+}
+
 function wrapInputWithCopy(input) {
   if (!input || input.closest(".cred-field-wrap")) return;
   const wrap = document.createElement("div");
@@ -876,6 +1047,9 @@ function wrapInputWithCopy(input) {
   wrap.appendChild(input);
   const label = input.labels?.[0]?.textContent?.trim() || "value";
   wrap.appendChild(createCopyButton(() => input.value, label));
+  if (input.type === "url") {
+    wrap.appendChild(createLaunchButton(() => input.value, label));
+  }
   input.addEventListener("input", syncCredentialCopyButtons);
 }
 
@@ -887,7 +1061,7 @@ function setupCredentialCopyButtons() {
     wrapInputWithCopy(input);
   });
 
-  const pathLine = document.querySelector(".cred-path-line");
+  const pathLine = document.getElementById("credPathLine");
   if (pathLine && credFilePath && !pathLine.querySelector(".cred-copy-btn")) {
     pathLine.appendChild(
       createCopyButton(() => credFilePath.textContent || "", "credentials file path")
@@ -902,11 +1076,13 @@ function syncCredentialCopyButtons() {
   if (!form) return;
   form.querySelectorAll(".cred-field-wrap").forEach((wrap) => {
     const input = wrap.querySelector("input.pf-v6-c-form-control");
-    const btn = wrap.querySelector(".cred-copy-btn");
-    if (!input || !btn) return;
-    btn.disabled = input.disabled || !input.value.trim();
+    if (!input) return;
+    const empty = input.disabled || !input.value.trim();
+    wrap.querySelectorAll(".cred-copy-btn").forEach((btn) => {
+      btn.disabled = empty;
+    });
   });
-  const pathBtn = document.querySelector(".cred-path-line .cred-copy-btn");
+  const pathBtn = document.querySelector("#credPathLine .cred-copy-btn");
   if (pathBtn && credFilePath) {
     const path = credFilePath.textContent?.trim();
     pathBtn.disabled = !path || path === "—";
@@ -932,7 +1108,7 @@ function preferredScId(clusters) {
 
 function readSecuredClustersFromDom() {
   if (!securedClusterList) return [];
-  return [...securedClusterList.querySelectorAll(".sc-row")].map((row) => {
+  return [...securedClusterList.querySelectorAll(".demo-sc-row")].map((row) => {
     const id = row.dataset.scId || newId();
     const same = Boolean(row.querySelector(".js-sc-same")?.checked);
     return {
@@ -947,6 +1123,26 @@ function readSecuredClustersFromDom() {
       },
     };
   });
+}
+
+function preferredOpenshiftForLab(lab) {
+  if (!lab) return emptyOpenshift();
+  const clusters = lab.securedClusters || [];
+  const sc =
+    clusters.find((c) => c.id === lab.activeSecuredClusterId) || clusters[0] || null;
+  if (sc && sc.sameAsCentralCluster === false) {
+    return sc.openshift || emptyOpenshift();
+  }
+  return (lab.centralCluster || {}).openshift || emptyOpenshift();
+}
+
+function updateCredPanelChrome() {
+  const mismatch = document.getElementById("credDualMismatch");
+  if (!mismatch) return;
+  const lab = editingLab();
+  const active = activeLab();
+  const same = Boolean(editingLabId) && editingLabId === credDoc.activeLabId;
+  mismatch.hidden = !(lab && active && same);
 }
 
 function updateFoldMetas(lab) {
@@ -964,67 +1160,74 @@ function updateFoldMetas(lab) {
     const n = clusters.length;
     scMeta.textContent = `${n} cluster${n === 1 ? "" : "s"}${remote ? ` · ${remote} remote` : ""}`;
   }
+  updateCredPanelChrome();
+}
+
+function scRemoteBodyHtml(sc, ocp) {
+  return `<label class="demo-field">
+      <span>Name</span>
+      <input class="pf-v6-c-form-control js-sc-name" type="text" value="${escapeHtml(sc.name || "")}" spellcheck="false" />
+    </label>
+    <label class="pf-v6-c-check">
+      <input class="pf-v6-c-check__input js-sc-same" type="checkbox" />
+      <span class="pf-v6-c-check__label">Same as Central</span>
+    </label>
+    <label class="demo-field">
+      <span>Console URL</span>
+      <input class="pf-v6-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl || "")}" spellcheck="false" />
+    </label>
+    <div class="demo-field-row">
+      <label class="demo-field">
+        <span>User</span>
+        <input class="pf-v6-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername || "")}" spellcheck="false" />
+      </label>
+      <label class="demo-field">
+        <span>Password</span>
+        <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" spellcheck="false" autocomplete="off" />
+      </label>
+    </div>`;
+}
+
+function scSameBodyHtml() {
+  return `<label class="pf-v6-c-check">
+      <input class="pf-v6-c-check__input js-sc-same" type="checkbox" checked />
+      <span class="pf-v6-c-check__label">Same as Central</span>
+    </label>
+    <p class="demo-sc-hint" style="margin:0">Uses Central OpenShift console/user/password.</p>`;
 }
 
 function renderSecuredClusters(lab) {
   if (!securedClusterList) return;
   const clusters = lab.securedClusters || [];
 
+  if (!clusters.length) {
+    securedClusterList.innerHTML =
+      '<p class="demo-sc-empty">No secured clusters. Add one when a module needs sensor-side OpenShift.</p>';
+    updateFoldMetas(lab);
+    return;
+  }
+
   securedClusterList.innerHTML = clusters
     .map((sc) => {
       const same = sc.sameAsCentralCluster !== false;
       const ocp = sc.openshift || emptyOpenshift();
-      const badge = same
-        ? `<span class="sc-row__badge">Same as Central</span>`
-        : `<span class="sc-row__badge sc-row__badge--remote">Remote</span>`;
-      const nameField = same
-        ? ""
-        : `<label class="sc-inline">
-            <span class="sc-inline__label">Name</span>
-            <input class="pf-v6-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(sc.name || "")}" spellcheck="false" />
-          </label>`;
-      const ocpFields = same
-        ? `<p class="sc-row__note">Uses Central OpenShift credentials above.</p>`
-        : `<div class="sc-row__ocp">
-            <div class="pf-v6-c-form__group">
-              <label class="pf-v6-c-form__label">Console URL</label>
-              <input class="pf-v6-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl || "")}" spellcheck="false" />
-            </div>
-            <div class="cred-form-row cred-form-row--pair">
-              <div class="pf-v6-c-form__group">
-                <label class="pf-v6-c-form__label">User</label>
-                <input class="pf-v6-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername || "")}" spellcheck="false" />
-              </div>
-              <div class="pf-v6-c-form__group">
-                <label class="pf-v6-c-form__label">Password</label>
-                <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" placeholder="Optional if using oc login" spellcheck="false" />
-              </div>
-            </div>
-          </div>`;
-      return `<details class="sc-row" data-sc-id="${escapeHtml(sc.id)}">
-        <summary class="sc-row__summary">
-          <span class="sc-row__chev" aria-hidden="true"></span>
-          <span class="sc-row__title js-sc-title">${escapeHtml(sc.name || "secured")}</span>
-          ${badge}
-          <span class="sc-row__sub js-sc-sub">${escapeHtml(scSubLabel(sc))}</span>
-          <button type="button" class="pf-v6-c-button pf-m-plain sc-row__remove js-sc-remove"
+      const badgeClass = same ? "pf-m-blue" : "pf-m-grey";
+      const badgeText = same ? "Same as Central" : "Remote OCP";
+      const body = same ? scSameBodyHtml() : scRemoteBodyHtml(sc, ocp);
+      return `<details class="demo-sc-row" data-sc-id="${escapeHtml(sc.id)}">
+        <summary class="demo-sc-row__summary">
+          <span class="demo-sc-row__name js-sc-title">${escapeHtml(sc.name || "secured")}</span>
+          <span class="pf-v6-c-label pf-m-compact ${badgeClass} js-sc-badge"><span class="pf-v6-c-label__content">${badgeText}</span></span>
+          <span class="demo-sc-row__hint js-sc-sub">${escapeHtml(scSubLabel(sc))}</span>
+          <button type="button" class="pf-v6-c-button pf-m-link pf-m-danger pf-m-inline js-sc-remove"
             title="Remove secured cluster">Remove</button>
         </summary>
-        <div class="sc-row__body">
-          <div class="sc-row__top">
-            ${nameField}
-            <label class="pf-v6-c-check cred-same-cluster">
-              <input class="pf-v6-c-check__input js-sc-same" type="checkbox"${same ? " checked" : ""} />
-              <span class="pf-v6-c-check__label">Same as Central</span>
-            </label>
-          </div>
-          ${ocpFields}
-        </div>
+        <div class="demo-sc-row__body">${body}</div>
       </details>`;
     })
     .join("");
 
-  securedClusterList.querySelectorAll(".sc-row").forEach((row) => {
+  securedClusterList.querySelectorAll(".demo-sc-row").forEach((row) => {
     bindSecuredClusterRow(row);
   });
 
@@ -1036,7 +1239,8 @@ function refreshScRowChrome(row) {
   const sameCb = row.querySelector(".js-sc-same");
   const titleEl = row.querySelector(".js-sc-title");
   const subEl = row.querySelector(".js-sc-sub");
-  const badgeEl = row.querySelector(".sc-row__badge");
+  const badgeEl = row.querySelector(".js-sc-badge .pf-v6-c-label__content");
+  const badgeWrap = row.querySelector(".js-sc-badge");
   const same = Boolean(sameCb?.checked);
   const nameInput = row.querySelector(".js-sc-name");
   const name = (nameInput?.value || titleEl?.textContent || "").trim() || "secured";
@@ -1047,9 +1251,10 @@ function refreshScRowChrome(row) {
       openshift: { consoleUrl: row.querySelector(".js-sc-console")?.value || "" },
     });
   }
-  if (badgeEl) {
-    badgeEl.textContent = same ? "Same as Central" : "Remote";
-    badgeEl.classList.toggle("sc-row__badge--remote", !same);
+  if (badgeEl) badgeEl.textContent = same ? "Same as Central" : "Remote OCP";
+  if (badgeWrap) {
+    badgeWrap.classList.toggle("pf-m-blue", same);
+    badgeWrap.classList.toggle("pf-m-grey", !same);
   }
   const lab = editingLab();
   if (lab) {
@@ -1069,7 +1274,7 @@ function wireScRowBodyControls(row) {
 function applyScSameToggle(row) {
   const sameCb = row.querySelector(".js-sc-same");
   const titleEl = row.querySelector(".js-sc-title");
-  const body = row.querySelector(".sc-row__body");
+  const body = row.querySelector(".demo-sc-row__body");
   if (!body || !sameCb) return;
 
   const same = Boolean(sameCb.checked);
@@ -1081,44 +1286,9 @@ function applyScSameToggle(row) {
     adminPassword: row.querySelector(".js-sc-password")?.value || "",
   };
 
-  if (same) {
-    body.innerHTML = `
-      <div class="sc-row__top">
-        <label class="pf-v6-c-check cred-same-cluster">
-          <input class="pf-v6-c-check__input js-sc-same" type="checkbox" checked />
-          <span class="pf-v6-c-check__label">Same as Central</span>
-        </label>
-      </div>
-      <p class="sc-row__note">Uses Central OpenShift credentials above.</p>`;
-  } else {
-    body.innerHTML = `
-      <div class="sc-row__top">
-        <label class="sc-inline">
-          <span class="sc-inline__label">Name</span>
-          <input class="pf-v6-c-form-control sc-inline__input js-sc-name" type="text" value="${escapeHtml(name)}" spellcheck="false" />
-        </label>
-        <label class="pf-v6-c-check cred-same-cluster">
-          <input class="pf-v6-c-check__input js-sc-same" type="checkbox" />
-          <span class="pf-v6-c-check__label">Same as Central</span>
-        </label>
-      </div>
-      <div class="sc-row__ocp">
-        <div class="pf-v6-c-form__group">
-          <label class="pf-v6-c-form__label">Console URL</label>
-          <input class="pf-v6-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl)}" spellcheck="false" />
-        </div>
-        <div class="cred-form-row cred-form-row--pair">
-          <div class="pf-v6-c-form__group">
-            <label class="pf-v6-c-form__label">User</label>
-            <input class="pf-v6-c-form-control js-sc-user" type="text" value="${escapeHtml(ocp.adminUsername)}" spellcheck="false" />
-          </div>
-          <div class="pf-v6-c-form__group">
-            <label class="pf-v6-c-form__label">Password</label>
-            <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword)}" placeholder="Optional if using oc login" spellcheck="false" />
-          </div>
-        </div>
-      </div>`;
-  }
+  body.innerHTML = same
+    ? scSameBodyHtml()
+    : scRemoteBodyHtml({ name }, ocp);
 
   row.open = true;
   wireScRowBodyControls(row);
@@ -1131,18 +1301,20 @@ function bindSecuredClusterRow(row) {
   row.querySelector(".js-sc-remove")?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const rows = securedClusterList.querySelectorAll(".sc-row");
-    if (rows.length <= 1) {
-      setCredFeedback("Keep at least one secured cluster.", true);
-      return;
-    }
+    // DOM-only: do not mutate credDoc here or dirty tracking / Save will miss the removal.
     row.remove();
+    const remaining = readSecuredClustersFromDom();
     const lab = editingLab();
-    if (lab) {
-      lab.securedClusters = readSecuredClustersFromDom();
-      lab.activeSecuredClusterId = preferredScId(lab.securedClusters);
-      updateFoldMetas(lab);
+    updateFoldMetas({
+      ...(lab || {}),
+      securedClusters: remaining,
+      activeSecuredClusterId: preferredScId(remaining),
+    });
+    if (!remaining.length && securedClusterList) {
+      securedClusterList.innerHTML =
+        '<p class="demo-sc-empty">No secured clusters. Add one when a module needs sensor-side OpenShift.</p>';
     }
+    syncCredCancelButton();
   });
 }
 
@@ -1173,6 +1345,7 @@ function updateLabStrip(summary) {
     const host = meta?.centralHost || "";
     labStripHint.textContent = host ? `Central · ${host}` : "";
   }
+  updateCredPanelChrome();
 }
 
 function syncMakeActiveButton() {
@@ -1180,6 +1353,7 @@ function syncMakeActiveButton() {
   const same = Boolean(editingLabId) && editingLabId === credDoc.activeLabId;
   btnMakeActive.disabled = busy || labUiBusy || same || !editingLabId;
   btnMakeActive.textContent = same ? "Already active" : "Use as active";
+  updateCredPanelChrome();
 }
 
 function syncDeleteLabButton() {
@@ -1314,6 +1488,8 @@ function applyCredentialsResponse(data, { keepEditingId } = {}) {
   fillLabSelects();
   fillEditingLabForm();
   updateLabStrip(data.activeLabSummary);
+  captureSavedEditingLabFingerprint();
+  syncCredCancelButton();
 }
 
 async function loadCredentials() {
@@ -1374,15 +1550,86 @@ async function switchActiveLab(labId) {
   }
 }
 
-async function switchEditingLab(labId) {
-  if (!labId || labId === editingLabId || labUiBusy) return;
+function normalizeLabForCompare(lab) {
+  if (!lab) return null;
+  return {
+    id: lab.id || "",
+    name: (lab.name || "").trim(),
+    insecureSkipTlsVerify: Boolean(lab.insecureSkipTlsVerify),
+    centralCluster: lab.centralCluster || {},
+    securedClusters: lab.securedClusters || [],
+    activeSecuredClusterId: lab.activeSecuredClusterId || "",
+  };
+}
+
+/**
+ * Fingerprint of the editing lab as last loaded/saved.
+ * Always captured from the form (not credDoc): fold/SC chrome handlers mutate
+ * the in-memory lab, so a file-object baseline would never look dirty.
+ */
+let savedEditingLabFingerprint = "";
+
+function captureSavedEditingLabFingerprint() {
+  savedEditingLabFingerprint = JSON.stringify(editingLabFormSnapshot() || null);
+}
+
+function editingLabFormSnapshot() {
+  const payload = buildCredentialsPayload();
+  return normalizeLabForCompare(
+    (payload.labs || []).find((lab) => lab.id === editingLabId)
+  );
+}
+
+function isEditingLabDirty() {
+  if (!editingLabId || !savedEditingLabFingerprint) return false;
+  return JSON.stringify(editingLabFormSnapshot()) !== savedEditingLabFingerprint;
+}
+
+function syncCredCancelButton() {
+  const btn = document.getElementById("btnCredCancel");
+  if (!btn) return;
+  btn.disabled = busy || labUiBusy || !isEditingLabDirty();
+}
+
+async function cancelEditingLab() {
+  if (labUiBusy) return;
+  if (!isEditingLabDirty()) {
+    setCredFeedback("No unsaved changes.");
+    return;
+  }
   labUiBusy = true;
   setCredFeedback("");
   try {
-    await persistEditingLab();
-    editingLabId = labId;
-    fillLabSelects();
-    fillEditingLabForm();
+    const data = await api("/api/credentials");
+    applyCredentialsResponse(data, { keepEditingId: editingLabId });
+    setCredFeedback("Reverted to file.");
+  } catch (err) {
+    setCredFeedback(String(err.message || err), true);
+  } finally {
+    labUiBusy = false;
+    syncMakeActiveButton();
+    syncDeleteLabButton();
+    syncCredCancelButton();
+  }
+}
+
+async function switchEditingLab(labId) {
+  if (!labId || labId === editingLabId || labUiBusy) return;
+  if (isEditingLabDirty()) {
+    const ok = window.confirm(
+      "You have unsaved edits. Switching labs discards them. Continue?"
+    );
+    if (!ok) {
+      fillLabSelects();
+      return;
+    }
+  }
+  labUiBusy = true;
+  setCredFeedback("");
+  try {
+    // Always reload from disk so the form shows file state, not in-memory edits.
+    const data = await api("/api/credentials");
+    applyCredentialsResponse(data, { keepEditingId: labId });
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
     fillLabSelects();
@@ -1390,6 +1637,7 @@ async function switchEditingLab(labId) {
     labUiBusy = false;
     syncMakeActiveButton();
     syncDeleteLabButton();
+    syncCredCancelButton();
   }
 }
 
@@ -1490,12 +1738,16 @@ function addSecuredCluster() {
   const current = readSecuredClustersFromDom();
   const sc = emptySecuredCluster(`secured-${current.length + 1}`);
   sc.sameAsCentralCluster = false;
-  lab.securedClusters = [...current, sc];
-  lab.activeSecuredClusterId = preferredScId(lab.securedClusters);
-  renderSecuredClusters(lab);
-  // Expand the new remote SC for editing
+  // Draft in DOM only; Save writes it. Avoid mutating credDoc so dirty tracking works.
+  const draft = {
+    ...lab,
+    securedClusters: [...current, sc],
+    activeSecuredClusterId: preferredScId([...current, sc]),
+  };
+  renderSecuredClusters(draft);
   const row = securedClusterList?.querySelector(`[data-sc-id="${CSS.escape(sc.id)}"]`);
   if (row) row.open = true;
+  syncCredCancelButton();
 }
 
 async function loadRegistry() {
@@ -1530,8 +1782,22 @@ function refreshFoldMetasFromForm() {
 
 fields.centralConsole?.addEventListener("input", refreshFoldMetasFromForm);
 fields.centralApiToken?.addEventListener("input", refreshFoldMetasFromForm);
+fields.labName?.addEventListener("input", refreshFoldMetasFromForm);
+fields.centralOcpConsole?.addEventListener("input", refreshFoldMetasFromForm);
 
-document.getElementById("btnCredSave").addEventListener("click", saveCredentials);
+document.getElementById("btnCredSave").addEventListener("click", (e) => {
+  e.preventDefault();
+  saveCredentials();
+});
+document.getElementById("btnCredCancel")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  cancelEditingLab().catch((err) => setCredFeedback(err.message, true));
+});
+
+// Keep Cancel enabled/disabled as the form changes.
+const credFormEl = document.getElementById("credForm");
+credFormEl?.addEventListener("input", () => syncCredCancelButton());
+credFormEl?.addEventListener("change", () => syncCredCancelButton());
 document.getElementById("btnAddLab")?.addEventListener("click", () => {
   addLab().catch((e) => setCredFeedback(e.message, true));
 });
@@ -1545,8 +1811,20 @@ document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSe
 activeLabSelect?.addEventListener("change", () => {
   switchActiveLab(activeLabSelect.value).catch((e) => setCredFeedback(e.message, true));
 });
+let editLabSelectPrior = "";
+editLabSelect?.addEventListener("focus", () => {
+  editLabSelectPrior = editLabSelect.value;
+});
 editLabSelect?.addEventListener("change", () => {
-  switchEditingLab(editLabSelect.value).catch((e) => setCredFeedback(e.message, true));
+  const next = editLabSelect.value;
+  switchEditingLab(next)
+    .then(() => {
+      editLabSelectPrior = editLabSelect.value;
+    })
+    .catch((e) => {
+      editLabSelect.value = editLabSelectPrior || editingLabId;
+      setCredFeedback(e.message, true);
+    });
 });
 document.getElementById("btnStatus").addEventListener("click", () => {
   (async () => {
@@ -1597,8 +1875,14 @@ async function init() {
   } catch (err) {
     log(`\n${err.message}\n`);
     modulesTbody.innerHTML =
-      '<tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td module-row-td" colspan="2">Failed to load.</td></tr>';
+      '<tr><td colspan="3">Failed to load.</td></tr>';
   }
 }
+
+let modulesColResizeTimer = 0;
+window.addEventListener("resize", () => {
+  window.clearTimeout(modulesColResizeTimer);
+  modulesColResizeTimer = window.setTimeout(() => syncModulesColumnWidths(), 100);
+});
 
 init();

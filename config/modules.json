@@ -63,37 +63,37 @@
     {
       "number": 11,
       "id": "openshift-mcp",
-      "label": "openshift-mcp — OpenShift MCP server + agent wiring",
+      "label": "openshift-mcp — installs/updates an OpenShift MCP server on your cluster and wires it to your preferred AI agent",
       "dependsOn": []
     },
     {
       "number": 12,
       "id": "openshift-mcp-gateway",
-      "label": "openshift-mcp-gateway — MCP Gateway on designated cluster",
+      "label": "openshift-mcp-gateway — launches an MCP gateway on the cluster you designate",
       "dependsOn": []
     },
     {
       "number": 13,
       "id": "acs-lightspeed",
-      "label": "acs-lightspeed — OpenShift Lightspeed + ACS MCP integration",
+      "label": "acs-lightspeed — configures OpenShift Lightspeed integration",
       "dependsOn": []
     },
     {
       "number": 14,
       "id": "acs-mcp",
-      "label": "acs-mcp — ACS MCP server + agent wiring",
+      "label": "acs-mcp — installs/updates an ACS MCP server on your cluster and wires it to your agent",
       "dependsOn": []
     },
     {
       "number": 15,
       "id": "prometheus",
-      "label": "prometheus — Prometheus on cluster + ACS monitoring wiring",
+      "label": "prometheus — install Prometheus on your cluster and wire ACS monitoring",
       "dependsOn": []
     },
     {
       "number": 16,
       "id": "secrets-manager",
-      "label": "secrets-manager — HashiCorp Vault, ESM console plugin, ESO, demo app",
+      "label": "secrets-manager — install Hashi on your cluster, enable External Secret Management Console plugin, External Secrets Operator (ESO) and a demo application",
       "dependsOn": []
     }
   ]

@@ -146,13 +146,17 @@ def normalize_document(raw: dict[str, Any] | None) -> dict[str, Any]:
         doc["version"] = 2
         if not doc.get("activeLabId"):
             doc["activeLabId"] = doc["labs"][0].get("id") or "default"
-        # Ensure each lab has securedClusters + activeSecuredClusterId
+        # Ensure each lab has securedClusters + activeSecuredClusterId.
+        # Empty securedClusters[] is allowed (Central-only labs).
         for lab in doc["labs"]:
             clusters = lab.get("securedClusters")
-            if not isinstance(clusters, list) or not clusters:
+            if not isinstance(clusters, list):
                 sc = empty_secured_cluster()
                 lab["securedClusters"] = [sc]
                 lab["activeSecuredClusterId"] = sc["id"]
+            elif not clusters:
+                lab["securedClusters"] = []
+                lab["activeSecuredClusterId"] = ""
             elif not lab.get("activeSecuredClusterId"):
                 lab["activeSecuredClusterId"] = clusters[0].get("id") or ""
             if "insecureSkipTlsVerify" not in lab and "insecureSkipTlsVerify" in raw:
@@ -204,7 +208,8 @@ def preferred_secured_cluster(lab: dict[str, Any]) -> dict[str, Any]:
     """
     clusters = lab.get("securedClusters") or []
     if not clusters:
-        raise RuntimeError("active lab has no securedClusters")
+        # Central-only lab: modules that need oc fall back to Central OpenShift.
+        return empty_secured_cluster(name="", same_as_central=True)
     aid = lab.get("activeSecuredClusterId")
     if aid:
         for sc in clusters:

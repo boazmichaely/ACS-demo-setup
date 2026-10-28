@@ -181,8 +181,8 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
             sc.get("id"): sc for sc in (prev.get("securedClusters") or []) if sc.get("id")
         }
         sc_list_in = lab_in.get("securedClusters")
-        if not isinstance(sc_list_in, list) or not sc_list_in:
-            sc_list_in = prev.get("securedClusters") or [empty_secured_cluster()]
+        if not isinstance(sc_list_in, list):
+            sc_list_in = prev.get("securedClusters") or []
 
         merged_scs: list[dict[str, Any]] = []
         for sc_in in sc_list_in:
@@ -206,8 +206,10 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
             )
 
         active_sc = (lab_in.get("activeSecuredClusterId") or "").strip()
-        if not any(sc["id"] == active_sc for sc in merged_scs):
+        if merged_scs and not any(sc["id"] == active_sc for sc in merged_scs):
             active_sc = merged_scs[0]["id"]
+        if not merged_scs:
+            active_sc = ""
 
         merged_labs.append(
             {

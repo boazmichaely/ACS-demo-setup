@@ -17,16 +17,16 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=content_copy,done"
     />
-    <link rel="stylesheet" href="/static/mock-modern.css?v=6" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell1" />
   </head>
   <body>
     <div class="pf-v6-c-page pf-m-no-sidebar" id="page">
       <header class="pf-v6-c-masthead" id="page-masthead">
         <div class="pf-v6-c-masthead__main">
           <div class="pf-v6-c-masthead__brand">
-            <a class="mock-mh-brand" href="/static/mock-modern.html" aria-label="ACS demo setup mock home">
-              <img class="mock-mh-logo" src="/static/favicon.png" width="32" height="32" alt="" />
-              <span class="mock-mh-title">ACS demo setup</span>
+            <a class="demo-mh-brand" href="/static/mock-modern.html" aria-label="ACS demo setup mock home">
+              <img class="demo-mh-logo" src="/static/favicon.png" width="32" height="32" alt="" />
+              <span class="demo-mh-title">ACS demo setup</span>
             </a>
           </div>
         </div>
@@ -36,8 +36,8 @@
               <div class="pf-v6-c-toolbar__content-section">
                 <div class="pf-v6-c-toolbar__group pf-m-align-end pf-m-gap-md">
                   <div class="pf-v6-c-toolbar__item">
-                    <div class="mock-mh-lab">
-                      <span class="mock-mh-lab__label">Active lab</span>
+                    <div class="demo-mh-lab">
+                      <span class="demo-mh-lab__label">Active lab</span>
                       <select
                         id="mockActiveLab"
                         class="pf-v6-c-form-control"
@@ -50,7 +50,7 @@
                   </div>
                   <div class="pf-v6-c-toolbar__item">
                     <span
-                      class="pf-v6-c-label pf-m-green mock-oc-chip"
+                      class="pf-v6-c-label pf-m-green demo-oc-chip"
                       id="mockOcChip"
                       title="Stub: would reflect ./scripts/acs-setup.sh --oc-status"
                     >
@@ -101,20 +101,20 @@
       <div class="pf-v6-c-page__main-container pf-m-fill">
         <main class="pf-v6-c-page__main" tabindex="-1" id="main-content">
           <section class="pf-v6-c-page__main-section">
-            <div class="pf-v6-c-page__main-body mock-pad">
-              <p class="mock-banner" role="status">
+            <div class="pf-v6-c-page__main-body demo-pad">
+              <p class="demo-banner" role="status">
                 <strong>Visual mock only</strong> - PatternFly 6 + Project Felt shell.
                 Live GUI unchanged.
                 <a href="/">Back to live GUI</a>
                 ·
-                <a href="/static/mock-multi-lab.html">Multi-lab mock</a>
+                <a href="/static/demo-multi-lab.html">Multi-lab mock</a>
               </p>
 
-              <details class="mock-cred" id="mockCredPanel" open>
-                <summary class="mock-cred__summary">
-                  <span class="mock-cred__chev" aria-hidden="true"></span>
-                  <span class="mock-cred__title">Lab credentials</span>
-                  <span class="mock-cred__meta" id="mockCredSummaryMeta"
+              <details class="demo-cred" id="mockCredPanel" open>
+                <summary class="demo-cred__summary">
+                  <span class="demo-cred__chev" aria-hidden="true"></span>
+                  <span class="demo-cred__title">Lab credentials</span>
+                  <span class="demo-cred__meta" id="mockCredSummaryMeta"
                     >Editing bm-50rc4 · central-stackrox… · 1 SC</span
                   >
                   <button
@@ -126,24 +126,24 @@
                     Save
                   </button>
                 </summary>
-                <div class="mock-cred__body">
-                  <p class="mock-dual-hint" id="mockDualHint">
+                <div class="demo-cred__body">
+                  <p class="demo-dual-hint" id="mockDualHint">
                     <strong>Active</strong> (masthead) chooses which lab modules hit.
                     <strong>Edit</strong> (below) chooses which lab this form shows - they can
                     differ.
                   </p>
-                  <p class="mock-dual-mismatch" id="mockDualMismatch" hidden></p>
+                  <p class="demo-dual-mismatch" id="mockDualMismatch" hidden></p>
 
-                  <div class="mock-cred-top">
-                    <p class="mock-cred-path" id="mockCredPathLine">
-                      <span class="mock-cred-path-label">File:</span>
+                  <div class="demo-cred-top">
+                    <p class="demo-cred-path" id="mockCredPathLine">
+                      <span class="demo-cred-path-label">File:</span>
                       <code id="mockCredPath">/Users/you/code/acs-demo-setup/lab-credentials.json</code>
                     </p>
                   </div>
 
-                  <div class="mock-lab-toolbar">
-                    <label class="mock-lab-toolbar__lab">
-                      <span class="mock-lab-toolbar__label">Edit</span>
+                  <div class="demo-lab-toolbar">
+                    <label class="demo-lab-toolbar__lab">
+                      <span class="demo-lab-toolbar__label">Edit</span>
                       <select
                         id="mockEditLab"
                         class="pf-v6-c-form-control"
@@ -153,8 +153,8 @@
                         <option value="acscs">ACSCS</option>
                       </select>
                     </label>
-                    <label class="mock-lab-toolbar__name">
-                      <span class="mock-lab-toolbar__label">Name</span>
+                    <label class="demo-lab-toolbar__name">
+                      <span class="demo-lab-toolbar__label">Name</span>
                       <input
                         id="mockLabName"
                         class="pf-v6-c-form-control"
@@ -162,7 +162,7 @@
                         value="bm-50rc4 (OCP 5 lab)"
                       />
                     </label>
-                    <div class="mock-lab-toolbar__actions">
+                    <div class="demo-lab-toolbar__actions">
                       <button type="button" class="pf-v6-c-button pf-m-secondary" disabled>
                         Add
                       </button>
@@ -184,7 +184,7 @@
                         Delete
                       </button>
                     </div>
-                    <label class="pf-v6-c-check mock-lab-toolbar__tls">
+                    <label class="pf-v6-c-check demo-lab-toolbar__tls">
                       <input
                         class="pf-v6-c-check__input"
                         type="checkbox"
@@ -195,19 +195,19 @@
                     </label>
                   </div>
 
-                  <details class="mock-fold">
-                    <summary class="mock-fold__summary">
-                      <span class="mock-fold__chev" aria-hidden="true"></span>
-                      <span class="mock-fold__title">Central</span>
-                      <span class="mock-fold__meta" id="mockCentralMeta"
+                  <details class="demo-fold">
+                    <summary class="demo-fold__summary">
+                      <span class="demo-fold__chev" aria-hidden="true"></span>
+                      <span class="demo-fold__title">Central</span>
+                      <span class="demo-fold__meta" id="mockCentralMeta"
                         >central-stackrox.apps.bm-50rc4… · token set</span
                       >
                     </summary>
-                    <div class="mock-fold__body">
-                      <div class="mock-central-cols">
-                        <div class="mock-sub">
-                          <h3 class="mock-sub__title">OpenShift</h3>
-                          <label class="mock-field">
+                    <div class="demo-fold__body">
+                      <div class="demo-central-cols">
+                        <div class="demo-sub">
+                          <h3 class="demo-sub__title">OpenShift</h3>
+                          <label class="demo-field">
                             <span>Console URL</span>
                             <input
                               class="pf-v6-c-form-control"
@@ -216,8 +216,8 @@
                               value="https://console-openshift-console.apps.bm-50rc4-on-ocp5.ocp.infra.rox.systems"
                             />
                           </label>
-                          <div class="mock-field-row">
-                            <label class="mock-field">
+                          <div class="demo-field-row">
+                            <label class="demo-field">
                               <span>User</span>
                               <input
                                 class="pf-v6-c-form-control"
@@ -227,7 +227,7 @@
                                 spellcheck="false"
                               />
                             </label>
-                            <label class="mock-field">
+                            <label class="demo-field">
                               <span>Password</span>
                               <input
                                 class="pf-v6-c-form-control"
@@ -240,9 +240,9 @@
                             </label>
                           </div>
                         </div>
-                        <div class="mock-sub">
-                          <h3 class="mock-sub__title">RHACS Central</h3>
-                          <label class="mock-field">
+                        <div class="demo-sub">
+                          <h3 class="demo-sub__title">RHACS Central</h3>
+                          <label class="demo-field">
                             <span>Console URL</span>
                             <input
                               class="pf-v6-c-form-control"
@@ -252,7 +252,7 @@
                               spellcheck="false"
                             />
                           </label>
-                          <label class="mock-field">
+                          <label class="demo-field">
                             <span>API token</span>
                             <input
                               class="pf-v6-c-form-control"
@@ -263,8 +263,8 @@
                               autocomplete="off"
                             />
                           </label>
-                          <div class="mock-field-row">
-                            <label class="mock-field">
+                          <div class="demo-field-row">
+                            <label class="demo-field">
                               <span>Token name</span>
                               <input
                                 class="pf-v6-c-form-control"
@@ -273,7 +273,7 @@
                                 value="demo-setup"
                               />
                             </label>
-                            <label class="mock-field">
+                            <label class="demo-field">
                               <span>Expires</span>
                               <input
                                 class="pf-v6-c-form-control"
@@ -288,11 +288,11 @@
                     </div>
                   </details>
 
-                  <details class="mock-fold" open>
-                    <summary class="mock-fold__summary">
-                      <span class="mock-fold__chev" aria-hidden="true"></span>
-                      <span class="mock-fold__title">Secured clusters</span>
-                      <span class="mock-fold__meta" id="mockScMeta">1 cluster</span>
+                  <details class="demo-fold" open>
+                    <summary class="demo-fold__summary">
+                      <span class="demo-fold__chev" aria-hidden="true"></span>
+                      <span class="demo-fold__title">Secured clusters</span>
+                      <span class="demo-fold__meta" id="mockScMeta">1 cluster</span>
                       <button
                         type="button"
                         class="pf-v6-c-button pf-m-secondary pf-m-small"
@@ -302,18 +302,18 @@
                         Add
                       </button>
                     </summary>
-                    <div class="mock-fold__body">
-                      <p class="mock-sc-hint">
+                    <div class="demo-fold__body">
+                      <p class="demo-sc-hint">
                         OpenShift logins for sensor control planes under this Central - not a
                         module target.
                       </p>
-                      <div id="mockScList" class="mock-sc-list"></div>
+                      <div id="mockScList" class="demo-sc-list"></div>
                     </div>
                   </details>
                 </div>
               </details>
 
-              <div class="pf-v6-c-card pf-m-compact mock-workbench">
+              <div class="pf-v6-c-card pf-m-compact demo-workbench">
                 <div class="pf-v6-c-card__header">
                   <div class="pf-v6-c-card__title">
                     <h2 class="pf-v6-c-card__title-text">Modules</h2>
@@ -325,7 +325,7 @@
                   </div>
                 </div>
                 <div class="pf-v6-c-card__body">
-                  <div class="mock-bulk has-selection" id="mockBulk">
+                  <div class="demo-bulk has-selection" id="mockBulk">
                     <label class="pf-v6-c-check" for="mockSelectAll">
                       <input
                         class="pf-v6-c-check__input"
@@ -340,7 +340,7 @@
                     >
                   </div>
 
-                  <table class="mock-modules" aria-label="Demo modules (mock)">
+                  <table class="demo-modules" aria-label="Demo modules (mock)">
                     <thead>
                       <tr>
                         <th scope="col">Module</th>
@@ -350,12 +350,12 @@
                     <tbody>
                       <tr>
                         <td>
-                          <div class="mock-mod__check">
+                          <div class="demo-mod__check">
                             <input type="checkbox" checked aria-label="Select registries" />
                             <div>
-                              <span class="mock-mod__idx">1.</span>
-                              <span class="mock-mod__slug">registries</span>
-                              <span class="mock-mod__desc"> — ACS image integrations</span>
+                              <span class="demo-mod__idx">1.</span>
+                              <span class="demo-mod__slug">registries</span>
+                              <span class="demo-mod__desc"> — ACS image integrations</span>
                             </div>
                           </div>
                         </td>
@@ -363,21 +363,21 @@
                           <span class="pf-v6-c-label pf-m-green"
                             ><span class="pf-v6-c-label__content">ready</span></span
                           >
-                          <div class="mock-mod__detail">All required integrations present</div>
+                          <div class="demo-mod__detail">All required integrations present</div>
                         </td>
                       </tr>
                       <tr>
                         <td>
-                          <div class="mock-mod__check">
+                          <div class="demo-mod__check">
                             <input
                               type="checkbox"
                               checked
                               aria-label="Select compliance-operator"
                             />
                             <div>
-                              <span class="mock-mod__idx">2.</span>
-                              <span class="mock-mod__slug">compliance-operator</span>
-                              <span class="mock-mod__desc"> — CO + scan schedule</span>
+                              <span class="demo-mod__idx">2.</span>
+                              <span class="demo-mod__slug">compliance-operator</span>
+                              <span class="demo-mod__desc"> — CO + scan schedule</span>
                             </div>
                           </div>
                         </td>
@@ -385,21 +385,21 @@
                           <span class="pf-v6-c-label pf-m-green"
                             ><span class="pf-v6-c-label__content">ready</span></span
                           >
-                          <div class="mock-mod__detail">Operator + schedule OK</div>
+                          <div class="demo-mod__detail">Operator + schedule OK</div>
                         </td>
                       </tr>
-                      <tr class="mock-mod--unavailable" aria-disabled="true">
+                      <tr class="demo-mod--unavailable" aria-disabled="true">
                         <td>
-                          <div class="mock-mod__check">
+                          <div class="demo-mod__check">
                             <input
                               type="checkbox"
                               disabled
                               aria-label="ms-demo unavailable"
                             />
                             <div>
-                              <span class="mock-mod__idx">3.</span>
-                              <span class="mock-mod__slug">ms-demo</span>
-                              <span class="mock-mod__desc"> — Mostmark microservices</span>
+                              <span class="demo-mod__idx">3.</span>
+                              <span class="demo-mod__slug">ms-demo</span>
+                              <span class="demo-mod__desc"> — Mostmark microservices</span>
                             </div>
                           </div>
                         </td>
@@ -407,21 +407,21 @@
                           <span class="pf-v6-c-label pf-m-grey"
                             ><span class="pf-v6-c-label__content">not installed</span></span
                           >
-                          <div class="mock-mod__detail">module script not installed</div>
+                          <div class="demo-mod__detail">module script not installed</div>
                         </td>
                       </tr>
-                      <tr class="mock-mod--unavailable" aria-disabled="true">
+                      <tr class="demo-mod--unavailable" aria-disabled="true">
                         <td>
-                          <div class="mock-mod__check">
+                          <div class="demo-mod__check">
                             <input
                               type="checkbox"
                               disabled
                               aria-label="openshift-mcp unavailable"
                             />
                             <div>
-                              <span class="mock-mod__idx">11.</span>
-                              <span class="mock-mod__slug">openshift-mcp</span>
-                              <span class="mock-mod__desc">
+                              <span class="demo-mod__idx">11.</span>
+                              <span class="demo-mod__slug">openshift-mcp</span>
+                              <span class="demo-mod__desc">
                                 — OpenShift MCP server + agent wiring</span
                               >
                             </div>
@@ -431,21 +431,21 @@
                           <span class="pf-v6-c-label pf-m-grey"
                             ><span class="pf-v6-c-label__content">not installed</span></span
                           >
-                          <div class="mock-mod__detail">module script not installed</div>
+                          <div class="demo-mod__detail">module script not installed</div>
                         </td>
                       </tr>
-                      <tr class="mock-mod--unavailable" aria-disabled="true">
+                      <tr class="demo-mod--unavailable" aria-disabled="true">
                         <td>
-                          <div class="mock-mod__check">
+                          <div class="demo-mod__check">
                             <input
                               type="checkbox"
                               disabled
                               aria-label="prometheus unavailable"
                             />
                             <div>
-                              <span class="mock-mod__idx">15.</span>
-                              <span class="mock-mod__slug">prometheus</span>
-                              <span class="mock-mod__desc">
+                              <span class="demo-mod__idx">15.</span>
+                              <span class="demo-mod__slug">prometheus</span>
+                              <span class="demo-mod__desc">
                                 — Prometheus + ACS monitoring wiring</span
                               >
                             </div>
@@ -455,17 +455,17 @@
                           <span class="pf-v6-c-label pf-m-grey"
                             ><span class="pf-v6-c-label__content">not installed</span></span
                           >
-                          <div class="mock-mod__detail">module script not installed</div>
+                          <div class="demo-mod__detail">module script not installed</div>
                         </td>
                       </tr>
                     </tbody>
                   </table>
 
-                  <div class="mock-actions">
+                  <div class="demo-actions">
                     <button type="button" class="pf-v6-c-button pf-m-primary" disabled>
                       Run selected
                     </button>
-                    <div class="mock-actions__secondary">
+                    <div class="demo-actions__secondary">
                       <button type="button" class="pf-v6-c-button pf-m-secondary" disabled>
                         Dry run
                       </button>
@@ -480,67 +480,67 @@
                 </div>
               </div>
 
-              <div class="pf-v6-c-card pf-m-compact mock-status-card">
+              <div class="pf-v6-c-card pf-m-compact demo-status-card">
                 <div class="pf-v6-c-card__header">
                   <div class="pf-v6-c-card__title">
                     <h2 class="pf-v6-c-card__title-text">Status</h2>
                   </div>
                 </div>
                 <div class="pf-v6-c-card__body">
-                  <details class="mock-status-outer" open>
-                    <summary class="mock-status-outer__toggle">
-                      <span class="mock-status-outer__chev" aria-hidden="true"></span>
-                      <span class="mock-status-outer__title">Modules</span>
-                      <span class="mock-status-outer__meta">2 installed</span>
+                  <details class="demo-status-outer" open>
+                    <summary class="demo-status-outer__toggle">
+                      <span class="demo-status-outer__chev" aria-hidden="true"></span>
+                      <span class="demo-status-outer__title">Modules</span>
+                      <span class="demo-status-outer__meta">2 installed</span>
                     </summary>
-                    <div class="mock-status-body">
-                      <details class="mock-pf-block">
-                        <summary class="mock-pf-block__summary">
-                          <span class="mock-pf-block__chev" aria-hidden="true"></span>
-                          <span class="mock-pf-block__name">registries</span>
+                    <div class="demo-status-body">
+                      <details class="demo-pf-block">
+                        <summary class="demo-pf-block__summary">
+                          <span class="demo-pf-block__chev" aria-hidden="true"></span>
+                          <span class="demo-pf-block__name">registries</span>
                           <span class="pf-v6-c-label pf-m-green pf-m-compact"
                             ><span class="pf-v6-c-label__content">ready</span></span
                           >
-                          <span class="mock-pf-block__msg">All required integrations present</span>
+                          <span class="demo-pf-block__msg">All required integrations present</span>
                         </summary>
-                        <div class="mock-pf-block__body">
-                          <details class="mock-sec">
+                        <div class="demo-pf-block__body">
+                          <details class="demo-sec">
                             <summary>
-                              <span class="mock-sec__tag mock-sec__tag--ok">ok</span>
+                              <span class="demo-sec__tag demo-sec__tag--ok">ok</span>
                               Quay + registry.redhat.io
                             </summary>
-                            <div class="mock-sec__body">Sample section body (collapsed by default in live UI).</div>
+                            <div class="demo-sec__body">Sample section body (collapsed by default in live UI).</div>
                           </details>
                         </div>
                       </details>
 
-                      <details class="mock-pf-block" open>
-                        <summary class="mock-pf-block__summary">
-                          <span class="mock-pf-block__chev" aria-hidden="true"></span>
-                          <span class="mock-pf-block__name">compliance-operator</span>
+                      <details class="demo-pf-block" open>
+                        <summary class="demo-pf-block__summary">
+                          <span class="demo-pf-block__chev" aria-hidden="true"></span>
+                          <span class="demo-pf-block__name">compliance-operator</span>
                           <span class="pf-v6-c-label pf-m-green pf-m-compact"
                             ><span class="pf-v6-c-label__content">ready</span></span
                           >
-                          <span class="mock-pf-block__msg">Operator + schedule OK</span>
+                          <span class="demo-pf-block__msg">Operator + schedule OK</span>
                         </summary>
-                        <div class="mock-pf-block__body">
-                          <p class="mock-sec-group">OpenShift / Compliance Operator</p>
-                          <details class="mock-sec">
+                        <div class="demo-pf-block__body">
+                          <p class="demo-sec-group">OpenShift / Compliance Operator</p>
+                          <details class="demo-sec">
                             <summary>
-                              <span class="mock-sec__tag mock-sec__tag--ok">ok</span>
+                              <span class="demo-sec__tag demo-sec__tag--ok">ok</span>
                               Subscription + CSV
-                              <span class="mock-sec__sum">Succeeded</span>
+                              <span class="demo-sec__sum">Succeeded</span>
                             </summary>
-                            <div class="mock-sec__body">compliance-operator CSV phase Succeeded in openshift-compliance.</div>
+                            <div class="demo-sec__body">compliance-operator CSV phase Succeeded in openshift-compliance.</div>
                           </details>
-                          <p class="mock-sec-group">RHACS Central</p>
-                          <details class="mock-sec" open>
+                          <p class="demo-sec-group">RHACS Central</p>
+                          <details class="demo-sec" open>
                             <summary>
-                              <span class="mock-sec__tag mock-sec__tag--ok">ok</span>
+                              <span class="demo-sec__tag demo-sec__tag--ok">ok</span>
                               Scan schedule
-                              <span class="mock-sec__sum">ocp4-cis-scan-schedule</span>
+                              <span class="demo-sec__sum">ocp4-cis-scan-schedule</span>
                             </summary>
-                            <div class="mock-sec__body">
+                            <div class="demo-sec__body">
                               Scan configuration present for secured cluster production; profiles ocp4-cis, ocp4-cis-node.
                             </div>
                           </details>
@@ -556,21 +556,21 @@
       </div>
     </div>
 
-    <div class="mock-log-drawer" id="mockLogDrawer">
+    <div class="demo-log-drawer" id="mockLogDrawer">
       <button
         type="button"
-        class="mock-log-drawer__bar"
+        class="demo-log-drawer__bar"
         id="mockLogToggle"
         aria-expanded="false"
         aria-controls="mockLogPanel"
       >
-        <span class="mock-log-drawer__chev" aria-hidden="true"></span>
-        <span class="mock-log-drawer__title">Log</span>
-        <span class="mock-log-drawer__preview" id="mockLogPreview"
+        <span class="demo-log-drawer__chev" aria-hidden="true"></span>
+        <span class="demo-log-drawer__title">Log</span>
+        <span class="demo-log-drawer__preview" id="mockLogPreview"
           >── 2026-10-28 page-load lab=bm-50rc4 …</span
         >
       </button>
-      <pre class="mock-log-drawer__panel" id="mockLogPanel" role="log">
+      <pre class="demo-log-drawer__panel" id="mockLogPanel" role="log">
 ── 2026-10-28 10:40:00 -0400 page-load lab=bm-50rc4 central=… sc=production(same-as-central) ────────
 ── 2026-10-28 10:41:12 -0400 run compliance-operator ────────
 (sample) Operator already Succeeded; scan schedule present.
@@ -698,7 +698,7 @@ OK
 
         function setOcChip(ok) {
           chip.className =
-            "pf-v6-c-label mock-oc-chip " + (ok ? "pf-m-green" : "pf-m-orange");
+            "pf-v6-c-label demo-oc-chip " + (ok ? "pf-m-green" : "pf-m-orange");
           chip.querySelector(".pf-v6-c-label__content").textContent = ok
             ? "oc OK"
             : "oc PROBLEM";
@@ -712,21 +712,21 @@ OK
               var badge = sc.sameAsCentral ? "Same as Central" : "Remote OCP";
               var badgeClass = sc.sameAsCentral ? "pf-m-blue" : "pf-m-grey";
               var body = sc.sameAsCentral
-                ? "<p class=\"mock-sc-hint\" style=\"margin:0\">Uses Central OpenShift console/user/password.</p>"
-                : '<label class="mock-field"><span>Console URL</span><input class="pf-v6-c-form-control" type="text" value="' +
+                ? "<p class=\"demo-sc-hint\" style=\"margin:0\">Uses Central OpenShift console/user/password.</p>"
+                : '<label class="demo-field"><span>Console URL</span><input class="pf-v6-c-form-control" type="text" value="' +
                   (sc.console || "") +
                   '" spellcheck="false" /></label>' +
-                  '<div class="mock-field-row"><label class="mock-field"><span>User</span><input class="pf-v6-c-form-control" type="text" value="' +
+                  '<div class="demo-field-row"><label class="demo-field"><span>User</span><input class="pf-v6-c-form-control" type="text" value="' +
                   (sc.user || "") +
-                  '" spellcheck="false" /></label><label class="mock-field"><span>Password</span><input class="pf-v6-c-form-control" type="text" value="' +
+                  '" spellcheck="false" /></label><label class="demo-field"><span>Password</span><input class="pf-v6-c-form-control" type="text" value="' +
                   (sc.password || "") +
                   '" spellcheck="false" autocomplete="off" /></label></div>';
               return (
-                '<details class="mock-sc-row"' +
+                '<details class="demo-sc-row"' +
                 (i === lab.sc.length - 1 && !sc.sameAsCentral ? " open" : "") +
                 ">" +
-                '<summary class="mock-sc-row__summary">' +
-                '<span class="mock-sc-row__name">' +
+                '<summary class="demo-sc-row__summary">' +
+                '<span class="demo-sc-row__name">' +
                 sc.name +
                 "</span>" +
                 '<span class="pf-v6-c-label pf-m-compact ' +
@@ -734,12 +734,12 @@ OK
                 '"><span class="pf-v6-c-label__content">' +
                 badge +
                 "</span></span>" +
-                '<span class="mock-sc-row__hint">' +
+                '<span class="demo-sc-row__hint">' +
                 sc.hint +
                 "</span>" +
                 '<button type="button" class="pf-v6-c-button pf-m-link pf-m-danger pf-m-inline" disabled onclick="event.preventDefault();event.stopPropagation();">Remove</button>' +
                 "</summary>" +
-                '<div class="mock-sc-row__body">' +
+                '<div class="demo-sc-row__body">' +
                 body +
                 "</div></details>"
               );

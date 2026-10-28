@@ -12,12 +12,13 @@ Implementation target: **PatternFly v6** + **Project Felt** (`pf-v6-theme-felt`)
 |----|-------------|
 | G-LF-1 | **PatternFly v6** core + addons via CDN (`@patternfly/patternfly@6.6.0` or compatible). Use `pf-v6-c-*` components. |
 | G-LF-2 | Root: `<html class="pf-v6-theme-felt">`. Optional dark: toggle `pf-v6-theme-dark` (Light / Dark / System in masthead; persist preference). |
-| G-LF-3 | **Local stylesheet** (`gui/static/demo-setup.css`) for layout/status only. Prefer **PF6 tokens** (`--pf-t--global--*`). A temporary bridge mapping legacy `--pf-v5-global--*` names is allowed during the shell port. |
+| G-LF-3 | **Local stylesheet** (`gui/static/demo-setup.css`) is the single layout source of truth (shared with `mock-modern.html`). Prefer **PF6 Felt tokens** (`--pf-t--global--*`). |
 | G-LF-4 | **Border radius:** use **md/sm** on tall panels, cards, folds, and Status blocks. **Pill** radius only on chips, labels, and small controls - never on tall containers (clips content). |
-| G-LF-5 | Base font size **112.5%** on `html`. |
+| G-LF-5 | Base font: browser default (`html { font-size: 100% }`). Do not invent a custom root scale. |
 | G-LF-6 | **No external repo links** in UI copy; paths are local to the user's machine. |
 | G-LF-7 | **Brand:** masthead logo (`favicon.png`) + title **"ACS demo setup"**. |
 | G-LF-8 | **Favicon:** under `gui/static/`. |
+| G-LF-9 | Live shell DOM uses `demo-*` layout classes matching the mock composition. Do not restyle a second legacy shell in parallel. |
 
 ---
 
@@ -67,11 +68,11 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 
 | ID | Requirement |
 |----|-------------|
-| G-MOD-1 | Two-column table: **Module** \| **State · detail**. |
-| G-MOD-2 | Row: checkbox + `{n}. {slug} — {description}`. |
-| G-MOD-3 | Dependency hints; lock hint when deps block run. |
+| G-MOD-1 | Three-column table: **Module** \| **Description** \| **State**. |
+| G-MOD-2 | Module cell: checkbox + `{n}. {slug}`; description in its own column. |
+| G-MOD-3 | Dependency lock hint when deps block run (only after status is loaded). |
 | G-MOD-4 | Bulk toolbar: Select all + count; highlight when selection &gt; 0. |
-| G-MOD-5 | Status cell: badge + detail. |
+| G-MOD-5 | Status cell: badge (detail via title / Status jump). Pending **checking** while refresh runs. |
 | G-MOD-6 | Badge mapping `ok` / `needs-run` / `error` (ready / needs-run / error). |
 | G-MOD-7 | **Not installed** (no `modules/NN-<id>.sh`): row **grayed out**, checkbox **disabled**, not selectable; badge **not installed**. Count selectable rows only in bulk toolbar. |
 | G-MOD-8 | Actions: primary **Run selected**; secondary Dry run / Run full install / Refresh selected (quieter than primary). |
@@ -130,16 +131,15 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 
 ## 9. Compliance checklist
 
-Milestone: **shell port** (behavior rules for not-installed modules may follow in a second pass).
+Milestone: **shell port** + not-installed module rules.
 
-- [ ] PatternFly v6 + Felt; theme toggle
-- [ ] Masthead with Active lab (+ oc chip stub OK)
-- [ ] Credentials collapsible; Active ≠ Edit preserved
-- [ ] Modules + Status as separate cards; Log drawer
-- [ ] No tall pill-radius panels
-- [ ] Functional APIs still work (REQUIREMENTS.md §7)
-
-Follow-up milestone: G-MOD-7 / G-STAT-5 (gray not-installed; omit from Status).
+- [x] PatternFly v6 + Felt; theme toggle
+- [x] Masthead with Active lab (+ oc chip stub OK)
+- [x] Credentials collapsible; Active ≠ Edit preserved
+- [x] Modules + Status as separate cards; Log drawer
+- [x] No tall pill-radius panels
+- [x] Functional APIs still work (REQUIREMENTS.md §7)
+- [x] G-MOD-7 / G-STAT-5 (gray not-installed; omit from Status)
 
 ---
 
