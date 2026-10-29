@@ -68,14 +68,14 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 
 | ID | Requirement |
 |----|-------------|
-| G-MOD-1 | Three-column table: **Module** \| **Description** \| **State**. |
+| G-MOD-1 | Four-column table: **Module** \| **Description** \| **State** \| row actions (kebab). |
 | G-MOD-2 | Module cell: checkbox + `{n}. {slug}`; description in its own column. |
 | G-MOD-3 | Dependency lock hint when deps block run (only after status is loaded). |
 | G-MOD-4 | Bulk toolbar: Select all + count; highlight when selection &gt; 0. |
 | G-MOD-5 | Status cell: badge (detail via title / Status jump). Pending **checking** while refresh runs. |
 | G-MOD-6 | Badge mapping `ok` / `needs-run` / `error` (ready / needs-run / error). |
 | G-MOD-7 | **Not installed** (no `modules/<id>.sh`): row **grayed out**, checkbox **disabled**, not selectable; badge **not installed**. Count selectable rows only in bulk toolbar. |
-| G-MOD-8 | Actions: primary **Run selected**; secondary Dry run / Run full install / Refresh selected (quieter than primary). |
+| G-MOD-8 | One toolbar above the table: Select all, **Dry run**, selection count, then **Run selected** / **Uninstall selected** / **Run full install**. Per-row kebab: Run / Uninstall (Dry run applies). |
 
 ---
 
@@ -83,7 +83,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 
 | ID | Requirement |
 |----|-------------|
-| G-STAT-1 | Card title **"Status"**; Refresh status + indicator. |
+| G-STAT-1 | Card title **"Status"**; **Refresh status** + indicator + Expand all. Diagnostic only (no Run / Uninstall). |
 | G-STAT-2 | Outer Modules panel open by default; nested modules/sections collapsed initially. |
 | G-STAT-3 | Expand-all toggles nested sections only. |
 | G-STAT-4 | Nested `details.pf-block` with left accent. |
@@ -108,7 +108,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 
 | ID | Requirement |
 |----|-------------|
-| G-UX-1 | Refresh status = all installed modules; Refresh selected = checked selectable modules. |
+| G-UX-1 | Refresh status = all installed modules (Status card). No per-selection status refresh. |
 | G-UX-2 | Run selected in dependency order; confirm destructive modules (REQUIREMENTS R-GUI-5). |
 | G-UX-3 | Disable controls while in flight. |
 | G-UX-4 | Errors use danger colors; do not print secrets into the log stream from the GUI. |

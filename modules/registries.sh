@@ -20,6 +20,7 @@ usage() {
 Usage: $(basename "$0") --help
        $(basename "$0") --status
        $(basename "$0") --run [--dry-run]
+       $(basename "$0") --uninstall [--dry-run]
 
 Purpose:
   Configure Central image registry integrations needed for vulnerability scanning:
@@ -38,6 +39,7 @@ Environment:
 
 Side effects:
   --run updates or creates image integrations in Central via /v1/imageintegrations
+  --uninstall is not supported (refuses rather than guessing how to undo integrations)
 EOF
 }
 
@@ -105,6 +107,23 @@ do_dry_run() {
   [[ "$state" != "error" ]]
 }
 
+# Undoing registry integrations is not automated - refuse clearly.
+do_uninstall() {
+  cat >&2 <<EOF
+${MODULE_ID}: uninstall is not supported.
+This module creates or updates Central image integrations from the cluster
+pull-secret. Removing them automatically is not safe or well-defined here
+(shared integrations, other consumers). Adjust or delete integrations in the
+RHACS UI if you need to undo them by hand.
+EOF
+  printf '%s\terror\tuninstall not supported for registries\n' "$MODULE_ID"
+  return 1
+}
+
+do_uninstall_dry_run() {
+  do_uninstall
+}
+
 emit_status() {
   local output state
   output="$(do_status)"
@@ -122,6 +141,15 @@ run_module() {
   do_run
 }
 
+uninstall_module() {
+  local dry_run="${1:-false}"
+  if [[ "$dry_run" == "true" ]]; then
+    do_uninstall_dry_run
+    return
+  fi
+  do_uninstall
+}
+
 main() {
   local action="" dry_run=false
 
@@ -130,6 +158,7 @@ main() {
       --help|-h) usage; exit 0 ;;
       --status) action=status ;;
       --run) action=run ;;
+      --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
@@ -145,6 +174,7 @@ main() {
   case "$action" in
     status) emit_status ;;
     run) run_module "$dry_run" ;;
+    uninstall) uninstall_module "$dry_run" ;;
   esac
 }
 

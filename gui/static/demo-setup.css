@@ -492,7 +492,6 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   margin-bottom: var(--pf-t--global--spacer--sm);
@@ -539,6 +538,12 @@ body {
 .demo-modules td:nth-child(3) {
   width: var(--demo-state-col, 7rem);
   white-space: nowrap;
+}
+
+.demo-modules th:nth-child(4),
+.demo-modules td:nth-child(4) {
+  width: 2.75rem;
+  padding-inline-end: var(--pf-t--global--spacer--sm);
 }
 
 .demo-modules.is-measuring {
@@ -616,21 +621,78 @@ body {
   cursor: not-allowed;
 }
 
-.demo-actions {
-  display: flex;
-  flex-wrap: wrap;
+.demo-dry-toggle {
+  display: inline-flex;
   align-items: center;
   gap: var(--pf-t--global--spacer--sm);
-  margin-top: var(--pf-t--global--spacer--md);
-  padding-top: var(--pf-t--global--spacer--md);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  margin: 0;
+  padding: 0.3125rem 0.625rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--sm, 4px);
+  cursor: pointer;
+  user-select: none;
 }
 
-.demo-actions__secondary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pf-t--global--spacer--sm);
-  margin-left: auto;
+.demo-dry-toggle.is-on {
+  border-color: var(--pf-t--global--color--brand--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.demo-mod__actions {
+  width: 2.5rem;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.demo-mod__menu-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.demo-mod__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 20;
+  min-width: 11rem;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--sm, 4px);
+  background: var(--pf-t--global--background--color--primary--default);
+  box-shadow: var(--pf-t--global--box-shadow--md);
+}
+
+.demo-mod__menu[hidden] {
+  display: none;
+}
+
+.demo-mod__menu button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.demo-mod__menu button:hover:not(:disabled) {
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
+.demo-mod__menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.demo-mod__menu button.is-danger {
+  color: var(--pf-t--global--text--color--status--danger--default, #c9190b);
 }
 
 /* Status card (same role as live GUI Status panel) */
@@ -886,8 +948,12 @@ body {
     min-width: 8rem;
   }
 
-  .demo-actions__secondary {
+  .demo-bulk__results {
     margin-left: 0;
+    width: 100%;
+  }
+
+  .demo-bulk__actions {
     width: 100%;
   }
 }
@@ -947,20 +1013,21 @@ body {
   font-weight: var(--pf-t--global--font--weight--body--bold);
 }
 
-.demo-status-actions-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pf-t--global--spacer--sm);
-  margin-top: var(--pf-t--global--spacer--sm);
-}
-
 .demo-bulk__results {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  margin-left: auto;
   font-size: var(--pf-t--global--font--size--sm);
   color: var(--pf-t--global--text--color--subtle);
+}
+
+.demo-bulk__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
 }
 
 .demo-workbench .pf-v6-c-card__header {

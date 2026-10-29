@@ -241,6 +241,56 @@ def evaluate_scan() -> dict[str, Any]:
     }
 
 
+def uninstall_scan(*, dry_run: bool) -> dict[str, Any]:
+    """Remove this module's Central scan configuration if present."""
+    log: list[str] = []
+    try:
+        creds = load_lab_credentials()
+        base, token = central_connection(creds)
+        auth_err = check_central_auth(base, token, creds=creds)
+        if auth_err:
+            return {"state": "error", "message": auth_err, "log": log}
+    except Exception as exc:  # noqa: BLE001
+        return {"state": "error", "message": str(exc), "log": log}
+
+    configs = list_scan_configurations(base, token)
+    existing = find_scan_configuration(configs)
+    if not existing or not existing.get("id"):
+        log.append(f"No Central scan configuration named {SCAN_NAME} to delete")
+        return {
+            "state": "ok",
+            "message": f"scan schedule {SCAN_NAME} already absent",
+            "log": log,
+        }
+
+    config_id = existing["id"]
+    path = f"/v2/compliance/scan/configurations/{config_id}"
+    if dry_run:
+        log.append("Planned changes (phase 2 - Central scan configuration):")
+        log.append(f"  - DELETE {path} ({SCAN_NAME})")
+        return {
+            "state": "ok",
+            "message": f"dry-run: would delete scan schedule {SCAN_NAME}",
+            "log": log,
+            "configId": config_id,
+        }
+
+    code, body = central_request(base, token, "DELETE", path)
+    if code not in (200, 204, 404):
+        return {
+            "state": "error",
+            "message": f"delete scan configuration failed ({code}): {body}",
+            "log": log,
+            "configId": config_id,
+        }
+    log.append(f"Deleted Central scan configuration {SCAN_NAME} ({config_id})")
+    return {
+        "state": "ok",
+        "message": f"scan schedule {SCAN_NAME} deleted",
+        "log": log,
+    }
+
+
 def apply_scan(*, dry_run: bool) -> dict[str, Any]:
     log: list[str] = []
     status = evaluate_scan()
@@ -352,7 +402,7 @@ def apply_scan(*, dry_run: bool) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "run"])
+    parser.add_argument("command", choices=["status", "run", "uninstall"])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--cli", action="store_true", help="Emit human-readable log lines")
     args = parser.parse_args()
@@ -360,6 +410,8 @@ def main() -> int:
     try:
         if args.command == "status":
             result = evaluate_scan()
+        elif args.command == "uninstall":
+            result = uninstall_scan(dry_run=args.dry_run)
         else:
             result = apply_scan(dry_run=args.dry_run)
     except Exception as exc:  # noqa: BLE001 - module boundary
@@ -369,10 +421,7 @@ def main() -> int:
         for line in result.get("log") or []:
             if line:
                 print(line)
-        if args.command == "status":
-            print(f"scan-status\t{result.get('state', 'error')}\t{result.get('message', '')}")
-        else:
-            print(f"scan-status\t{result.get('state', 'error')}\t{result.get('message', '')}")
+        print(f"scan-status\t{result.get('state', 'error')}\t{result.get('message', '')}")
     else:
         print(json.dumps(result))
 

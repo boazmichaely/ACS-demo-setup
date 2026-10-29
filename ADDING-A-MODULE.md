@@ -8,6 +8,8 @@ A **module** is one step in preparing the demo lab. The GUI and CLI treat every 
 | `--status` | Check whether the lab already has this step done |
 | `--run` | Apply the step (safe to run again if nothing changed) |
 | `--run --dry-run` | Print what would change, without changing anything |
+| `--uninstall` | Remove what this module created (or refuse with a clear error) |
+| `--uninstall --dry-run` | Print what uninstall would remove (or refuse the same way) |
 
 ## Fast path (copy the skeleton)
 
@@ -19,7 +21,7 @@ ID=my-feature
 cp templates/module-skeleton.sh "modules/${ID}.sh"
 chmod +x "modules/${ID}.sh"
 
-# 3. Edit the copy: set MODULE_ID, fill in usage(), do_status, do_run, do_dry_run
+# 3. Edit the copy: set MODULE_ID, fill in usage() and the do_* functions
 #    Search for TODO in modules/${ID}.sh
 
 # 4. Register it in config/modules.json (see below)
@@ -34,7 +36,7 @@ The orchestrator only runs `modules/<id>.sh`. That file is the module.
 
 ## When do you also need a Python file?
 
-**Most modules start as that one shell script.** Put `oc`, simple checks, and straightforward logic in `do_status` / `do_run` / `do_dry_run` inside `modules/<id>.sh`.
+**Most modules start as that one shell script.** Put `oc`, simple checks, and straightforward logic in the `do_*` functions inside `modules/<id>.sh`.
 
 **Add a Python helper only when the work is awkward in bash** - typically calling the Central HTTP API or parsing a lot of JSON. Then:
 
@@ -43,9 +45,7 @@ The orchestrator only runs `modules/<id>.sh`. That file is the module.
 cp templates/module-helper.py modules/my_feature.py
 ```
 
-Open `modules/my-feature.sh` and uncomment the “Optional: call a Python helper” block near the bottom of the skeleton. Point `HELPER` at `modules/my_feature.py`. Implement `status` / `run` in the `.py` file; keep `--help` and flag parsing in the `.sh` file.
-
-Working examples of that split:
+Open `modules/my-feature.sh` and uncomment the “Optional: call a Python helper” block in the skeleton. Point `HELPER` at `modules/my_feature.py`. Implement commands in the `.py` file; keep `--help` and flag parsing in the `.sh` file.
 
 If you are not sure: stay in bash until it hurts, then add the helper.
 
@@ -79,10 +79,13 @@ my-feature	ok	short human summary
 | `needs-run` | The lab is reachable, but this step is missing or drifted |
 | `error` | You cannot tell (bad credentials, API down, and so on) |
 
-## Run and dry-run
+## Run, dry-run, and uninstall
 
 - `--run` should leave the lab in the desired state. Running it again when nothing drifted should still succeed.
-- `--dry-run` should describe the plan and exit 0 without changing the cluster or Central.
+- `--dry-run` (with `--run`) should describe the plan and exit 0 without changing the cluster or Central.
+- `--uninstall` should remove what this module owns. Prefer idempotent cleanup when already absent.
+- If uninstall is not safe or not defined, **refuse**: print a clear message, emit a status line with state `error`, and exit non-zero. Do not pretend success.
+- Orchestrator uninstall always requires `--module <id>` (no bulk uninstall of every module from the CLI).
 - On hard failure, exit non-zero and print a clear message on stderr.
 
 ## Credentials and ACS style
@@ -100,10 +103,11 @@ If the RHACS UI configures something in Central, prefer the Central API. Avoid a
 ./scripts/acs-setup.sh --status --module my-feature
 ./scripts/acs-setup.sh --run --module my-feature --dry-run
 ./scripts/acs-setup.sh --run --module my-feature
+./scripts/acs-setup.sh --uninstall --module my-feature --dry-run
 ./serve.sh
 ```
 
-In the GUI you should see an enabled row, a sensible status after refresh, and a working Run action.
+In the GUI you should see an enabled row, a sensible status after refresh, and Run / Uninstall from the row menu (the Dry run toggle applies to both).
 
 ## Contributing
 

@@ -199,13 +199,20 @@ def post_log_page_load() -> dict[str, bool]:
 
 
 @app.post("/api/run/{module_id}")
-def run_module(module_id: str, dry_run: bool = False) -> StreamingResponse:
-    args = ["--run", "--module", module_id]
+def run_module(
+    module_id: str,
+    dry_run: bool = False,
+    uninstall: bool = False,
+) -> StreamingResponse:
+    if uninstall:
+        args = ["--uninstall", "--module", module_id]
+    else:
+        args = ["--run", "--module", module_id]
     if dry_run:
         args.append("--dry-run")
 
     def stream_output():
-        begin_run(REPO_ROOT, module_id, dry_run=dry_run)
+        begin_run(REPO_ROOT, module_id, dry_run=dry_run, uninstall=uninstall)
         proc = subprocess.Popen(
             [str(ACS_SETUP), *args],
             cwd=REPO_ROOT,

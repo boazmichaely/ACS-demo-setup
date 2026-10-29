@@ -12,6 +12,7 @@ usage() {
 Usage: $(basename "$0") --help
        $(basename "$0") --status
        $(basename "$0") --run [--dry-run]
+       $(basename "$0") --uninstall [--dry-run]
 
 Purpose:
   Install OpenShift Compliance Operator via OLM on the secured cluster, then
@@ -45,6 +46,8 @@ Environment:
 
 Side effects:
   --run applies OLM resources on the secured cluster and scan configuration via Central API
+  --uninstall deletes this module's Central scan schedule (if present), then removes the
+    Subscription/CSV/OperatorGroup and the openshift-compliance namespace
 EOF
 }
 
@@ -69,6 +72,14 @@ do_dry_run() {
   compliance_operator_run true
 }
 
+do_uninstall() {
+  compliance_operator_uninstall false
+}
+
+do_uninstall_dry_run() {
+  compliance_operator_uninstall true
+}
+
 emit_status() {
   # Lib prints status (and optional sections) and sets the exit code.
   do_status
@@ -83,6 +94,15 @@ run_module() {
   do_run
 }
 
+uninstall_module() {
+  local dry_run="${1:-false}"
+  if [[ "$dry_run" == "true" ]]; then
+    do_uninstall_dry_run
+    return
+  fi
+  do_uninstall
+}
+
 main() {
   local action="" dry_run=false
 
@@ -91,6 +111,7 @@ main() {
       --help|-h) usage; exit 0 ;;
       --status) action=status ;;
       --run) action=run ;;
+      --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
@@ -106,6 +127,7 @@ main() {
   case "$action" in
     status) emit_status ;;
     run) run_module "$dry_run" ;;
+    uninstall) uninstall_module "$dry_run" ;;
   esac
 }
 

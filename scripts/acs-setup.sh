@@ -12,6 +12,7 @@ usage() {
 Usage: acs-setup.sh --help
        acs-setup.sh --status [--module <id>] [--json]
        acs-setup.sh --run [--module <id>] [--dry-run]
+       acs-setup.sh --uninstall --module <id> [--dry-run]
        acs-setup.sh --oc-status
        acs-setup.sh --oc-login [--force]
 
@@ -19,9 +20,10 @@ Options:
   --help          Show this help
   --status        Report module status (all modules, or one with --module)
   --run           Run module(s)
+  --uninstall     Uninstall one module (requires --module; some modules refuse)
   --module <id>   Limit to one module id from config/modules.json
   --json          With --status: emit JSON array (for GUI)
-  --dry-run       With --run: pass through to module (planned actions only)
+  --dry-run       With --run or --uninstall: planned actions only
 
 OpenShift (active lab; lab-credentials.json is source of truth):
   --oc-status     Is oc ready for the active lab? (OK/PROBLEM + next step)
@@ -231,6 +233,21 @@ run_modules() {
   return "$failed"
 }
 
+uninstall_module() {
+  local filter_id="${1:-}"
+  local dry_run="${2:-false}"
+  [[ -n "$filter_id" ]] || die "uninstall requires --module <id>"
+
+  local script args=(--uninstall)
+  script="$(module_script_path "$filter_id")"
+  if [[ ! -x "$script" ]]; then
+    echo "acs-setup: module script not installed: $script" >&2
+    return 1
+  fi
+  [[ "$dry_run" == "true" ]] && args+=(--dry-run)
+  "$script" "${args[@]}"
+}
+
 main() {
   [[ -f "$MODULES_JSON" ]] || die "missing $MODULES_JSON"
 
@@ -241,6 +258,7 @@ main() {
       --help|-h) usage; exit 0 ;;
       --status) action=status ;;
       --run) action=run ;;
+      --uninstall) action=uninstall ;;
       --module) shift; module_id="${1:-}"; [[ -n "$module_id" ]] || die "--module requires an id" ;;
       --json) json=true ;;
       --dry-run) dry_run=true ;;
@@ -274,6 +292,9 @@ main() {
       ;;
     run)
       run_modules "$module_id" "$dry_run"
+      ;;
+    uninstall)
+      uninstall_module "$module_id" "$dry_run"
       ;;
     oc-status) run_openshift_cli status ;;
     oc-login)

@@ -15,6 +15,7 @@ usage() {
 Usage: $(basename "$0") --help
        $(basename "$0") --status
        $(basename "$0") --run [--dry-run]
+       $(basename "$0") --uninstall [--dry-run]
 
 Purpose:
   TODO: one short paragraph - what this module sets up in the demo lab.
@@ -29,11 +30,12 @@ Environment:
 
 Side effects:
   --run TODO: what gets created or updated (Central API paths, namespaces, …).
+  --uninstall TODO: what gets removed, or say "not supported" if you leave it unimplemented.
 EOF
 }
 
 # ---------------------------------------------------------------------------
-# Implement these three functions. Keep the flag parsing in main() as-is.
+# Implement these functions. Keep the flag parsing in main() as-is.
 # ---------------------------------------------------------------------------
 
 # Print exactly one status line with three fields separated by tabs:
@@ -42,12 +44,6 @@ EOF
 # Example: printf '%s\tok\tall set\n' "$MODULE_ID"
 do_status() {
   # TODO: replace with a real check against the lab.
-  # Example:
-  #   if everything looks good; then
-  #     printf '%s\tok\tshort summary\n' "$MODULE_ID"
-  #   else
-  #     printf '%s\tneeds-run\twhat is missing\n' "$MODULE_ID"
-  #   fi
   printf '%s\tneeds-run\tTODO: implement do_status in modules/%s.sh\n' \
     "$MODULE_ID" "$MODULE_ID"
 }
@@ -69,6 +65,23 @@ ${MODULE_ID}: dry-run
 EOF
 }
 
+# Remove what --run created. Safe to run when already absent when possible.
+# If uninstall is not supported, fail with a clear message (do not pretend success).
+do_uninstall() {
+  # TODO: implement real uninstall, or keep this graceful refusal.
+  echo "${MODULE_ID}: uninstall is not implemented for this module." >&2
+  printf '%s\terror\tuninstall not implemented\n' "$MODULE_ID"
+  return 1
+}
+
+# Print uninstall plan only. Exit non-zero if uninstall is not supported.
+do_uninstall_dry_run() {
+  # TODO: describe what do_uninstall would remove, or keep this refusal.
+  echo "${MODULE_ID}: uninstall is not implemented for this module." >&2
+  printf '%s\terror\tuninstall not implemented\n' "$MODULE_ID"
+  return 1
+}
+
 # ---------------------------------------------------------------------------
 # Optional: call a Python helper for Central API / heavy JSON.
 # Copy templates/module-helper.py to modules/<id_with_underscores>.py only if
@@ -84,7 +97,7 @@ EOF
 #     fi
 #   fi
 #   run_helper() { "$PYTHON" "$HELPER" "$@"; }
-#   # Then in do_status / do_run, call run_helper and print its status line.
+#   # Then in do_status / do_run / do_uninstall, call run_helper and print status.
 # ---------------------------------------------------------------------------
 
 emit_status() {
@@ -104,6 +117,15 @@ run_module() {
   do_run
 }
 
+uninstall_module() {
+  local dry_run="${1:-false}"
+  if [[ "$dry_run" == "true" ]]; then
+    do_uninstall_dry_run
+    return
+  fi
+  do_uninstall
+}
+
 main() {
   local action="" dry_run=false
 
@@ -112,6 +134,7 @@ main() {
       --help|-h) usage; exit 0 ;;
       --status) action=status ;;
       --run) action=run ;;
+      --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
@@ -127,6 +150,7 @@ main() {
   case "$action" in
     status) emit_status ;;
     run) run_module "$dry_run" ;;
+    uninstall) uninstall_module "$dry_run" ;;
   esac
 }
 

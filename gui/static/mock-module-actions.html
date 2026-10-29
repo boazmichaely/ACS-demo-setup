@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en" class="pf-v6-theme-felt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACS demo setup</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly-addons.min.css"
+    />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell21" />
+    <style>
+      .demo-mod__actions {
+        width: 2.5rem;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .demo-mod__menu-wrap {
+        position: relative;
+        display: inline-block;
+      }
+      .demo-mod__menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 2px);
+        z-index: 20;
+        min-width: 11rem;
+        margin: 0;
+        padding: 0.25rem 0;
+        list-style: none;
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--sm, 4px);
+        background: var(--pf-t--global--background--color--primary--default);
+        box-shadow: var(--pf-t--global--box-shadow--md);
+      }
+      .demo-mod__menu[hidden] {
+        display: none;
+      }
+      .demo-mod__menu button {
+        display: block;
+        width: 100%;
+        margin: 0;
+        padding: 0.4rem 0.75rem;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+        color: inherit;
+        font: inherit;
+      }
+      .demo-mod__menu button:hover {
+        background: var(--pf-t--global--background--color--secondary--default);
+      }
+      .demo-mod__menu button.is-danger {
+        color: var(--pf-t--global--text--color--status--danger--default, #c9190b);
+      }
+      .demo-dry-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--pf-t--global--spacer--sm);
+        margin: 0;
+        padding: 0.3125rem 0.625rem;
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--sm, 4px);
+        cursor: pointer;
+        user-select: none;
+      }
+      .demo-dry-toggle.is-on {
+        border-color: var(--pf-t--global--color--brand--default);
+        background: var(--pf-t--global--background--color--secondary--default);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="pf-v6-c-page pf-m-no-sidebar" id="page">
+      <header class="pf-v6-c-masthead" id="page-masthead">
+        <div class="pf-v6-c-masthead__main">
+          <div class="pf-v6-c-masthead__brand">
+            <a class="demo-mh-brand" href="/" aria-label="ACS demo setup home">
+              <img
+                class="demo-mh-logo"
+                src="/static/favicon.png"
+                width="32"
+                height="32"
+                alt=""
+              />
+              <span class="demo-mh-title">ACS demo setup</span>
+            </a>
+          </div>
+        </div>
+        <div class="pf-v6-c-masthead__content">
+          <div class="pf-v6-c-toolbar pf-m-full-height">
+            <div class="pf-v6-c-toolbar__content">
+              <div class="pf-v6-c-toolbar__content-section">
+                <div class="pf-v6-c-toolbar__group pf-m-align-end pf-m-gap-md">
+                  <div class="pf-v6-c-toolbar__item">
+                    <div class="demo-mh-lab">
+                      <span class="demo-mh-lab__label">Active lab</span>
+                      <select class="pf-v6-c-form-control" aria-label="Active lab for modules">
+                        <option selected>bm-50rc4-on-ocp5</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="pf-v6-c-toolbar__item">
+                    <div class="pf-v6-c-toggle-group" role="group" aria-label="Color scheme">
+                      <div class="pf-v6-c-toggle-group__item">
+                        <button
+                          type="button"
+                          class="pf-v6-c-toggle-group__button"
+                          aria-pressed="false"
+                        >
+                          Light
+                        </button>
+                      </div>
+                      <div class="pf-v6-c-toggle-group__item">
+                        <button
+                          type="button"
+                          class="pf-v6-c-toggle-group__button"
+                          aria-pressed="false"
+                        >
+                          Dark
+                        </button>
+                      </div>
+                      <div class="pf-v6-c-toggle-group__item">
+                        <button
+                          type="button"
+                          class="pf-v6-c-toggle-group__button"
+                          aria-pressed="true"
+                        >
+                          System
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="pf-v6-c-page__main-container pf-m-fill">
+        <main class="pf-v6-c-page__main" tabindex="-1" id="main-content">
+          <section class="pf-v6-c-page__main-section">
+            <div class="pf-v6-c-page__main-body demo-pad">
+              <details class="demo-cred">
+                <summary class="demo-cred__summary">
+                  <span class="demo-cred__chev" aria-hidden="true"></span>
+                  <span class="demo-cred__title">Lab credentials</span>
+                </summary>
+              </details>
+
+              <div class="pf-v6-c-card pf-m-compact demo-workbench">
+                <div class="pf-v6-c-card__header">
+                  <div class="pf-v6-c-card__title">
+                    <h2 class="pf-v6-c-card__title-text">Modules</h2>
+                  </div>
+                </div>
+                <div class="pf-v6-c-card__body">
+                  <div class="demo-bulk" aria-label="Module selection">
+                    <label class="pf-v6-c-check" for="modSelectAll">
+                      <input class="pf-v6-c-check__input" type="checkbox" id="modSelectAll" />
+                      <span class="pf-v6-c-check__label">Select all</span>
+                    </label>
+                    <label class="demo-dry-toggle" id="dryToggleWrap">
+                      <input class="pf-v6-c-check__input" type="checkbox" id="dryRunToggle" />
+                      <span>Dry run</span>
+                    </label>
+                    <div class="demo-bulk__results">
+                      <span>2 of 4 selected</span>
+                    </div>
+                    <div class="demo-bulk__actions">
+                      <button class="pf-v6-c-button pf-m-primary" type="button">Run selected</button>
+                      <button class="pf-v6-c-button pf-m-secondary pf-m-danger" type="button">
+                        Uninstall selected
+                      </button>
+                      <button class="pf-v6-c-button pf-m-secondary" type="button">
+                        Run full install
+                      </button>
+                    </div>
+                  </div>
+
+                  <table class="demo-modules" aria-label="Demo modules">
+                    <thead>
+                      <tr>
+                        <th scope="col">Module</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">State</th>
+                        <th scope="col" class="demo-mod__actions">
+                          <span class="pf-v6-screen-reader">Actions</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr data-module-id="registries">
+                        <td>
+                          <div class="demo-mod__check">
+                            <input
+                              class="js-mod-cb"
+                              type="checkbox"
+                              checked
+                              aria-label="Select registries"
+                            />
+                            <div class="demo-mod__line">
+                              <span class="demo-mod__idx">1.</span>
+                              <span class="demo-mod__slug">registries</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="demo-mod__desc-cell">
+                          <span title="ACS image integrations">ACS image integrations</span>
+                        </td>
+                        <td>
+                          <span class="pf-v6-c-label pf-m-green pf-m-compact"
+                            ><span class="pf-v6-c-label__content">ready</span></span
+                          >
+                        </td>
+                        <td class="demo-mod__actions">
+                          <div class="demo-mod__menu-wrap">
+                            <button
+                              type="button"
+                              class="pf-v6-c-button pf-m-plain js-kebab"
+                              aria-label="Actions for registries"
+                              aria-expanded="false"
+                            >
+                              ⋮
+                            </button>
+                            <ul class="demo-mod__menu" hidden>
+                              <li><button type="button">Run</button></li>
+                              <li>
+                                <button type="button" class="is-danger">Uninstall</button>
+                              </li>
+                            </ul>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr data-module-id="compliance-operator">
+                        <td>
+                          <div class="demo-mod__check">
+                            <input
+                              class="js-mod-cb"
+                              type="checkbox"
+                              checked
+                              aria-label="Select compliance-operator"
+                            />
+                            <div class="demo-mod__line">
+                              <span class="demo-mod__idx">2.</span>
+                              <span class="demo-mod__slug">compliance-operator</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="demo-mod__desc-cell">
+                          <span title="Compliance Operator + scan schedule"
+                            >Compliance Operator + scan schedule</span
+                          >
+                        </td>
+                        <td>
+                          <span class="pf-v6-c-label pf-m-green pf-m-compact"
+                            ><span class="pf-v6-c-label__content">ready</span></span
+                          >
+                        </td>
+                        <td class="demo-mod__actions">
+                          <div class="demo-mod__menu-wrap">
+                            <button
+                              type="button"
+                              class="pf-v6-c-button pf-m-plain js-kebab"
+                              aria-label="Actions for compliance-operator"
+                              aria-expanded="false"
+                            >
+                              ⋮
+                            </button>
+                            <ul class="demo-mod__menu" hidden>
+                              <li><button type="button">Run</button></li>
+                              <li>
+                                <button type="button" class="is-danger">Uninstall</button>
+                              </li>
+                            </ul>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr class="demo-mod--unavailable" data-module-id="ms-demo" aria-disabled="true">
+                        <td>
+                          <div class="demo-mod__check">
+                            <input
+                              class="js-mod-cb"
+                              type="checkbox"
+                              disabled
+                              aria-label="Select ms-demo"
+                            />
+                            <div class="demo-mod__line">
+                              <span class="demo-mod__idx">3.</span>
+                              <span class="demo-mod__slug">ms-demo</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="demo-mod__desc-cell">
+                          <span title="Mostmark microservices">Mostmark microservices</span>
+                        </td>
+                        <td>
+                          <span class="pf-v6-c-label pf-m-grey pf-m-compact"
+                            ><span class="pf-v6-c-label__content">not installed</span></span
+                          >
+                        </td>
+                        <td class="demo-mod__actions">
+                          <button
+                            type="button"
+                            class="pf-v6-c-button pf-m-plain"
+                            disabled
+                            aria-label="No actions"
+                          >
+                            ⋮
+                          </button>
+                        </td>
+                      </tr>
+                      <tr data-module-id="slack-notifier">
+                        <td>
+                          <div class="demo-mod__check">
+                            <input
+                              class="js-mod-cb"
+                              type="checkbox"
+                              aria-label="Select slack-notifier"
+                            />
+                            <div class="demo-mod__line">
+                              <span class="demo-mod__idx">4.</span>
+                              <span class="demo-mod__slug">slack-notifier</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="demo-mod__desc-cell">
+                          <span title="Central Slack integration">Central Slack integration</span>
+                        </td>
+                        <td>
+                          <span class="pf-v6-c-label pf-m-orange pf-m-compact"
+                            ><span class="pf-v6-c-label__content">needs run</span></span
+                          >
+                        </td>
+                        <td class="demo-mod__actions">
+                          <div class="demo-mod__menu-wrap">
+                            <button
+                              type="button"
+                              class="pf-v6-c-button pf-m-plain js-kebab"
+                              aria-label="Actions for slack-notifier"
+                              aria-expanded="false"
+                            >
+                              ⋮
+                            </button>
+                            <ul class="demo-mod__menu" hidden>
+                              <li><button type="button">Run</button></li>
+                              <li>
+                                <button type="button" class="is-danger">Uninstall</button>
+                              </li>
+                            </ul>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="pf-v6-c-card pf-m-compact demo-status-card">
+                <div class="pf-v6-c-card__header">
+                  <div class="pf-v6-c-card__title">
+                    <h2 class="pf-v6-c-card__title-text">Status</h2>
+                  </div>
+                  <div class="pf-v6-c-card__actions">
+                    <button class="pf-v6-c-button pf-m-link" type="button">Refresh status</button>
+                    <button
+                      type="button"
+                      class="pf-v6-c-button pf-m-link"
+                      aria-label="Expand all modules"
+                    >
+                      Expand all
+                    </button>
+                  </div>
+                </div>
+                <div class="pf-v6-c-card__body">
+                  <details class="demo-status-outer" open>
+                    <summary class="demo-status-outer__toggle">
+                      <span class="demo-status-outer__chev" aria-hidden="true"></span>
+                      <span class="demo-status-outer__title">Modules</span>
+                      <span class="demo-status-outer__meta">2 installed</span>
+                    </summary>
+                    <div class="demo-status-body">
+                      <details class="demo-pf-block" data-module-id="registries">
+                        <summary class="demo-pf-block__summary">
+                          <span class="demo-pf-block__chev" aria-hidden="true"></span>
+                          <span class="demo-pf-block__name">registries</span>
+                          <span class="pf-v6-c-label pf-m-green pf-m-compact"
+                            ><span class="pf-v6-c-label__content">ready</span></span
+                          >
+                          <span class="demo-pf-block__msg"
+                            >quay.io and registry.redhat.io integrations configured</span
+                          >
+                        </summary>
+                        <div class="demo-pf-block__body">
+                          <p class="demo-pf-block__body--empty">No section details.</p>
+                        </div>
+                      </details>
+
+                      <details class="demo-pf-block" data-module-id="compliance-operator" open>
+                        <summary class="demo-pf-block__summary">
+                          <span class="demo-pf-block__chev" aria-hidden="true"></span>
+                          <span class="demo-pf-block__name">compliance-operator</span>
+                          <span class="pf-v6-c-label pf-m-green pf-m-compact"
+                            ><span class="pf-v6-c-label__content">ready</span></span
+                          >
+                          <span class="demo-pf-block__msg"
+                            >Compliance Operator compliance-operator.v1.10.0 (1.10.0); scan schedule
+                            ocp4-cis-scan-schedule (daily 02:00 UTC, ocp4-cis + ocp4-cis-node)</span
+                          >
+                        </summary>
+                        <div class="demo-pf-block__body">
+                          <div class="demo-sec-group">Context</div>
+                          <details class="demo-sec">
+                            <summary>
+                              <span>Cluster API</span>
+                              <span class="demo-sec__sum"
+                                >api.bm-50rc4-on-ocp5… · openshift-compliance</span
+                              >
+                            </summary>
+                            <pre class="demo-sec__body">{
+  "server": "https://api.bm-50rc4-on-ocp5.ocp.infra.rox.systems:6443",
+  "namespace": "openshift-compliance"
+}</pre>
+                          </details>
+                          <div class="demo-sec-group">1. Workloads</div>
+                          <details class="demo-sec">
+                            <summary>
+                              <span>About workloads</span>
+                              <span class="demo-sec__sum"
+                                >Running operator machinery installed by OLM</span
+                              >
+                            </summary>
+                            <div class="demo-sec__body">
+                              Subscription, ClusterServiceVersion, and Deployments.
+                            </div>
+                          </details>
+                          <details class="demo-sec">
+                            <summary>
+                              <span>ClusterServiceVersion/compliance-operator.v1.10.0</span>
+                              <span class="demo-sec__tag demo-sec__tag--ok">Succeeded</span>
+                            </summary>
+                            <pre class="demo-sec__body">phase: Succeeded</pre>
+                          </details>
+                          <details class="demo-sec">
+                            <summary>
+                              <span>Deployment/compliance-operator</span>
+                              <span class="demo-sec__sum">1/1 ready</span>
+                            </summary>
+                            <pre class="demo-sec__body">readyReplicas: 1</pre>
+                          </details>
+                          <div class="demo-sec-group">2. CO configuration</div>
+                          <details class="demo-sec">
+                            <summary>
+                              <span>ScanSetting/ocp4-cis-scan-schedule</span>
+                              <span class="demo-sec__tag demo-sec__tag--ok"
+                                >RHACS sensor-managed</span
+                              >
+                            </summary>
+                            <pre class="demo-sec__body">schedule: 0 2 * * *</pre>
+                          </details>
+                          <div class="demo-sec-group">4. RHACS Central</div>
+                          <details class="demo-sec">
+                            <summary>
+                              <span>ComplianceScanConfiguration/ocp4-cis-scan-schedule</span>
+                              <span class="demo-sec__sum"
+                                >id=79ce3b1c-… · ocp4-cis, ocp4-cis-node</span
+                              >
+                            </summary>
+                            <pre class="demo-sec__body">profiles: ocp4-cis, ocp4-cis-node</pre>
+                          </details>
+                        </div>
+                      </details>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      const dry = document.getElementById("dryRunToggle");
+      const dryWrap = document.getElementById("dryToggleWrap");
+      dry?.addEventListener("change", () => {
+        dryWrap.classList.toggle("is-on", Boolean(dry.checked));
+      });
+
+      document.querySelectorAll(".js-kebab").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const menu = btn.parentElement.querySelector(".demo-mod__menu");
+          const open = menu && !menu.hidden;
+          document.querySelectorAll(".demo-mod__menu").forEach((m) => {
+            m.hidden = true;
+          });
+          document.querySelectorAll(".js-kebab").forEach((b) => b.setAttribute("aria-expanded", "false"));
+          if (menu && !open) {
+            menu.hidden = false;
+            btn.setAttribute("aria-expanded", "true");
+          }
+        });
+      });
+
+      document.addEventListener("click", () => {
+        document.querySelectorAll(".demo-mod__menu").forEach((m) => {
+          m.hidden = true;
+        });
+        document.querySelectorAll(".js-kebab").forEach((b) => b.setAttribute("aria-expanded", "false"));
+      });
+    </script>
+  </body>
+</html>

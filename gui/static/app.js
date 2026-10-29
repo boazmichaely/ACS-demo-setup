@@ -150,10 +150,33 @@ function clearLog() {
 
 function syncRefreshActionButtons() {
   const freeze = busy || statusRefreshing;
-  for (const id of ["btnStatus", "btnRefreshSelected"]) {
-    const el = document.getElementById(id);
-    if (el) el.disabled = freeze;
-  }
+  const el = document.getElementById("btnStatus");
+  if (el) el.disabled = freeze;
+}
+
+function dryRunMode() {
+  return Boolean(document.getElementById("dryRunToggle")?.checked);
+}
+
+function syncDryRunToggleUi() {
+  const wrap = document.getElementById("dryToggleWrap");
+  if (wrap) wrap.classList.toggle("is-on", dryRunMode());
+}
+
+/** Open the log drawer if closed. Used when Dry run turns on (output is the point). */
+function ensureLogDrawerOpen() {
+  const drawer = document.getElementById("logDrawer");
+  const toggle = document.getElementById("logDrawerToggle");
+  if (!drawer || drawer.classList.contains("is-open")) return;
+  drawer.classList.add("is-open");
+  if (toggle) toggle.setAttribute("aria-expanded", "true");
+}
+
+function closeAllModuleMenus() {
+  document.querySelectorAll(".demo-mod__menu").forEach((m) => {
+    m.hidden = true;
+  });
+  document.querySelectorAll(".js-kebab").forEach((b) => b.setAttribute("aria-expanded", "false"));
 }
 
 function setBusy(on) {
@@ -167,13 +190,18 @@ function setBusy(on) {
     "btnMakeActive",
     "btnAddSecuredCluster",
     "btnRun",
-    "btnDryRun",
+    "btnUninstall",
     "btnRunFull",
+    "dryRunToggle",
   ];
   for (const id of ids) {
     const el = document.getElementById(id);
     if (el) el.disabled = on;
   }
+  modulesTbody?.querySelectorAll(".js-kebab").forEach((btn) => {
+    if (!btn.dataset.forceDisabled) btn.disabled = on;
+  });
+  if (on) closeAllModuleMenus();
   if (activeLabSelect) activeLabSelect.disabled = on;
   if (editLabSelect) editLabSelect.disabled = on;
   syncRefreshActionButtons();
@@ -181,6 +209,7 @@ function setBusy(on) {
     syncMakeActiveButton();
     syncDeleteLabButton();
     syncCredCancelButton();
+    syncModuleMenuButtons();
   }
 }
 
@@ -449,6 +478,97 @@ function syncModulesColumnWidths() {
   table.style.setProperty("--demo-state-col", `${Math.ceil(state) + 4}px`);
 }
 
+function moduleActionsCellHtml(m) {
+  const id = escapeHtml(m.id);
+  if (m.scriptInstalled === false) {
+    return `<td class="demo-mod__actions">
+      <button type="button" class="pf-v6-c-button pf-m-plain js-kebab" disabled data-force-disabled="1" aria-label="No actions for ${id}">⋮</button>
+    </td>`;
+  }
+  return `<td class="demo-mod__actions">
+    <div class="demo-mod__menu-wrap">
+      <button type="button" class="pf-v6-c-button pf-m-plain js-kebab" aria-label="Actions for ${id}" aria-expanded="false" data-module-id="${id}">⋮</button>
+      <ul class="demo-mod__menu" hidden>
+        <li><button type="button" class="js-mod-menu-run" data-module-id="${id}">Run</button></li>
+        <li><button type="button" class="js-mod-menu-uninstall is-danger" data-module-id="${id}">Uninstall</button></li>
+      </ul>
+    </div>
+  </td>`;
+}
+
+function syncModuleMenuButtons() {
+  if (!modulesTbody) return;
+  modulesTbody.querySelectorAll("tr[data-module-id]").forEach((tr) => {
+    const id = tr.dataset.moduleId;
+    const runBtn = tr.querySelector(".js-mod-menu-run");
+    const kebab = tr.querySelector(".js-kebab");
+    if (!id || !runBtn) return;
+    const unavailable = !isScriptInstalled(id);
+    const locked = missingDeps(id).length > 0;
+    runBtn.disabled = unavailable || locked || busy;
+    if (kebab && !kebab.dataset.forceDisabled) {
+      kebab.disabled = busy;
+    }
+  });
+}
+
+function bindModuleMenus() {
+  if (!modulesTbody || modulesTbody.dataset.menusBound === "1") return;
+  modulesTbody.dataset.menusBound = "1";
+
+  modulesTbody.addEventListener("click", (e) => {
+    const kebab = e.target.closest(".js-kebab");
+    if (kebab && modulesTbody.contains(kebab)) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (kebab.disabled) return;
+      const wrap = kebab.closest(".demo-mod__menu-wrap");
+      const menu = wrap?.querySelector(".demo-mod__menu");
+      const open = menu && !menu.hidden;
+      closeAllModuleMenus();
+      if (menu && !open) {
+        menu.hidden = false;
+        kebab.setAttribute("aria-expanded", "true");
+      }
+      return;
+    }
+
+    const runBtn = e.target.closest(".js-mod-menu-run");
+    if (runBtn && modulesTbody.contains(runBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllModuleMenus();
+      if (runBtn.disabled) return;
+      runModule(runBtn.dataset.moduleId, { dryRun: dryRunMode() }).catch((err) =>
+        log(`\n${err.message}\n`)
+      );
+      return;
+    }
+
+    const uninstallBtn = e.target.closest(".js-mod-menu-uninstall");
+    if (uninstallBtn && modulesTbody.contains(uninstallBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllModuleMenus();
+      const id = uninstallBtn.dataset.moduleId;
+      const dry = dryRunMode();
+      if (
+        !dry &&
+        !window.confirm(
+          `Uninstall module “${id}”? Some modules refuse uninstall and will fail with a message.`
+        )
+      ) {
+        return;
+      }
+      runModule(id, { uninstall: true, dryRun: dry }).catch((err) =>
+        log(`\n${err.message}\n`)
+      );
+    }
+  });
+
+  document.addEventListener("click", () => closeAllModuleMenus());
+}
+
 function missingDeps(moduleId) {
   const meta = moduleMetaById.get(moduleId);
   if (!meta?.dependsOn?.length) return [];
@@ -556,6 +676,7 @@ function syncDependencyLocks() {
       if (hint) hint.hidden = true;
     }
   }
+  syncModuleMenuButtons();
 }
 
 function syncMasterCheckbox() {
@@ -600,7 +721,7 @@ function applySelectAll(on) {
 
 function renderModuleRows() {
   if (!registryModules.length) {
-    modulesTbody.innerHTML = '<tr><td colspan="3">No modules.</td></tr>';
+    modulesTbody.innerHTML = '<tr><td colspan="4">No modules.</td></tr>';
     return;
   }
 
@@ -622,6 +743,7 @@ function renderModuleRows() {
         <td class="js-status-cell" data-module-id="${id}">
           ${moduleStatusCellHtml(m.id)}
         </td>
+        ${moduleActionsCellHtml(m)}
       </tr>`;
     })
     .join("");
@@ -633,6 +755,7 @@ function renderModuleRows() {
     });
   });
   bindStatusJumpLinks(modulesTbody);
+  bindModuleMenus();
 
   syncDependencyLocks();
   syncMasterCheckbox();
@@ -719,7 +842,6 @@ function renderStatusModulesPanel() {
       const msg = escapeHtml(rawMsg || "—");
       const sectionsHtml = renderSectionsHtml(st?.sections || row.sections || [], id);
       const missing = missingDeps(id);
-      const canRun = missing.length === 0;
       const lockHtml = missing.length
         ? `<p class="demo-mod__lock">Requires ready: ${escapeHtml(missing.join(", "))}</p>`
         : "";
@@ -739,10 +861,6 @@ function renderStatusModulesPanel() {
           ${sectionsHtml || `<p class="demo-pf-block__body--empty">No section details.</p>`}
           ${depsHtml}
           ${lockHtml}
-          <div class="demo-status-actions-row">
-            <button type="button" class="pf-v6-c-button pf-m-primary js-mod-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Run</button>
-            <button type="button" class="pf-v6-c-button pf-m-secondary js-mod-dry-run" data-module-id="${escapeHtml(id)}" ${canRun ? "" : "disabled"}>Dry run</button>
-          </div>
         </div>
       </details>`;
     })
@@ -754,19 +872,6 @@ function renderStatusModulesPanel() {
   if (btnPreflightExpandAll) btnPreflightExpandAll.disabled = false;
 
   bindSelectableSummaries(statusWrap);
-
-  statusWrap.querySelectorAll(".js-mod-run").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      runModule(btn.dataset.moduleId, false).catch((err) => log(`\n${err.message}\n`));
-    });
-  });
-  statusWrap.querySelectorAll(".js-mod-dry-run").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      runModule(btn.dataset.moduleId, true).catch((err) => log(`\n${err.message}\n`));
-    });
-  });
 }
 
 function setupExpandAll() {
@@ -861,34 +966,13 @@ async function refreshAllStatus() {
   }
 }
 
-async function refreshSelectedStatus() {
-  const ids = selectedModuleIds();
-  if (!ids.length) {
-    setModuleRefreshFeedback("Select at least one module.");
-    return;
-  }
-  const gen = ++statusRefreshGeneration;
-  setStatusRefreshing(true);
-  refreshStatusCells();
-  try {
-    await fetchStatus(ids);
-    if (gen !== statusRefreshGeneration) return;
-    statusReady = true;
-    setModuleRefreshFeedback(`Refreshed ${ids.length} module(s).`);
-  } finally {
-    if (gen === statusRefreshGeneration) {
-      setStatusRefreshing(false);
-      refreshStatusCells();
-      syncDependencyLocks();
-      syncMasterCheckbox();
-      renderStatusModulesPanel();
-    }
-  }
-}
-
-async function executeModuleRun(moduleId, dryRun) {
+async function executeModuleRun(moduleId, { dryRun = false, uninstall = false } = {}) {
+  const params = new URLSearchParams();
+  if (dryRun) params.set("dry_run", "true");
+  if (uninstall) params.set("uninstall", "true");
+  const qs = params.toString();
   const res = await fetch(
-    `/api/run/${encodeURIComponent(moduleId)}?dry_run=${dryRun}`,
+    `/api/run/${encodeURIComponent(moduleId)}${qs ? `?${qs}` : ""}`,
     { method: "POST" }
   );
   if (!res.ok) {
@@ -934,14 +1018,17 @@ async function executeModuleRun(moduleId, dryRun) {
   return { ok: exitCode === 0, exit_code: exitCode };
 }
 
-async function runModule(moduleId, dryRun = false) {
+async function runModule(moduleId, { dryRun = false, uninstall = false } = {}) {
   if (!moduleId) return;
-  const label = dryRun ? "Dry run" : "Run";
+  let label = "Run";
+  if (uninstall && dryRun) label = "Uninstall dry-run";
+  else if (uninstall) label = "Uninstall";
+  else if (dryRun) label = "Dry run";
   setBusy(true);
   logSection(`${label}: ${moduleId}`);
 
   try {
-    await executeModuleRun(moduleId, dryRun);
+    await executeModuleRun(moduleId, { dryRun, uninstall });
     await fetchStatus([moduleId]);
     refreshStatusCells();
     renderStatusModulesPanel();
@@ -950,13 +1037,26 @@ async function runModule(moduleId, dryRun = false) {
   }
 }
 
-async function runModules(ids, dryRun = false) {
+async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
   if (!ids.length) {
     setModuleRefreshFeedback("Select at least one module.");
     return;
   }
-  const order = topologicalRunOrder(ids);
-  const label = dryRun ? "Dry run" : "Run";
+  if (uninstall && !dryRun) {
+    const labelList = ids.join(", ");
+    if (
+      !window.confirm(
+        `Uninstall selected module(s): ${labelList}?\n\nSome modules refuse uninstall and will fail with a message.`
+      )
+    ) {
+      return;
+    }
+  }
+  const order = uninstall ? [...ids] : topologicalRunOrder(ids);
+  let label = "Run";
+  if (uninstall && dryRun) label = "Uninstall dry-run";
+  else if (uninstall) label = "Uninstall";
+  else if (dryRun) label = "Dry run";
   setBusy(true);
   clearLog();
   logSection(`${label}: ${order.join(", ")}`);
@@ -966,7 +1066,7 @@ async function runModules(ids, dryRun = false) {
       if (order.length > 1) {
         log(`\n[${moduleId}]\n`);
       }
-      await executeModuleRun(moduleId, dryRun);
+      await executeModuleRun(moduleId, { dryRun, uninstall });
     }
     await fetchStatus();
     refreshStatusCells();
@@ -1852,23 +1952,29 @@ document.getElementById("btnStatus").addEventListener("click", () => {
     log("Status refresh finished.\n");
   })().catch((e) => log(`\n${e.message}\n`));
 });
-document.getElementById("btnRefreshSelected").addEventListener("click", () => {
-  refreshSelectedStatus().catch((e) => setModuleRefreshFeedback(e.message));
+document.getElementById("dryRunToggle")?.addEventListener("change", () => {
+  syncDryRunToggleUi();
+  if (dryRunMode()) ensureLogDrawerOpen();
 });
 document.getElementById("btnRun").addEventListener("click", () => {
-  runModules(selectedModuleIds(), false).catch((e) => log(`\n${e.message}\n`));
+  runModules(selectedModuleIds(), { dryRun: dryRunMode() }).catch((e) =>
+    log(`\n${e.message}\n`)
+  );
 });
-document.getElementById("btnDryRun").addEventListener("click", () => {
-  runModules(selectedModuleIds(), true).catch((e) => log(`\n${e.message}\n`));
+document.getElementById("btnUninstall")?.addEventListener("click", () => {
+  runModules(selectedModuleIds(), { uninstall: true, dryRun: dryRunMode() }).catch((e) =>
+    log(`\n${e.message}\n`)
+  );
 });
 document.getElementById("btnRunFull").addEventListener("click", () => {
   const allIds = registryModules.map((m) => m.id);
   applySelectAll(true);
-  runModules(allIds, false).catch((e) => log(`\n${e.message}\n`));
+  runModules(allIds, { dryRun: dryRunMode() }).catch((e) => log(`\n${e.message}\n`));
 });
 modSelectAll.addEventListener("change", () => applySelectAll(modSelectAll.checked));
 
 setupExpandAll();
+syncDryRunToggleUi();
 
 async function markPageLoadInDiskLog() {
   try {
@@ -1893,7 +1999,7 @@ async function init() {
   } catch (err) {
     log(`\n${err.message}\n`);
     modulesTbody.innerHTML =
-      '<tr><td colspan="3">Failed to load.</td></tr>';
+      '<tr><td colspan="4">Failed to load.</td></tr>';
   }
 }
 

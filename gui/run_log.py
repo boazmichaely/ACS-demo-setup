@@ -81,8 +81,17 @@ def _stamp() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
 
 
-def begin_run(repo_root: Path, module_id: str, *, dry_run: bool) -> None:
-    mode = "dry-run" if dry_run else "run"
+def begin_run(
+    repo_root: Path,
+    module_id: str,
+    *,
+    dry_run: bool,
+    uninstall: bool = False,
+) -> None:
+    if uninstall:
+        mode = "uninstall-dry-run" if dry_run else "uninstall"
+    else:
+        mode = "dry-run" if dry_run else "run"
     header = f"\n── {_stamp()} {mode} {module_id} {'─' * 8}\n"
     append_today_log(repo_root, header)
 

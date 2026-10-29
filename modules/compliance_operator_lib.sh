@@ -446,3 +446,112 @@ compliance_operator_run() {
 
   [[ "$state" == "ok" ]] && [[ "$rc" -eq 0 ]]
 }
+
+compliance_operator_uninstall_plan() {
+  local ns sub
+  ns="$(co_namespace)"
+  sub="$(co_subscription_name)"
+  cat <<EOF
+Planned uninstall:
+  - Delete Central scan configuration for this module (if present)
+  - Delete Subscription/${sub} in ${ns} (if present)
+  - Delete compliance-operator ClusterServiceVersion(s) in ${ns} (if present)
+  - Delete OperatorGroup/compliance-operator in ${ns} (if present)
+  - Delete namespace ${ns} (removes remaining CO CRs in that namespace)
+EOF
+}
+
+compliance_operator_uninstall_scan() {
+  local dry_run="${1:-false}"
+  local helper py args=(uninstall --cli)
+  helper="$(co_scan_helper)"
+  py="$(co_python)"
+  [[ "$dry_run" == "true" ]] && args+=(--dry-run)
+
+  echo "Remove compliance scan schedule from Central (if present)"
+  if [[ ! -f "$helper" ]]; then
+    echo "missing helper: $helper" >&2
+    return 1
+  fi
+  if ! "$py" "$helper" "${args[@]}"; then
+    return 1
+  fi
+}
+
+compliance_operator_uninstall_olm() {
+  local dry_run="${1:-false}"
+  local ns sub
+  ns="$(co_namespace)"
+  sub="$(co_subscription_name)"
+
+  if [[ "$dry_run" == "true" ]]; then
+    compliance_operator_uninstall_plan
+    return 0
+  fi
+
+  if oc get "subscription/${sub}" -n "${ns}" >/dev/null 2>&1; then
+    echo "Delete Subscription/${sub} in ${ns}"
+    oc delete "subscription/${sub}" -n "${ns}" --wait=true --timeout=120s || true
+  else
+    echo "Subscription/${sub} not present in ${ns}"
+  fi
+
+  # Delete CSVs this operator owns (name prefix from OLM).
+  local csvs
+  csvs="$(oc get csv -n "${ns}" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)"
+  if [[ -n "${csvs}" ]]; then
+    while IFS= read -r csv; do
+      [[ -n "$csv" ]] || continue
+      case "$csv" in
+        compliance-operator.*)
+          echo "Delete ClusterServiceVersion/${csv} in ${ns}"
+          oc delete "csv/${csv}" -n "${ns}" --wait=true --timeout=180s || true
+          ;;
+      esac
+    done <<<"${csvs}"
+  fi
+
+  if oc get operatorgroup/compliance-operator -n "${ns}" >/dev/null 2>&1; then
+    echo "Delete OperatorGroup/compliance-operator in ${ns}"
+    oc delete operatorgroup/compliance-operator -n "${ns}" --wait=true --timeout=60s || true
+  else
+    echo "OperatorGroup/compliance-operator not present in ${ns}"
+  fi
+
+  if oc get "namespace/${ns}" >/dev/null 2>&1; then
+    echo "Delete namespace ${ns}"
+    oc delete "namespace/${ns}" --wait=true --timeout=300s
+  else
+    echo "Namespace ${ns} already absent"
+  fi
+}
+
+compliance_operator_uninstall() {
+  local dry_run="${1:-false}"
+  local rc=0
+
+  if ! command -v oc >/dev/null 2>&1; then
+    echo "oc not on PATH" >&2
+    return 1
+  fi
+  local oc_err
+  if ! oc_err="$(co_ensure_oc)"; then
+    echo "${oc_err:-OpenShift access failed}" >&2
+    return 1
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    compliance_operator_uninstall_plan
+    compliance_operator_uninstall_scan true || rc=1
+    return "$rc"
+  fi
+
+  # Central first so we do not leave a schedule pointing at a removed operator.
+  compliance_operator_uninstall_scan false || rc=1
+  compliance_operator_uninstall_olm false || rc=1
+
+  if [[ "$rc" -eq 0 ]]; then
+    echo "Compliance Operator module uninstall finished."
+  fi
+  return "$rc"
+}
