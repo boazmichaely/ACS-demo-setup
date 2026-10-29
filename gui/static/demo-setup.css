@@ -874,6 +874,31 @@ body:has(#page) {
   color: var(--pf-t--global--text--color--subtle);
 }
 
+/* GUI-owned last /api/run hint on the module intro line (session only). */
+.demo-pf-block__last {
+  margin-left: auto;
+  flex: 0 1 auto;
+  max-width: 18rem;
+  font-size: var(--pf-t--global--font--size--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.demo-pf-block__last.is-fail {
+  color: var(--pf-t--global--text--color--status--danger--default, #c9190b);
+}
+
+.demo-pf-block__last .demo-pf-block__last-result {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.demo-pf-block__last.is-ok .demo-pf-block__last-result {
+  color: var(--pf-t--global--text--color--status--success--default, #3e8635);
+}
+
 .demo-pf-block__body {
   --demo-sec-toggle-col: 1.75rem;
   padding: 0 var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--md);

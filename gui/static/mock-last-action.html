@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ACS demo setup</title>
+    <title>Mock · Last action in Status</title>
     <link rel="icon" type="image/png" href="/static/favicon.png" />
     <link
       rel="stylesheet"
@@ -13,46 +13,34 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly-addons.min.css"
     />
-    <link rel="stylesheet" href="/static/demo-setup.css?v=shell26" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell34" />
     <style>
+      html,
+      body {
+        height: auto;
+        overflow: auto;
+      }
       .demo-mod__actions {
         width: 2.5rem;
         text-align: right;
         white-space: nowrap;
       }
-      /* Proposed: GUI-owned last action footer inside a Status module fold */
-      .demo-last-action {
-        margin-top: var(--pf-t--global--spacer--sm);
+      .mock-note {
+        max-width: 52rem;
+        margin: 0 auto var(--pf-t--global--spacer--md);
         padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-        border-top: 1px solid var(--pf-t--global--border--color--default);
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--sm, 4px);
+        background: var(--pf-t--global--background--color--secondary--default);
         font-size: var(--pf-t--global--font--size--sm);
-      }
-      .demo-last-action__label {
-        display: block;
-        margin-bottom: 0.15rem;
-        font-size: var(--pf-t--global--font--size--xs);
-        font-weight: var(--pf-t--global--font--weight--body--bold);
-        color: var(--pf-t--global--text--color--subtle);
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-      }
-      .demo-last-action__row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-      }
-      .demo-last-action__verb {
-        font-weight: var(--pf-t--global--font--weight--body--bold);
-      }
-      .demo-last-action__msg {
         color: var(--pf-t--global--text--color--subtle);
       }
-      .demo-last-action.is-ok .demo-last-action__result {
-        color: var(--pf-t--global--text--color--status--success--default, #3e8635);
+      .mock-note code {
+        font-family: var(--pf-t--global--font--family--mono, ui-monospace, monospace);
+        font-size: 0.92em;
       }
-      .demo-last-action.is-fail .demo-last-action__result {
-        color: var(--pf-t--global--text--color--status--danger--default, #c9190b);
+      .mock-note + .mock-note {
+        margin-top: calc(-1 * var(--pf-t--global--spacer--md) + var(--pf-t--global--spacer--sm));
       }
     </style>
   </head>
@@ -97,6 +85,12 @@
         <main class="pf-v6-c-page__main" tabindex="-1">
           <section class="pf-v6-c-page__main-section">
             <div class="pf-v6-c-page__main-body demo-pad">
+              <p class="mock-note">
+                Reference mock (now shipped in the live GUI). <strong>Last action</strong> on the
+                module intro line: <code>{verb}: {ok|failed} (HH:MM)</code> from button label +
+                exit code + clock. Session only; Log keeps the detail.
+              </p>
+
               <details class="demo-cred">
                 <summary class="demo-cred__summary">
                   <span class="demo-cred__chev" aria-hidden="true"></span>
@@ -116,48 +110,45 @@
                       <input class="pf-v6-c-check__input" type="checkbox" />
                       <span class="pf-v6-c-check__label">Select all</span>
                     </label>
-                    <div class="demo-bulk__results">
-                      <span>1 of 2 selectable selected</span>
-                    </div>
+                    <label class="pf-v6-c-check">
+                      <input class="pf-v6-c-check__input" type="checkbox" />
+                      <span class="pf-v6-c-check__label">Dry run</span>
+                    </label>
                     <div class="demo-bulk__actions">
-                      <label class="demo-dry-toggle">
-                        <input class="pf-v6-c-check__input" type="checkbox" />
-                        <span>Dry run</span>
-                      </label>
-                      <button class="pf-v6-c-button pf-m-primary" type="button">Run selected</button>
-                      <button class="pf-v6-c-button pf-m-secondary pf-m-danger" type="button">
+                      <button type="button" class="pf-v6-c-button pf-m-primary" disabled>
+                        Run selected
+                      </button>
+                      <button type="button" class="pf-v6-c-button pf-m-secondary" disabled>
                         Uninstall selected
                       </button>
-                      <button class="pf-v6-c-button pf-m-secondary" type="button">
+                      <button type="button" class="pf-v6-c-button pf-m-secondary" disabled>
                         Run full install
                       </button>
                     </div>
                   </div>
-
-                  <table class="demo-modules" aria-label="Demo modules">
+                  <table class="pf-v6-c-table pf-m-compact" role="grid">
                     <thead>
-                      <tr>
-                        <th scope="col">Module</th>
-                        <th scope="col">Description</th>
-                        <th scope="col">State</th>
-                        <th scope="col" class="demo-mod__actions">
-                          <span class="pf-v6-screen-reader">Actions</span>
-                        </th>
+                      <tr role="row">
+                        <th></th>
+                        <th>Module</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                        <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr data-module-id="test">
+                      <tr role="row">
                         <td>
-                          <div class="demo-mod__check">
-                            <input type="checkbox" checked aria-label="Select test" />
-                            <div class="demo-mod__line">
-                              <span class="demo-mod__idx">1.</span>
-                              <span class="demo-mod__slug">test</span>
-                            </div>
+                          <input type="checkbox" aria-label="Select my-feature" />
+                        </td>
+                        <td>
+                          <div class="demo-mod__line">
+                            <span class="demo-mod__idx">1.</span>
+                            <span class="demo-mod__slug">my-feature</span>
                           </div>
                         </td>
                         <td class="demo-mod__desc-cell">
-                          <span>Skeleton module for adding a new demo step</span>
+                          <span>Placeholder module with no Status folds yet</span>
                         </td>
                         <td>
                           <span class="pf-v6-c-label pf-m-orange pf-m-compact"
@@ -170,18 +161,42 @@
                           </button>
                         </td>
                       </tr>
-                      <tr data-module-id="registries">
+                      <tr role="row">
                         <td>
-                          <div class="demo-mod__check">
-                            <input type="checkbox" aria-label="Select registries" />
-                            <div class="demo-mod__line">
-                              <span class="demo-mod__idx">2.</span>
-                              <span class="demo-mod__slug">registries</span>
-                            </div>
+                          <input type="checkbox" aria-label="Select registries" checked />
+                        </td>
+                        <td>
+                          <div class="demo-mod__line">
+                            <span class="demo-mod__idx">2.</span>
+                            <span class="demo-mod__slug">registries</span>
                           </div>
                         </td>
                         <td class="demo-mod__desc-cell">
                           <span>ACS image integrations</span>
+                        </td>
+                        <td>
+                          <span class="pf-v6-c-label pf-m-green pf-m-compact"
+                            ><span class="pf-v6-c-label__content">ready</span></span
+                          >
+                        </td>
+                        <td class="demo-mod__actions">
+                          <button type="button" class="pf-v6-c-button pf-m-plain" aria-label="Actions">
+                            ⋮
+                          </button>
+                        </td>
+                      </tr>
+                      <tr role="row">
+                        <td>
+                          <input type="checkbox" aria-label="Select compliance-operator" />
+                        </td>
+                        <td>
+                          <div class="demo-mod__line">
+                            <span class="demo-mod__idx">3.</span>
+                            <span class="demo-mod__slug">compliance-operator</span>
+                          </div>
+                        </td>
+                        <td class="demo-mod__desc-cell">
+                          <span>OpenShift Compliance Operator and RHACS scan schedule</span>
                         </td>
                         <td>
                           <span class="pf-v6-c-label pf-m-green pf-m-compact"
@@ -214,37 +229,32 @@
                     <summary class="demo-status-outer__toggle">
                       <span class="demo-status-outer__chev" aria-hidden="true"></span>
                       <span class="demo-status-outer__title">Modules</span>
-                      <span class="demo-status-outer__meta">2 installed</span>
+                      <span class="demo-status-outer__meta">3 installed</span>
                     </summary>
                     <div class="demo-status-body">
-                      <!-- Module with no ACS_SECTIONS_JSON: last action fills the empty body -->
-                      <details class="demo-pf-block" data-module-id="test" open>
+                      <!-- Case A: failed uninstall; no ACS_SECTIONS_JSON. -->
+                      <details class="demo-pf-block" data-module-id="my-feature" open>
                         <summary class="demo-pf-block__summary">
                           <span class="demo-pf-block__chev" aria-hidden="true"></span>
-                          <span class="demo-pf-block__name">test</span>
+                          <span class="demo-pf-block__name">my-feature</span>
                           <span class="pf-v6-c-label pf-m-orange pf-m-compact"
                             ><span class="pf-v6-c-label__content">needs run</span></span
                           >
                           <span class="demo-pf-block__msg"
-                            >TODO: implement do_status in modules/test.sh</span
+                            >TODO: implement do_status in modules/my-feature.sh</span
+                          >
+                          <span
+                            class="demo-pf-block__last is-fail"
+                            title="Last action this session"
+                            >Uninstall: <span class="demo-pf-block__last-result">failed</span> (21:38)</span
                           >
                         </summary>
                         <div class="demo-pf-block__body">
                           <p class="demo-pf-block__body--empty">No section details.</p>
-                          <div class="demo-last-action is-fail">
-                            <span class="demo-last-action__label">Last action</span>
-                            <div class="demo-last-action__row">
-                              <span class="demo-last-action__verb">Uninstall</span>
-                              <span class="demo-last-action__result">failed (exit 1)</span>
-                              <span class="demo-last-action__msg"
-                                >uninstall not implemented · 21:38</span
-                              >
-                            </div>
-                          </div>
                         </div>
                       </details>
 
-                      <!-- Module with real sections: last action sits under them -->
+                      <!-- Case B: successful run; live folds present. -->
                       <details class="demo-pf-block" data-module-id="registries" open>
                         <summary class="demo-pf-block__summary">
                           <span class="demo-pf-block__chev" aria-hidden="true"></span>
@@ -255,34 +265,96 @@
                           <span class="demo-pf-block__msg"
                             >quay.io and registry.redhat.io integrations configured</span
                           >
+                          <span
+                            class="demo-pf-block__last is-ok"
+                            title="Last action this session"
+                            >Run: <span class="demo-pf-block__last-result">ok</span> (21:12)</span
+                          >
                         </summary>
                         <div class="demo-pf-block__body">
-                          <div class="demo-sec-group">Integrations</div>
-                          <details class="demo-sec">
-                            <summary>
-                              <span class="demo-sec__tag demo-sec__tag--ok">ready</span>
-                              <span class="demo-sec__title">quay.io</span>
-                              <span class="demo-sec__sum">configured</span>
-                            </summary>
-                            <div class="demo-sec__body">Image integration present in Central.</div>
-                          </details>
-                          <details class="demo-sec">
-                            <summary>
-                              <span class="demo-sec__tag demo-sec__tag--ok">ready</span>
-                              <span class="demo-sec__title">registry.redhat.io</span>
-                              <span class="demo-sec__sum">configured</span>
-                            </summary>
-                            <div class="demo-sec__body">Image integration present in Central.</div>
-                          </details>
-                          <div class="demo-last-action is-ok">
-                            <span class="demo-last-action__label">Last action</span>
-                            <div class="demo-last-action__row">
-                              <span class="demo-last-action__verb">Run</span>
-                              <span class="demo-last-action__result">ok</span>
-                              <span class="demo-last-action__msg"
-                                >no changes required · 21:12</span
+                          <div class="demo-sec-group-block" data-group="Integrations">
+                            <div class="demo-sec-group">
+                              <button
+                                type="button"
+                                class="pf-v6-c-button pf-m-plain demo-sec-group__expand is-expanded"
+                                data-expanded="true"
+                                aria-expanded="true"
+                                title="Collapse all"
+                                aria-label="Collapse all sections in Integrations"
                               >
+                                <span class="demo-sec-group__expand-icon" aria-hidden="true"></span>
+                              </button>
+                              <span class="demo-sec-group__label">Integrations</span>
                             </div>
+                            <details class="demo-sec" open>
+                              <summary>
+                                <span class="demo-sec__toggle" aria-hidden="true"
+                                  ><span class="demo-sec__chev"></span
+                                ></span>
+                                <span class="demo-sec__tag demo-sec__tag--ok">ready</span>
+                                <span class="demo-sec__title">quay.io</span>
+                                <span class="demo-sec__sum">configured</span>
+                              </summary>
+                              <div class="demo-sec__body">Image integration present in Central.</div>
+                            </details>
+                            <details class="demo-sec">
+                              <summary>
+                                <span class="demo-sec__toggle" aria-hidden="true"
+                                  ><span class="demo-sec__chev"></span
+                                ></span>
+                                <span class="demo-sec__tag demo-sec__tag--ok">ready</span>
+                                <span class="demo-sec__title">registry.redhat.io</span>
+                                <span class="demo-sec__sum">configured</span>
+                              </summary>
+                              <div class="demo-sec__body">Image integration present in Central.</div>
+                            </details>
+                          </div>
+                        </div>
+                      </details>
+
+                      <!-- Case C: dry-run attempt; live status still ok. -->
+                      <details class="demo-pf-block" data-module-id="compliance-operator" open>
+                        <summary class="demo-pf-block__summary">
+                          <span class="demo-pf-block__chev" aria-hidden="true"></span>
+                          <span class="demo-pf-block__name">compliance-operator</span>
+                          <span class="pf-v6-c-label pf-m-green pf-m-compact"
+                            ><span class="pf-v6-c-label__content">ready</span></span
+                          >
+                          <span class="demo-pf-block__msg"
+                            >Compliance Operator installed; scan schedule ready</span
+                          >
+                          <span
+                            class="demo-pf-block__last is-ok"
+                            title="Last action this session"
+                            >Uninstall dry-run: <span class="demo-pf-block__last-result">ok</span> (22:04)</span
+                          >
+                        </summary>
+                        <div class="demo-pf-block__body">
+                          <div class="demo-sec-group-block" data-group="1. Workloads">
+                            <div class="demo-sec-group">
+                              <button
+                                type="button"
+                                class="pf-v6-c-button pf-m-plain demo-sec-group__expand"
+                                data-expanded="false"
+                                aria-expanded="false"
+                                title="Expand all"
+                                aria-label="Expand all sections in 1. Workloads"
+                              >
+                                <span class="demo-sec-group__expand-icon" aria-hidden="true"></span>
+                              </button>
+                              <span class="demo-sec-group__label">1. Workloads</span>
+                            </div>
+                            <details class="demo-sec">
+                              <summary>
+                                <span class="demo-sec__toggle" aria-hidden="true"
+                                  ><span class="demo-sec__chev"></span
+                                ></span>
+                                <span class="demo-sec__tag demo-sec__tag--ok">ready</span>
+                                <span class="demo-sec__title">Deployment/compliance-operator</span>
+                                <span class="demo-sec__sum">1/1 ready</span>
+                              </summary>
+                              <div class="demo-sec__body">Operator pod ready in openshift-compliance.</div>
+                            </details>
                           </div>
                         </div>
                       </details>
@@ -297,26 +369,15 @@
 
       <div class="demo-log-drawer is-open" id="logDrawer">
         <div class="demo-log-drawer__resize" aria-hidden="true"></div>
-        <button
-          type="button"
-          class="demo-log-drawer__bar"
-          aria-expanded="true"
-          aria-controls="logDrawerPanel"
-        >
+        <button type="button" class="demo-log-drawer__toggle" aria-expanded="true">
           <span class="demo-log-drawer__chev" aria-hidden="true"></span>
-          <span class="demo-log-drawer__title">Log</span>
-          <span class="demo-log-drawer__preview"
-            >test: uninstall is not implemented for this module.</span
-          >
+          Log
+          <span class="demo-log-drawer__hint">Session console</span>
         </button>
-        <div class="demo-log-drawer__panel" id="logDrawerPanel" style="height: 10rem">
-          <div id="log" role="log" aria-label="Script output">
-── Uninstall: test ────────────────────────────────
-test: uninstall is not implemented for this module.
-test	error	uninstall not implemented
-exit code: 1
-          </div>
-        </div>
+        <pre class="demo-log-drawer__body" aria-label="Session log">my-feature: uninstall is not implemented for this module.
+my-feature	error	uninstall not implemented
+__EXIT__:1
+</pre>
       </div>
     </div>
   </body>

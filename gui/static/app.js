@@ -24,6 +24,8 @@ const btnDeleteLab = document.getElementById("btnDeleteLab");
 let registryModules = [];
 let lastStatusModules = [];
 let lastStatusMap = new Map();
+/** Session-only last /api/run outcome per module. Cleared on page reload. */
+let lastActionByModule = new Map();
 let moduleMetaById = new Map();
 let busy = false;
 /** True after at least one successful /api/status response this page load. */
@@ -106,6 +108,34 @@ function editingLab() {
   return labById(editingLabId) || activeLab();
 }
 
+function runVerbLabel({ dryRun = false, uninstall = false } = {}) {
+  if (uninstall && dryRun) return "Uninstall dry-run";
+  if (uninstall) return "Uninstall";
+  if (dryRun) return "Dry run";
+  return "Run";
+}
+
+function formatLastActionWhen(d = new Date()) {
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function recordLastAction(moduleId, { verb, ok }) {
+  if (!moduleId) return;
+  lastActionByModule.set(moduleId, {
+    verb,
+    ok: Boolean(ok),
+    when: formatLastActionWhen(),
+  });
+}
+
+function lastActionHtml(moduleId) {
+  const a = lastActionByModule.get(moduleId);
+  if (!a) return "";
+  const result = a.ok ? "ok" : "failed";
+  const cls = a.ok ? "is-ok" : "is-fail";
+  return `<span class="demo-pf-block__last ${cls}" title="Last action this session">${escapeHtml(a.verb)}: <span class="demo-pf-block__last-result">${result}</span> (${escapeHtml(a.when)})</span>`;
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -163,7 +193,7 @@ function syncDryRunToggleUi() {
   if (wrap) wrap.classList.toggle("is-on", dryRunMode());
 }
 
-/** Open the log drawer if closed. Used when Dry run turns on (output is the point). */
+/** Open the log drawer if closed (module runs, Dry run toggle). */
 function ensureLogDrawerOpen() {
   const drawer = document.getElementById("logDrawer");
   const toggle = document.getElementById("logDrawerToggle");
@@ -912,6 +942,7 @@ function renderStatusModulesPanel() {
           <span class="demo-pf-block__name">${escapeHtml(id)}</span>
           ${badgeHtml(id)}
           <span class="demo-pf-block__msg">${msg}</span>
+          ${lastActionHtml(id)}
         </summary>
         <div class="demo-pf-block__body">
           ${sectionsHtml || `<p class="demo-pf-block__body--empty">No section details.</p>`}
@@ -1107,15 +1138,14 @@ async function executeModuleRun(moduleId, { dryRun = false, uninstall = false } 
 
 async function runModule(moduleId, { dryRun = false, uninstall = false } = {}) {
   if (!moduleId) return;
-  let label = "Run";
-  if (uninstall && dryRun) label = "Uninstall dry-run";
-  else if (uninstall) label = "Uninstall";
-  else if (dryRun) label = "Dry run";
+  const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
+  ensureLogDrawerOpen();
   logSection(`${label}: ${moduleId}`);
 
   try {
-    await executeModuleRun(moduleId, { dryRun, uninstall });
+    const result = await executeModuleRun(moduleId, { dryRun, uninstall });
+    recordLastAction(moduleId, { verb: label, ok: result.ok });
     await fetchStatus([moduleId]);
     refreshStatusCells();
     renderStatusModulesPanel();
@@ -1140,11 +1170,9 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
     }
   }
   const order = uninstall ? [...ids] : topologicalRunOrder(ids);
-  let label = "Run";
-  if (uninstall && dryRun) label = "Uninstall dry-run";
-  else if (uninstall) label = "Uninstall";
-  else if (dryRun) label = "Dry run";
+  const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
+  ensureLogDrawerOpen();
   clearLog();
   logSection(`${label}: ${order.join(", ")}`);
 
@@ -1153,7 +1181,8 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
       if (order.length > 1) {
         log(`\n[${moduleId}]\n`);
       }
-      await executeModuleRun(moduleId, { dryRun, uninstall });
+      const result = await executeModuleRun(moduleId, { dryRun, uninstall });
+      recordLastAction(moduleId, { verb: label, ok: result.ok });
     }
     await fetchStatus();
     refreshStatusCells();

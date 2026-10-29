@@ -90,3 +90,6 @@ temp/
 # GUI local state
 gui/.env
 gui/data/
+
+# Local scratch modules (not shipped)
+modules/test.sh

@@ -1,13 +1,9 @@
 {
   "modules": [
-    {
-      "id": "test",
-      "label": "Skeleton module for adding a new demo step",
-      "dependsOn": []
-    },
+    
     {
       "id": "registries",
-      "label": "ACS image integrations",
+      "label": "Configure ACS image integrations",
       "dependsOn": []
     },
     {
