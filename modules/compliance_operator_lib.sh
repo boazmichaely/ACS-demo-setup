@@ -42,11 +42,11 @@ co_python() {
 co_ensure_oc() {
   local py kc err errf
   if ! command -v oc >/dev/null 2>&1; then
-    printf 'oc not on PATH\n'
+    printf 'oc not on PATH\n' >&2
     return 1
   fi
   if [[ -z "${COMPLIANCE_MODULE_ROOT:-}" ]]; then
-    printf 'COMPLIANCE_MODULE_ROOT unset\n'
+    printf 'COMPLIANCE_MODULE_ROOT unset\n' >&2
     return 1
   fi
   py="$(co_python)"
@@ -58,12 +58,14 @@ co_ensure_oc() {
   )"; then
     err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
     rm -f "${errf}"
-    printf '%s\n' "${err:-OpenShift access failed}"
+    # stderr: callers must invoke co_ensure_oc in the current shell (not $()),
+    # so export KUBECONFIG sticks for later oc commands.
+    printf '%s\n' "${err:-OpenShift access failed}" >&2
     return 1
   fi
   rm -f "${errf}"
   if [[ -z "${kc}" || ! -f "${kc}" ]]; then
-    printf 'ensure_oc did not return a kubeconfig path\n'
+    printf 'ensure_oc did not return a kubeconfig path\n' >&2
     return 1
   fi
   export KUBECONFIG="${kc}"
@@ -88,9 +90,8 @@ co_operator_status_line() {
     printf 'error\toc not on PATH\n'
     return 1
   fi
-  local oc_err
-  if ! oc_err="$(co_ensure_oc)"; then
-    printf 'error\t%s\n' "${oc_err:-OpenShift access failed}"
+  if ! co_ensure_oc; then
+    printf 'error\tOpenShift access failed\n'
     return 1
   fi
   if ! oc get "namespace/${ns}" >/dev/null 2>&1; then
@@ -401,9 +402,8 @@ compliance_operator_run() {
     compliance_operator_emit_status
     return 1
   fi
-  local oc_err
-  if ! oc_err="$(co_ensure_oc)"; then
-    echo "${oc_err:-OpenShift access failed}" >&2
+  if ! co_ensure_oc; then
+    echo "OpenShift access failed" >&2
     compliance_operator_emit_status
     return 1
   fi
@@ -518,6 +518,19 @@ compliance_operator_uninstall_olm() {
     echo "OperatorGroup/compliance-operator not present in ${ns}"
   fi
 
+  # ProfileBundles keep namespace finalizers after the operator CSV is gone; clear them
+  # so namespace deletion can finish.
+  local pbs
+  pbs="$(oc get profilebundle.compliance -n "${ns}" -o name 2>/dev/null || true)"
+  if [[ -n "${pbs}" ]]; then
+    while IFS= read -r pb; do
+      [[ -n "$pb" ]] || continue
+      echo "Clear finalizers on ${pb}"
+      oc patch "${pb}" -n "${ns}" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+      oc delete "${pb}" -n "${ns}" --wait=false || true
+    done <<<"${pbs}"
+  fi
+
   if oc get "namespace/${ns}" >/dev/null 2>&1; then
     echo "Delete namespace ${ns}"
     oc delete "namespace/${ns}" --wait=true --timeout=300s
@@ -534,9 +547,8 @@ compliance_operator_uninstall() {
     echo "oc not on PATH" >&2
     return 1
   fi
-  local oc_err
-  if ! oc_err="$(co_ensure_oc)"; then
-    echo "${oc_err:-OpenShift access failed}" >&2
+  if ! co_ensure_oc; then
+    echo "OpenShift access failed" >&2
     return 1
   fi
 
