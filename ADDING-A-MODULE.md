@@ -68,9 +68,14 @@ Add an object to the `modules` array. **List order** is the GUI order and the de
 - Do not put a number prefix on the filename (`07-my-feature.sh` is wrong)
 - A catalog row with no executable script shows as **not installed** in the GUI (useful for placeholders)
 
-## Status output
+## Status output (required: summary line **and** Status folds)
 
-`--status` must print **one** tab-separated line like this (extra log lines are OK; the orchestrator keeps the last matching row):
+`--status` must print **two** things (order does not matter; extra log lines are OK):
+
+1. **Summary line** - one tab-separated row. The orchestrator keeps the last row with at least three fields. This drives the Modules table badge and the Status fold header.
+2. **Status folds** - exactly one machine line starting with `ACS_SECTIONS_JSON=`. The orchestrator attaches `sections` to `--status --json`; the GUI renders each item as a fold under that module. **This is mandatory.** Without it the Status card shows “No section details.”
+
+### Summary line
 
 ```text
 my-feature	ok	short human summary
@@ -82,55 +87,77 @@ my-feature	ok	short human summary
 | `needs-run` | The lab is reachable, but this step is missing or drifted |
 | `error` | You cannot tell (bad credentials, API down, and so on) |
 
-### Detailed Status folds (optional)
+### Status folds (`ACS_SECTIONS_JSON`)
 
-The TSV line is enough for the Modules table badge. For nested folds under the Status card, also print **one** machine line anywhere in the `--status` output:
+Print **one** line: `ACS_SECTIONS_JSON=` plus compact JSON. Build that JSON with `jq` so the structure stays readable (do not hand-escape a giant string inside `printf`).
 
-```text
-ACS_SECTIONS_JSON={"sections":[...]}
-```
-
-The orchestrator (`scripts/acs-setup.sh`) looks for a line that starts with `ACS_SECTIONS_JSON=`, parses the JSON, and attaches `sections` to that module’s `--status --json` row. The GUI renders each array item as a fold.
-
-Minimal example (shell; print the TSV line after or before - both work):
+Pattern from the skeleton (`emit_status_sections` + summary line):
 
 ```bash
-python3 - <<'PY'
-import json
-print("ACS_SECTIONS_JSON=" + json.dumps({
-  "sections": [
-    {
-      "group": "Overview",
-      "title": "Example check",
-      "summary": "looks fine",
-      "body": "Longer detail for the expanded fold.",
-      "bodyFormat": "prose"
-    },
-    {
-      "group": "Overview",
-      "title": "Config/snippet",
-      "tag": "ok",
-      "tagLabel": "ready",
-      "summary": "matched",
-      "body": {"key": "value"},
-      "bodyFormat": "json"
-    }
-  ]
-}, separators=(",", ":")))
-PY
-printf '%s\tok\tshort human summary\n' "$MODULE_ID"
+emit_status_sections() {
+  local sections_json body
+  body="Longer detail for the expanded fold."
+  sections_json="$(
+    jq -nc --arg body "$body" '{
+      sections: [
+        {
+          group: "Overview",
+          title: "Example check",
+          summary: "looks fine",
+          body: $body,
+          bodyFormat: "prose"
+        },
+        {
+          group: "Overview",
+          title: "Config snippet",
+          tag: "ok",
+          tagLabel: "ready",
+          summary: "matched",
+          body: { key: "value" },
+          bodyFormat: "json"
+        }
+      ]
+    }'
+  )"
+  printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
+}
+
+do_status() {
+  emit_status_sections
+  printf '%s\tok\tshort human summary\n' "$MODULE_ID"
+}
 ```
 
-| Field | Required? | Meaning |
-|-------|-----------|---------|
-| `group` | recommended | Heading above a batch of folds (repeat for items in the same batch) |
-| `title` | yes | Fold title |
-| `body` | yes | Fold body: string (`prose`) or object/array (`json`) |
-| `bodyFormat` | no | `prose` (default) or `json` |
-| `summary` | no | Short text on the closed fold row |
-| `tag` / `tagLabel` | no | Optional badge; `tag` of `ok`/`ready` or `error`/`fail` picks color |
+`jq` is already required by the orchestrator. Keep this pattern when you replace the TODOs.
 
-Skip `ACS_SECTIONS_JSON` entirely if you do not need folds. Reference emitter: Compliance Operator (`scripts/compliance_co_overview.py`).
+**Visual map (open in the GUI server):** [`gui/static/status-sections-map.html`](gui/static/status-sections-map.html)  
+→ http://127.0.0.1:8765/static/status-sections-map.html
+
+```text
+Status card
+└─ Module fold header  ← from TSV summary line (not from sections[])
+   │    [id]   [state badge]   [message]
+   │
+   └─ Body
+      ├─ group                  ← uppercase heading; new heading only when group changes
+      │    └─ fold (closed row)
+      │         [tagLabel]  title ................ summary
+      │         └─ (expanded) body
+      │              bodyFormat "prose" → normal text
+      │              bodyFormat "json"  → monospace pretty-print
+      └─ group (next batch) …
+```
+
+| Field | Required? | What it is in the UI |
+|-------|-----------|----------------------|
+| `group` | recommended | Heading above a batch of folds. Same string keeps items under one heading; a new value starts a new heading. |
+| `title` | yes | Main label on the fold row (what you click). |
+| `summary` | no | Muted hint on the right of that row. |
+| `tag` / `tagLabel` | no | Badge left of `title`. `tag` sets color (`ok`/`ready`, `error`/`fail`, else warn); `tagLabel` is the visible text. |
+| `body` | yes | Content inside the expanded fold. |
+| `bodyFormat` | no | `prose` (default): normal text. `json`: pretty-printed code block (object/array or JSON string). |
+
+Richer multi-fold example: Compliance Operator (`scripts/compliance_co_overview.py`).
 
 ## Run, dry-run, and uninstall
 

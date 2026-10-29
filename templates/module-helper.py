@@ -36,7 +36,7 @@ def emit_status_line(state: str, message: str) -> None:
 
 
 def emit_sections(sections: list) -> None:
-    """Optional GUI Status folds. See ADDING-A-MODULE.md ('Detailed Status folds')."""
+    """Mandatory GUI Status folds. See ADDING-A-MODULE.md ('Status output')."""
     print(
         "ACS_SECTIONS_JSON="
         + json.dumps({"sections": sections}, separators=(",", ":"))
@@ -46,14 +46,17 @@ def emit_sections(sections: list) -> None:
 def cmd_status(_: argparse.Namespace) -> int:
     # TODO: real check. Use lib.central / lib.openshift as needed.
     # from lib import central  # noqa: F401
-    # Optional folds:
-    # emit_sections([{
-    #     "group": "Overview",
-    #     "title": "Check",
-    #     "summary": "ok",
-    #     "body": "Detail for the expanded fold.",
-    #     "bodyFormat": "prose",
-    # }])
+    emit_sections(
+        [
+            {
+                "group": "Overview",
+                "title": "Implementation",
+                "summary": "TODO",
+                "body": f"Replace this Status fold with real checks for {MODULE_ID}.",
+                "bodyFormat": "prose",
+            }
+        ]
+    )
     emit_status_line(
         "needs-run", f"TODO: implement status in modules/{Path(__file__).name}"
     )

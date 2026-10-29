@@ -38,18 +38,35 @@ EOF
 # Implement these functions. Keep the flag parsing in main() as-is.
 # ---------------------------------------------------------------------------
 
-# Print exactly one status line with three fields separated by tabs:
-#   id<TAB>state<TAB>message
-# state must be: ok | needs-run | error
-# Example: printf '%s\tok\tall set\n' "$MODULE_ID"
+# --status must print BOTH:
+#   1) ACS_SECTIONS_JSON={"sections":[...]}   (mandatory Status folds for the GUI)
+#   2) id<TAB>state<TAB>message               (summary; state: ok | needs-run | error)
+# See ADDING-A-MODULE.md ("Status output").
 #
-# Optional GUI folds: also print one line
-#   ACS_SECTIONS_JSON={"sections":[...]}
-# See ADDING-A-MODULE.md ("Detailed Status folds"). Example:
-#   python3 -c 'import json; print("ACS_SECTIONS_JSON="+json.dumps({"sections":[{"group":"Overview","title":"Check","summary":"ok","body":"Detail.","bodyFormat":"prose"}]},separators=(",",":")))'
+# Build the sections object with jq (readable), then emit one compact line.
+emit_status_sections() {
+  # TODO: replace this object with real fold data for the lab.
+  local sections_json body
+  body="Replace this Status fold with real checks for ${MODULE_ID}."
+  sections_json="$(
+    jq -nc --arg body "$body" '{
+      sections: [
+        {
+          group: "Overview",
+          title: "Implementation",
+          summary: "TODO",
+          body: $body,
+          bodyFormat: "prose"
+        }
+      ]
+    }'
+  )"
+  printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
+}
+
 do_status() {
-  # TODO: replace with a real check against the lab.
-  # TODO (optional): emit ACS_SECTIONS_JSON=... before the TSV line for Status folds.
+  # TODO: replace fold body + summary with real checks against the lab.
+  emit_status_sections
   printf '%s\tneeds-run\tTODO: implement do_status in modules/%s.sh\n' \
     "$MODULE_ID" "$MODULE_ID"
 }

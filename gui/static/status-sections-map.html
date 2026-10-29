@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" class="pf-v6-theme-felt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Status sections field map</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly-addons.min.css"
+    />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell26" />
+    <style>
+      .map-page {
+        max-width: 52rem;
+        margin: 0 auto;
+        padding: var(--pf-t--global--spacer--lg);
+      }
+      .map-page h1 {
+        font-size: var(--pf-t--global--font--size--xl);
+        margin: 0 0 var(--pf-t--global--spacer--sm);
+      }
+      .map-page .lede {
+        color: var(--pf-t--global--text--color--subtle);
+        margin: 0 0 var(--pf-t--global--spacer--lg);
+      }
+      .map-callout {
+        display: inline-block;
+        margin: 0 0.15rem;
+        padding: 0.05rem 0.35rem;
+        border-radius: 3px;
+        font-family: var(--pf-t--global--font--family--mono, ui-monospace, monospace);
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: #fef3cd;
+        color: #5c4400;
+        border: 1px solid #e6d089;
+        vertical-align: baseline;
+      }
+      .map-legend {
+        margin: var(--pf-t--global--spacer--lg) 0;
+        padding: var(--pf-t--global--spacer--md);
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--md, 8px);
+        font-size: var(--pf-t--global--font--size--sm);
+      }
+      .map-legend table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .map-legend th,
+      .map-legend td {
+        text-align: left;
+        padding: 0.35rem 0.5rem;
+        border-bottom: 1px solid var(--pf-t--global--border--color--default);
+        vertical-align: top;
+      }
+      .map-legend th {
+        width: 7rem;
+        font-family: var(--pf-t--global--font--family--mono, ui-monospace, monospace);
+        font-weight: 600;
+      }
+      .map-stage {
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--md, 8px);
+        padding: var(--pf-t--global--spacer--md);
+        background: var(--pf-t--global--background--color--primary--default);
+      }
+      .map-note {
+        margin-top: var(--pf-t--global--spacer--md);
+        font-size: var(--pf-t--global--font--size--sm);
+        color: var(--pf-t--global--text--color--subtle);
+      }
+      code {
+        font-family: var(--pf-t--global--font--family--mono, ui-monospace, monospace);
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="map-page">
+      <h1>Status folds: field → UI map</h1>
+      <p class="lede">
+        What each <code>ACS_SECTIONS_JSON</code> field paints in the Status card. Yellow chips name the
+        JSON keys. The module header row comes from the TSV summary line, not from
+        <code>sections</code>.
+      </p>
+
+      <div class="map-stage demo-status-body">
+        <details class="demo-pf-block" open>
+          <summary class="demo-pf-block__summary">
+            <span class="demo-pf-block__chev" aria-hidden="true"></span>
+            <span class="demo-pf-block__name"
+              >my-feature <span class="map-callout">TSV id</span></span
+            >
+            <span class="pf-v6-c-label pf-m-green pf-m-compact"
+              ><span class="pf-v6-c-label__content"
+                >ready <span class="map-callout">TSV state</span></span
+              ></span
+            >
+            <span class="demo-pf-block__msg"
+              >short human summary <span class="map-callout">TSV message</span></span
+            >
+          </summary>
+          <div class="demo-pf-block__body">
+            <p class="demo-sec-group">
+              Overview <span class="map-callout">group</span>
+            </p>
+
+            <details class="demo-sec" open>
+              <summary>
+                <span class="demo-sec__tag demo-sec__tag--ok"
+                  >ready <span class="map-callout">tagLabel</span></span
+                >
+                <span class="demo-sec__title"
+                  >Example check <span class="map-callout">title</span></span
+                >
+                <span class="demo-sec__sum"
+                  >looks fine <span class="map-callout">summary</span></span
+                >
+              </summary>
+              <div class="demo-sec__body">
+                Longer detail for the expanded fold.
+                <span class="map-callout">body</span>
+                <span class="map-callout">bodyFormat: prose</span>
+              </div>
+            </details>
+
+            <details class="demo-sec" open>
+              <summary>
+                <span class="demo-sec__tag demo-sec__tag--ok">ready</span>
+                <span class="demo-sec__title">Config snippet</span>
+                <span class="demo-sec__sum">matched</span>
+              </summary>
+              <pre class="demo-sec__body">{
+  "key": "value"
+}
+<span class="map-callout">body</span> <span class="map-callout">bodyFormat: json</span></pre>
+            </details>
+
+            <p class="demo-sec-group">
+              Workloads <span class="map-callout">group</span> (new heading when group changes)
+            </p>
+            <details class="demo-sec">
+              <summary>
+                <span class="demo-sec__title">Deployment/example</span>
+                <span class="demo-sec__sum">1/1 ready</span>
+              </summary>
+              <div class="demo-sec__body">Another fold in a different group.</div>
+            </details>
+          </div>
+        </details>
+      </div>
+
+      <div class="map-legend">
+        <table>
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>Where it shows</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>group</th>
+              <td>
+                Small uppercase heading above a batch of folds. Printed only when the value
+                <em>changes</em> from the previous section item. Same <code>group</code> on several
+                items keeps them under one heading.
+              </td>
+            </tr>
+            <tr>
+              <th>title</th>
+              <td>Main label on the fold’s closed row (the thing you click to expand).</td>
+            </tr>
+            <tr>
+              <th>summary</th>
+              <td>Muted text on the right of that same closed row (one-line hint).</td>
+            </tr>
+            <tr>
+              <th>tag / tagLabel</th>
+              <td>
+                Optional badge left of <code>title</code>. <code>tag</code> picks color
+                (<code>ok</code>/<code>ready</code>, <code>error</code>/<code>fail</code>, else warn).
+                <code>tagLabel</code> is the visible text (falls back to <code>tag</code>).
+              </td>
+            </tr>
+            <tr>
+              <th>body</th>
+              <td>Content inside the expanded fold.</td>
+            </tr>
+            <tr>
+              <th>bodyFormat</th>
+              <td>
+                How <code>body</code> is rendered.
+                <code>prose</code> (default) = normal text (newlines become line breaks).
+                <code>json</code> = pretty-printed monospace block (pass an object/array, or a JSON
+                string).
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="map-note">
+          Contract text: repo <code>ADDING-A-MODULE.md</code>. Live rendering:
+          <code>gui/static/app.js</code> → <code>renderSectionsHtml</code>.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

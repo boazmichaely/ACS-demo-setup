@@ -3,12 +3,9 @@
 # Example: cp templates/module-skeleton.sh modules/my-feature.sh && chmod +x modules/my-feature.sh
 set -euo pipefail
 
-# TODO: set to the same id you put in config/modules.json (and in the filename).
-MODULE_ID="my-feature"
+MODULE_ID="test"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# When this file lives in modules/, ROOT is the repo root.
-# If you are still editing under templates/, adjust paths after you copy.
 
 usage() {
   cat <<EOF
@@ -34,77 +31,103 @@ Side effects:
 EOF
 }
 
-# ---------------------------------------------------------------------------
-# Implement these functions. Keep the flag parsing in main() as-is.
-# ---------------------------------------------------------------------------
-
-# Print exactly one status line with three fields separated by tabs:
-#   id<TAB>state<TAB>message
-# state must be: ok | needs-run | error
-# Example: printf '%s\tok\tall set\n' "$MODULE_ID"
+# --status must print BOTH:
+#   1) ACS_SECTIONS_JSON={"sections":[...]}   (mandatory Status folds for the GUI)
+#   2) id<TAB>state<TAB>message               (summary; state: ok | needs-run | error)
+# See ADDING-A-MODULE.md ("Status output").
 #
-# Optional GUI folds: also print one line
-#   ACS_SECTIONS_JSON={"sections":[...]}
-# See ADDING-A-MODULE.md ("Detailed Status folds"). Example:
-#   python3 -c 'import json; print("ACS_SECTIONS_JSON="+json.dumps({"sections":[{"group":"Overview","title":"Check","summary":"ok","body":"Detail.","bodyFormat":"prose"}]},separators=(",",":")))'
+# Build the sections object with jq (readable), then emit one compact line.
+# Supported bodyFormat values in the GUI: "prose" (default) and "json" only.
+emit_status_sections() {
+  # TODO: replace this object with real fold data for the lab.
+  local sections_json prose_multiline
+  prose_multiline="$(
+    cat <<'EOF'
+Body of a multi-line prose blob.
+Each newline becomes a line break in the GUI.
+
+Use bodyFormat "prose" for normal readable text (this is the default if omitted).
+EOF
+  )"
+  sections_json="$(
+    jq -nc \
+      --arg prose_multi "$prose_multiline" \
+      '{
+        sections: [
+          {
+            group: "Group 1 header. e.g. Overview",
+            title: "Title of first blob. e.g. Installed components",
+            summary: "(optional) right hand side info (1/1 ready)",
+            body: "Body of the first blob. e.g.: Installed network-policy.yaml, application.yaml",
+            bodyFormat: "prose"
+          },
+          {
+            group: "Group 2 header. e.g. Notes",
+            title: "Title of second blob. e.g. Multi-line prose",
+            summary: "(optional) right hand side info",
+            body: $prose_multi,
+            bodyFormat: "prose"
+          },
+          {
+            group: "Group 3 header. e.g. Config",
+            title: "Title of third blob. e.g. Config object",
+            summary: "(optional) right hand side info (matched)",
+            tag: "ok",
+            tagLabel: "(optional) badge text; tag sets color (ok/ready, error/fail)",
+            body: {
+              note: "Body of the third blob. bodyFormat json pretty-prints this object in a monospace block",
+              replicas: 1,
+              image: "quay.io/example/app:1.0"
+            },
+            bodyFormat: "json"
+          },
+          {
+            group: "Group 4 header. e.g. Workloads",
+            title: "Title of fourth blob. e.g. Deployment",
+            summary: "(optional) right hand side info (0/1 ready)",
+            tag: "error",
+            tagLabel: "(optional) badge text; tag sets color (ok/ready, error/fail)",
+            body: {
+              note: "Body of the fourth blob. e.g. status detail"
+            },
+            bodyFormat: "json"
+          }
+        ]
+      }'
+  )"
+  printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
+}
+
 do_status() {
-  # TODO: replace with a real check against the lab.
-  # TODO (optional): emit ACS_SECTIONS_JSON=... before the TSV line for Status folds.
+  # TODO: replace fold body + summary with real checks against the lab.
+  emit_status_sections
   printf '%s\tneeds-run\tTODO: implement do_status in modules/%s.sh\n' \
     "$MODULE_ID" "$MODULE_ID"
 }
 
-# Apply the desired state. Must be safe to run twice.
-# Exit 0 on success; non-zero on failure (message on stderr).
 do_run() {
-  # TODO: create/update whatever this module owns, then preferably re-check.
   echo "${MODULE_ID}: TODO: implement do_run" >&2
   return 1
 }
 
-# Print the plan only. Do not change the cluster or Central. Exit 0.
 do_dry_run() {
-  # TODO: describe what do_run would change.
   cat <<EOF
 ${MODULE_ID}: dry-run
   TODO: describe planned changes here (no mutations).
 EOF
 }
 
-# Remove what --run created. Safe to run when already absent when possible.
-# If uninstall is not supported, fail with a clear message (do not pretend success).
 do_uninstall() {
-  # TODO: implement real uninstall, or keep this graceful refusal.
   echo "${MODULE_ID}: uninstall is not implemented for this module." >&2
   printf '%s\terror\tuninstall not implemented\n' "$MODULE_ID"
   return 1
 }
 
-# Print uninstall plan only. Exit non-zero if uninstall is not supported.
 do_uninstall_dry_run() {
-  # TODO: describe what do_uninstall would remove, or keep this refusal.
   echo "${MODULE_ID}: uninstall is not implemented for this module." >&2
   printf '%s\terror\tuninstall not implemented\n' "$MODULE_ID"
   return 1
 }
-
-# ---------------------------------------------------------------------------
-# Optional: call a Python helper for Central API / heavy JSON.
-# Copy templates/module-helper.py to modules/<id_with_underscores>.py only if
-# you need it. Example for id "my-feature" → modules/my_feature.py
-#
-#   HELPER="${ROOT}/modules/my_feature.py"
-#   PYTHON="${ACS_DEMO_PYTHON:-}"
-#   if [[ -z "$PYTHON" ]]; then
-#     if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
-#       PYTHON="${ROOT}/gui/.venv/bin/python"
-#     else
-#       PYTHON="$(command -v python3)"
-#     fi
-#   fi
-#   run_helper() { "$PYTHON" "$HELPER" "$@"; }
-#   # Then in do_status / do_run / do_uninstall, call run_helper and print status.
-# ---------------------------------------------------------------------------
 
 emit_status() {
   local output state

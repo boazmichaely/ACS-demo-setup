@@ -382,18 +382,77 @@ function applyStatusExpandState(state, { defaultModulesOpen = false } = {}) {
   });
 }
 
+function setGroupExpandButton(btn, expanded) {
+  if (!btn) return;
+  btn.dataset.expanded = expanded ? "true" : "false";
+  btn.textContent = expanded ? "Collapse all" : "Expand all";
+  const group = btn.closest(".demo-sec-group-block")?.dataset.group || "group";
+  btn.setAttribute(
+    "aria-label",
+    expanded ? `Collapse all sections in ${group}` : `Expand all sections in ${group}`
+  );
+}
+
+function syncGroupExpandButtons(root) {
+  if (!root) return;
+  root.querySelectorAll(".demo-sec-group-block").forEach((block) => {
+    const secs = [...block.querySelectorAll("details.demo-sec")];
+    if (!secs.length) return;
+    const allOpen = secs.every((d) => d.open);
+    setGroupExpandButton(block.querySelector(".demo-sec-group__expand"), allOpen);
+  });
+}
+
+function bindGroupExpandButtons(root) {
+  if (!root) return;
+  root.querySelectorAll(".demo-sec-group__expand").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const block = btn.closest(".demo-sec-group-block");
+      if (!block) return;
+      const expand = btn.dataset.expanded !== "true";
+      block.querySelectorAll("details.demo-sec").forEach((d) => {
+        d.open = expand;
+      });
+      setGroupExpandButton(btn, expand);
+    });
+  });
+  root.querySelectorAll(".demo-sec-group-block details.demo-sec").forEach((sec) => {
+    sec.addEventListener("toggle", () => {
+      syncGroupExpandButtons(sec.closest(".demo-sec-group-block"));
+    });
+  });
+}
+
 function renderSectionsHtml(sections, moduleId = "") {
   if (!Array.isArray(sections) || !sections.length) return "";
 
   let currentGroup = null;
   let html = "";
   let index = 0;
+  let groupOpen = false;
+
+  const closeGroup = () => {
+    if (groupOpen) {
+      html += `</div>`;
+      groupOpen = false;
+    }
+  };
 
   for (const item of sections) {
     const group = item.group || "";
-    if (group && group !== currentGroup) {
+    if (group !== currentGroup) {
       currentGroup = group;
-      html += `<p class="demo-sec-group">${escapeHtml(group)}</p>`;
+      closeGroup();
+      if (group) {
+        html += `<div class="demo-sec-group-block" data-group="${escapeHtml(group)}">
+          <div class="demo-sec-group">
+            <span class="demo-sec-group__label">${escapeHtml(group)}</span>
+            <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline demo-sec-group__expand" data-expanded="false">Expand all</button>
+          </div>`;
+        groupOpen = true;
+      }
     }
 
     const tagKey = String(item.tag || "").toLowerCase();
@@ -414,6 +473,7 @@ function renderSectionsHtml(sections, moduleId = "") {
 
     html += `<details class="demo-sec" data-section-key="${escapeHtml(key)}">
       <summary>
+        <span class="demo-sec__chev" aria-hidden="true"></span>
         ${tag}<span class="demo-sec__title">${escapeHtml(title)}</span>${summary}
       </summary>
       ${body}
@@ -421,6 +481,7 @@ function renderSectionsHtml(sections, moduleId = "") {
     index += 1;
   }
 
+  closeGroup();
   return html;
 }
 
@@ -859,10 +920,12 @@ function renderStatusModulesPanel() {
 
   // Hard refresh / first paint: leave modules collapsed. Later refreshes keep user expand state.
   applyStatusExpandState(savedExpand, { defaultModulesOpen: false });
+  syncGroupExpandButtons(statusWrap);
 
   if (btnPreflightExpandAll) btnPreflightExpandAll.disabled = false;
 
   bindSelectableSummaries(statusWrap);
+  bindGroupExpandButtons(statusWrap);
 }
 
 function setupExpandAll() {
@@ -874,6 +937,9 @@ function setupExpandAll() {
     expanded = !expanded;
     statusWrap.querySelectorAll("details.demo-pf-block, details.demo-sec").forEach((d) => {
       d.open = expanded;
+    });
+    statusWrap.querySelectorAll(".demo-sec-group__expand").forEach((btn) => {
+      setGroupExpandButton(btn, expanded);
     });
     btnPreflightExpandAll.setAttribute(
       "aria-label",
