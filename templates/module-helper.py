@@ -18,6 +18,7 @@ This file is a library/CLI the shell calls.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -34,9 +35,25 @@ def emit_status_line(state: str, message: str) -> None:
     print(f"{MODULE_ID}\t{state}\t{message}")
 
 
+def emit_sections(sections: list) -> None:
+    """Optional GUI Status folds. See ADDING-A-MODULE.md ('Detailed Status folds')."""
+    print(
+        "ACS_SECTIONS_JSON="
+        + json.dumps({"sections": sections}, separators=(",", ":"))
+    )
+
+
 def cmd_status(_: argparse.Namespace) -> int:
     # TODO: real check. Use lib.central / lib.openshift as needed.
     # from lib import central  # noqa: F401
+    # Optional folds:
+    # emit_sections([{
+    #     "group": "Overview",
+    #     "title": "Check",
+    #     "summary": "ok",
+    #     "body": "Detail for the expanded fold.",
+    #     "bodyFormat": "prose",
+    # }])
     emit_status_line(
         "needs-run", f"TODO: implement status in modules/{Path(__file__).name}"
     )

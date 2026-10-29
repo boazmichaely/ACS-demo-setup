@@ -28,7 +28,7 @@ Implementation target: **PatternFly v6** + **Project Felt** (`pf-v6-theme-felt`)
 |----|-------------|
 | G-LAY-1 | **Wide main column:** `max-width: min(1600px, 98vw)`, centered. |
 | G-LAY-2 | Structure: `pf-v6-c-page pf-m-no-sidebar` → **`pf-v6-c-masthead`** → main → demo pad (stacked sections). |
-| G-LAY-3 | Vertical order: **Lab credentials** → **Modules** card → **Status** card → **Log** drawer (fixed bottom). Active lab lives in the **masthead**, not a separate strip. |
+| G-LAY-3 | Vertical order: **Lab credentials** → **Modules** card → **Status** card → **Log** drawer (in-flow bottom; opening shrinks main, does not overlay). Active lab lives in the **masthead**, not a separate strip. |
 | G-LAY-4 | Section titles use `pf-v6-c-card__title-text`. Prefer `pf-m-compact` cards. |
 | G-LAY-5 | **Do not merge** Modules and Status into one card. Modules = select/run; Status = expandable detail. |
 
@@ -75,7 +75,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 | G-MOD-5 | Status cell: badge (detail via title / Status jump). Pending **checking** while refresh runs. |
 | G-MOD-6 | Badge mapping `ok` / `needs-run` / `error` (ready / needs-run / error). |
 | G-MOD-7 | **Not installed** (no `modules/<id>.sh`): row **grayed out**, checkbox **disabled**, not selectable; badge **not installed**. Count selectable rows only in bulk toolbar. |
-| G-MOD-8 | One toolbar above the table: Select all, **Dry run**, selection count, then **Run selected** / **Uninstall selected** / **Run full install**. Per-row kebab: Run / Uninstall (Dry run applies). |
+| G-MOD-8 | One toolbar above the table: Select all, selection count, then **Dry run** beside **Run selected** / **Uninstall selected** / **Run full install**. Per-row kebab: Run / Uninstall (Dry run applies). |
 
 ---
 
@@ -95,7 +95,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 
 | ID | Requirement |
 |----|-------------|
-| G-LOG-1 | **Bottom drawer** (collapsed bar with preview; expand for full console). Not a mid-page card as the primary presentation. |
+| G-LOG-1 | **Bottom drawer** in page flow (collapsed bar with preview; expand for full console). Opening pushes/shrinks main content; not a fixed overlay. Panel height is user-resizable (persisted). |
 | G-LOG-2 | Monospace stream; scrollable expanded panel. |
 | G-LOG-3 | Append run/refresh output; delimit runs. |
 | G-LOG-4 | `role="log"`. |

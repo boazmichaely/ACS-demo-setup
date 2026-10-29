@@ -430,27 +430,18 @@ function dependsOnHintHtml(m) {
   return `<span class="demo-mod__deps">Requires: ${deps.map(escapeHtml).join(", ")}</span>`;
 }
 
-function moduleLabelParts(m) {
-  const label = String(m.label ?? m.id ?? "");
-  const parts = label.split(/\s+[—-]\s+/);
-  const slug = (parts[0] || m.id || "").trim();
-  const desc = parts.length >= 2 ? parts.slice(1).join(" - ").trim() : "";
-  return { slug, desc };
-}
-
 function moduleCellHtml(m) {
   const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
-  const { slug } = moduleLabelParts(m);
+  const id = String(m.id ?? "");
   return `<div class="demo-mod__line">
     <span class="demo-mod__idx">${idx}</span>
-    <span class="demo-mod__slug">${escapeHtml(slug)}</span>
+    <span class="demo-mod__slug">${escapeHtml(id)}</span>
     <span class="js-deps-lock-hint demo-mod__lock" hidden></span>
   </div>`;
 }
 
 function moduleDescriptionCellHtml(m) {
-  const { desc } = moduleLabelParts(m);
-  const text = desc || "—";
+  const text = String(m.label ?? "").trim() || "—";
   // title = native tooltip when ellipsis clips the text
   return `<span title="${escapeHtml(text)}">${escapeHtml(text)}</span>`;
 }

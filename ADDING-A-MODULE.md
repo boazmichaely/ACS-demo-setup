@@ -24,7 +24,9 @@ chmod +x "modules/${ID}.sh"
 # 3. Edit the copy: set MODULE_ID, fill in usage() and the do_* functions
 #    Search for TODO in modules/${ID}.sh
 
-# 4. Register it in config/modules.json (see below)
+# 4. REQUIRED: add a row to config/modules.json (see "Catalog entry" below).
+#    Without that file entry, the GUI and orchestrator will not list the module.
+#    Edit: config/modules.json  →  modules[] array  →  { "id", "label", "dependsOn" }
 
 # 5. Try it
 ./modules/${ID}.sh --help
@@ -32,7 +34,7 @@ chmod +x "modules/${ID}.sh"
 ./scripts/acs-setup.sh --status --module "${ID}"
 ```
 
-The orchestrator only runs `modules/<id>.sh`. That file is the module.
+You need **two** things for a module to show up: the script `modules/<id>.sh`, and a catalog row in `config/modules.json`. The orchestrator only executes `modules/<id>.sh`, but it discovers modules only from `config/modules.json`.
 
 ## When do you also need a Python file?
 
@@ -56,12 +58,13 @@ Add an object to the `modules` array. **List order** is the GUI order and the de
 ```json
 {
   "id": "my-feature",
-  "label": "my-feature - short description for the table",
+  "label": "Short description for the Description column",
   "dependsOn": []
 }
 ```
 
-- `id` must match the script name: `modules/<id>.sh`
+- `id` is the module key: script name `modules/<id>.sh`, CLI `--module`, `dependsOn`, and the **Module** column in the GUI. Do not repeat it inside `label`.
+- `label` is human text only (Description column). Plain sentence or phrase, capitalized at the start - no `id - …` prefix.
 - Do not put a number prefix on the filename (`07-my-feature.sh` is wrong)
 - A catalog row with no executable script shows as **not installed** in the GUI (useful for placeholders)
 
@@ -78,6 +81,56 @@ my-feature	ok	short human summary
 | `ok` | This step is already in good shape |
 | `needs-run` | The lab is reachable, but this step is missing or drifted |
 | `error` | You cannot tell (bad credentials, API down, and so on) |
+
+### Detailed Status folds (optional)
+
+The TSV line is enough for the Modules table badge. For nested folds under the Status card, also print **one** machine line anywhere in the `--status` output:
+
+```text
+ACS_SECTIONS_JSON={"sections":[...]}
+```
+
+The orchestrator (`scripts/acs-setup.sh`) looks for a line that starts with `ACS_SECTIONS_JSON=`, parses the JSON, and attaches `sections` to that module’s `--status --json` row. The GUI renders each array item as a fold.
+
+Minimal example (shell; print the TSV line after or before - both work):
+
+```bash
+python3 - <<'PY'
+import json
+print("ACS_SECTIONS_JSON=" + json.dumps({
+  "sections": [
+    {
+      "group": "Overview",
+      "title": "Example check",
+      "summary": "looks fine",
+      "body": "Longer detail for the expanded fold.",
+      "bodyFormat": "prose"
+    },
+    {
+      "group": "Overview",
+      "title": "Config/snippet",
+      "tag": "ok",
+      "tagLabel": "ready",
+      "summary": "matched",
+      "body": {"key": "value"},
+      "bodyFormat": "json"
+    }
+  ]
+}, separators=(",", ":")))
+PY
+printf '%s\tok\tshort human summary\n' "$MODULE_ID"
+```
+
+| Field | Required? | Meaning |
+|-------|-----------|---------|
+| `group` | recommended | Heading above a batch of folds (repeat for items in the same batch) |
+| `title` | yes | Fold title |
+| `body` | yes | Fold body: string (`prose`) or object/array (`json`) |
+| `bodyFormat` | no | `prose` (default) or `json` |
+| `summary` | no | Short text on the closed fold row |
+| `tag` / `tagLabel` | no | Optional badge; `tag` of `ok`/`ready` or `error`/`fail` picks color |
+
+Skip `ACS_SECTIONS_JSON` entirely if you do not need folds. Reference emitter: Compliance Operator (`scripts/compliance_co_overview.py`).
 
 ## Run, dry-run, and uninstall
 

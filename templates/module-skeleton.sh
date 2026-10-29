@@ -42,8 +42,14 @@ EOF
 #   id<TAB>state<TAB>message
 # state must be: ok | needs-run | error
 # Example: printf '%s\tok\tall set\n' "$MODULE_ID"
+#
+# Optional GUI folds: also print one line
+#   ACS_SECTIONS_JSON={"sections":[...]}
+# See ADDING-A-MODULE.md ("Detailed Status folds"). Example:
+#   python3 -c 'import json; print("ACS_SECTIONS_JSON="+json.dumps({"sections":[{"group":"Overview","title":"Check","summary":"ok","body":"Detail.","bodyFormat":"prose"}]},separators=(",",":")))'
 do_status() {
   # TODO: replace with a real check against the lab.
+  # TODO (optional): emit ACS_SECTIONS_JSON=... before the TSV line for Status folds.
   printf '%s\tneeds-run\tTODO: implement do_status in modules/%s.sh\n' \
     "$MODULE_ID" "$MODULE_ID"
 }

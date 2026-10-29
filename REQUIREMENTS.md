@@ -102,7 +102,7 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 
 | ID | Requirement |
 |----|-------------|
-| R-LAY-1 | `config/modules.json` is the single registry of module id, display label, list order, and `dependsOn` |
+| R-LAY-1 | `config/modules.json` is the single registry: `id` (script / CLI / Module column), `label` (Description only), list order, and `dependsOn` |
 | R-LAY-2 | Each module has a documented entrypoint: `modules/<id>.sh` (may delegate to helpers in the same directory) |
 | R-LAY-3 | `./serve.sh` is the top-level GUI entrypoint; `scripts/acs-setup.sh` is the CLI orchestrator |
 | R-LAY-4 | `gui/` is part of the repo from the first shipped module; not a later add-on |

@@ -5,11 +5,45 @@
 
 html {
   font-size: 100%;
+  height: 100%;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Viewport shell: masthead + scrolling main + in-flow log (pushes content, no overlay).
+   Overrides PatternFly page grid so the log is a real third row, not position:fixed. */
+#page.pf-v6-c-page {
+  display: grid;
+  grid-template-areas:
+    "header"
+    "main"
+    "log";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: max-content minmax(0, 1fr) max-content;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+#page > .pf-v6-c-masthead {
+  grid-area: header;
+}
+
+#page > .pf-v6-c-page__main-container {
+  grid-area: main;
+  align-self: stretch;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+  margin-block-end: 0;
+}
+
+#page > .demo-log-drawer {
+  grid-area: log;
 }
 
 /* Masthead brand */
@@ -78,8 +112,7 @@ body {
 .demo-pad {
   max-width: min(1600px, 98vw);
   margin: 0 auto;
-  padding: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--lg)
-    calc(4.5rem + var(--pf-t--global--spacer--lg));
+  padding: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--lg);
 }
 
 /* Credentials — secondary fold */
@@ -859,17 +892,57 @@ body {
   background: var(--pf-t--global--background--color--secondary--default);
 }
 
-/* Log drawer - dark console look */
+/* Log drawer - dark console look; in-flow so opening shrinks main instead of covering it */
 .demo-log-drawer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 200;
+  flex: 0 0 auto;
   border-top: 1px solid #3c3f42;
   background: #212427;
   color: #f0f0f0;
   box-shadow: 0 -0.25rem 0.75rem rgba(0, 0, 0, 0.35);
+}
+
+.demo-log-drawer__resize {
+  display: none;
+  height: 0.4rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  cursor: ns-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.demo-log-drawer__resize::after {
+  content: "";
+  display: block;
+  width: 2.5rem;
+  height: 0.2rem;
+  margin: 0.1rem auto 0;
+  border-radius: 999px;
+  background: #6a6e73;
+}
+
+.demo-log-drawer.is-open .demo-log-drawer__resize {
+  display: block;
+}
+
+.demo-log-drawer__resize:hover::after,
+.demo-log-drawer__resize:focus-visible::after {
+  background: #b8bbbe;
+}
+
+.demo-log-drawer__resize:focus-visible {
+  outline: 2px solid var(--pf-t--global--color--brand--default, #06c);
+  outline-offset: -2px;
+}
+
+body.demo-log-resizing {
+  cursor: ns-resize;
+  user-select: none;
+}
+
+body.demo-log-resizing iframe {
+  pointer-events: none;
 }
 
 .demo-log-drawer__bar {
@@ -904,7 +977,7 @@ body {
 
 .demo-log-drawer__panel {
   display: none;
-  max-height: min(40vh, 22rem);
+  height: min(40vh, 22rem);
   overflow: auto;
   margin: 0;
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--lg)
