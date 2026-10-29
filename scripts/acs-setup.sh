@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ACS demo setup orchestrator — dispatches to modules/NN-<id>.sh
+# ACS demo setup orchestrator - dispatches to modules/<id>.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -66,14 +66,25 @@ module_meta() {
 
 module_script_path() {
   local id="$1"
-  local num
-  num="$(module_meta "$id" number)"
-  [[ -n "$num" && "$num" != "null" ]] || die "unknown module id: $id"
-  printf '%s/modules/%02d-%s.sh' "$ROOT" "$num" "$id"
+  local found
+  found="$(module_meta "$id" id)"
+  [[ -n "$found" && "$found" != "null" ]] || die "unknown module id: $id"
+  printf '%s/modules/%s.sh' "$ROOT" "$id"
+}
+
+# Catalog order in modules.json (1-based index for display / JSON "number").
+module_display_number() {
+  local id="$1"
+  jq -r --arg id "$id" '
+    .modules
+    | to_entries
+    | map(select(.value.id == $id) | .key + 1)
+    | first // empty
+  ' "$MODULES_JSON"
 }
 
 module_ids_sorted() {
-  jq -r '.modules | sort_by(.number) | .[].id' "$MODULES_JSON"
+  jq -r '.modules[].id' "$MODULES_JSON"
 }
 
 module_status_capture() {
@@ -155,7 +166,8 @@ status_json() {
     row="$MODULE_LAST_CAPTURE_ROW"
     state="$(printf '%s' "$row" | awk -F'\t' '{print $2}')"
     message="$(printf '%s' "$row" | awk -F'\t' '{for (i=3;i<=NF;i++) {if (i>3) printf "\t"; printf "%s", $i}}')"
-    num="$(module_meta "$id" number)"
+    num="$(module_display_number "$id")"
+    [[ -n "$num" ]] || die "unknown module id: $id"
     label="$(module_meta "$id" label)"
     depends="$(jq -c --arg id "$id" '.modules[] | select(.id == $id) | .dependsOn' "$MODULES_JSON")"
     base_row="$(jq -nc \

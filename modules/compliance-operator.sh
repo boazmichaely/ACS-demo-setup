@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Module: compliance-operator — OLM install + Central compliance scan schedule
+# Module: compliance-operator - OLM install + Central compliance scan schedule
+# Entrypoint shape matches templates/module-skeleton.sh; logic in compliance_operator_lib.sh
 set -euo pipefail
 
 MODULE_ID="compliance-operator"
@@ -47,6 +48,41 @@ Side effects:
 EOF
 }
 
+if [[ ! -f "$LIB" ]]; then
+  printf '%s\terror\tmissing helper %s\n' "$MODULE_ID" "$LIB"
+  exit 1
+fi
+
+# shellcheck source=compliance_operator_lib.sh
+COMPLIANCE_MODULE_ROOT="$ROOT"
+source "$LIB"
+
+do_status() {
+  compliance_operator_emit_status
+}
+
+do_run() {
+  compliance_operator_run false
+}
+
+do_dry_run() {
+  compliance_operator_run true
+}
+
+emit_status() {
+  # Lib prints status (and optional sections) and sets the exit code.
+  do_status
+}
+
+run_module() {
+  local dry_run="${1:-false}"
+  if [[ "$dry_run" == "true" ]]; then
+    do_dry_run
+    return
+  fi
+  do_run
+}
+
 main() {
   local action="" dry_run=false
 
@@ -66,22 +102,10 @@ main() {
   done
 
   [[ -n "$action" ]] || { usage; exit 0; }
-  [[ -f "$LIB" ]] || {
-    printf '%s\terror\tmissing helper %s\n' "$MODULE_ID" "$LIB"
-    exit 1
-  }
-
-  # shellcheck source=compliance_operator_lib.sh
-  COMPLIANCE_MODULE_ROOT="$ROOT"
-  source "$LIB"
 
   case "$action" in
-    status)
-      compliance_operator_emit_status
-      ;;
-    run)
-      compliance_operator_run "$dry_run"
-      ;;
+    status) emit_status ;;
+    run) run_module "$dry_run" ;;
   esac
 }
 

@@ -148,8 +148,17 @@ function clearLog() {
   if (logEl) logEl.textContent = "";
 }
 
+function syncRefreshActionButtons() {
+  const freeze = busy || statusRefreshing;
+  for (const id of ["btnStatus", "btnRefreshSelected"]) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = freeze;
+  }
+}
+
 function setBusy(on) {
   busy = on;
+  // Module runs lock credentials + lab selectors. Status refresh must not.
   const ids = [
     "btnCredSave",
     "btnCredCancel",
@@ -157,11 +166,9 @@ function setBusy(on) {
     "btnDeleteLab",
     "btnMakeActive",
     "btnAddSecuredCluster",
-    "btnRefreshSelected",
     "btnRun",
     "btnDryRun",
     "btnRunFull",
-    "btnStatus",
   ];
   for (const id of ids) {
     const el = document.getElementById(id);
@@ -169,6 +176,7 @@ function setBusy(on) {
   }
   if (activeLabSelect) activeLabSelect.disabled = on;
   if (editLabSelect) editLabSelect.disabled = on;
+  syncRefreshActionButtons();
   if (!on) {
     syncMakeActiveButton();
     syncDeleteLabButton();
@@ -203,6 +211,7 @@ function setStatusRefreshing(on, label = "Refreshing status…") {
   }
   document.getElementById("modulesTable")?.setAttribute("aria-busy", statusRefreshing ? "true" : "false");
   document.querySelector(".demo-workbench")?.classList.toggle("is-status-refreshing", statusRefreshing);
+  syncRefreshActionButtons();
 }
 
 async function api(path, options = {}) {
@@ -828,22 +837,27 @@ async function fetchStatus(moduleIds = null) {
   lastStatusMap = statusMapFromModules(lastStatusModules);
 }
 
+/** Bumped each status refresh so a newer refresh can supersede an older one. */
+let statusRefreshGeneration = 0;
+
 async function refreshAllStatus() {
-  setBusy(true);
+  const gen = ++statusRefreshGeneration;
   setStatusRefreshing(true);
   refreshStatusCells();
   renderStatusModulesPanel();
   try {
     await fetchStatus();
+    if (gen !== statusRefreshGeneration) return;
     statusReady = true;
     setModuleRefreshFeedback("Status updated.");
   } finally {
-    setBusy(false);
-    setStatusRefreshing(false);
-    refreshStatusCells();
-    syncDependencyLocks();
-    syncMasterCheckbox();
-    renderStatusModulesPanel();
+    if (gen === statusRefreshGeneration) {
+      setStatusRefreshing(false);
+      refreshStatusCells();
+      syncDependencyLocks();
+      syncMasterCheckbox();
+      renderStatusModulesPanel();
+    }
   }
 }
 
@@ -853,20 +867,22 @@ async function refreshSelectedStatus() {
     setModuleRefreshFeedback("Select at least one module.");
     return;
   }
-  setBusy(true);
+  const gen = ++statusRefreshGeneration;
   setStatusRefreshing(true);
   refreshStatusCells();
   try {
     await fetchStatus(ids);
+    if (gen !== statusRefreshGeneration) return;
     statusReady = true;
     setModuleRefreshFeedback(`Refreshed ${ids.length} module(s).`);
   } finally {
-    setBusy(false);
-    setStatusRefreshing(false);
-    refreshStatusCells();
-    syncDependencyLocks();
-    syncMasterCheckbox();
-    renderStatusModulesPanel();
+    if (gen === statusRefreshGeneration) {
+      setStatusRefreshing(false);
+      refreshStatusCells();
+      syncDependencyLocks();
+      syncMasterCheckbox();
+      renderStatusModulesPanel();
+    }
   }
 }
 
@@ -1527,9 +1543,11 @@ async function setActiveLabOnly(labId) {
   fillLabSelects();
   updateLabStrip(data.activeLabSummary);
   logLabEvent("lab-switch", data.activeLabSummary);
+  // Do not hold lab UI / await here: status can take a long time.
   log("Refreshing module status for the new active lab…\n");
-  await refreshAllStatus();
-  log("Status refresh finished.\n");
+  refreshAllStatus()
+    .then(() => log("Status refresh finished.\n"))
+    .catch((err) => log(`\nStatus refresh failed: ${err.message || err}\n`));
 }
 
 async function switchActiveLab(labId) {

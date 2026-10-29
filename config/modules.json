@@ -1,97 +1,81 @@
 {
   "modules": [
     {
-      "number": 1,
       "id": "registries",
       "label": "registries — ACS image integrations",
       "dependsOn": []
     },
     {
-      "number": 2,
       "id": "compliance-operator",
       "label": "compliance-operator — Compliance Operator + scan schedule",
       "dependsOn": []
     },
     {
-      "number": 3,
       "id": "ms-demo",
       "label": "ms-demo — Mostmark microservices (project ms-demo)",
       "dependsOn": []
     },
     {
-      "number": 4,
       "id": "init-demo",
       "label": "init-demo — Init Containers app (project init-demo)",
       "dependsOn": []
     },
     {
-      "number": 5,
       "id": "ocp-users",
       "label": "ocp-users — HTPasswd, IdP, and RBAC",
       "dependsOn": []
     },
     {
-      "number": 6,
       "id": "ocp-OAuth",
       "label": "ocp-OAuth — Central OpenShift login",
       "dependsOn": []
     },
     {
-      "number": 7,
       "id": "acs-users",
       "label": "acs-users — scopes, roles, and rules",
       "dependsOn": ["ocp-OAuth"]
     },
     {
-      "number": 8,
       "id": "slack-notifier",
       "label": "slack-notifier — Central Slack integration",
       "dependsOn": ["roxctl-env"]
     },
     {
-      "number": 9,
       "id": "splunk",
       "label": "splunk — Splunk Operator + RHACS TA",
       "dependsOn": []
     },
     {
-      "number": 10,
       "id": "roxctl-env",
       "label": "roxctl-env — ~/.roxctl route + API token",
       "dependsOn": []
     },
     {
-      "number": 11,
       "id": "openshift-mcp",
       "label": "openshift-mcp — installs/updates an OpenShift MCP server on your cluster and wires it to your preferred AI agent",
       "dependsOn": []
     },
     {
-      "number": 12,
       "id": "openshift-mcp-gateway",
       "label": "openshift-mcp-gateway — launches an MCP gateway on the cluster you designate",
       "dependsOn": []
     },
     {
-      "number": 13,
       "id": "acs-lightspeed",
       "label": "acs-lightspeed — configures OpenShift Lightspeed integration",
       "dependsOn": []
     },
     {
-      "number": 14,
       "id": "acs-mcp",
       "label": "acs-mcp — installs/updates an ACS MCP server on your cluster and wires it to your agent",
       "dependsOn": []
     },
     {
-      "number": 15,
       "id": "prometheus",
       "label": "prometheus — install Prometheus on your cluster and wire ACS monitoring",
       "dependsOn": []
     },
     {
-      "number": 16,
       "id": "secrets-manager",
       "label": "secrets-manager — install Hashi on your cluster, enable External Secret Management Console plugin, External Secrets Operator (ESO) and a demo application",
       "dependsOn": []

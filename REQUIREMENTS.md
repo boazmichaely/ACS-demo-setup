@@ -102,8 +102,8 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 
 | ID | Requirement |
 |----|-------------|
-| R-LAY-1 | `config/modules.json` is the single registry of module id, display label, numeric order, and `dependsOn` |
-| R-LAY-2 | Each module has a documented entrypoint: `modules/NN-<id>.sh` (may delegate to helpers in the same directory) |
+| R-LAY-1 | `config/modules.json` is the single registry of module id, display label, list order, and `dependsOn` |
+| R-LAY-2 | Each module has a documented entrypoint: `modules/<id>.sh` (may delegate to helpers in the same directory) |
 | R-LAY-3 | `./serve.sh` is the top-level GUI entrypoint; `scripts/acs-setup.sh` is the CLI orchestrator |
 | R-LAY-4 | `gui/` is part of the repo from the first shipped module; not a later add-on |
 | R-LAY-5 | `STATUS.md` is updated when module behavior ships (human changelog, not generated) |
@@ -117,14 +117,14 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 | R-ORCH-1 | Supports `--help`, `--status`, `--run` |
 | R-ORCH-2 | `--status` without `--module` runs every module’s `--status` and prints aggregated output |
 | R-ORCH-3 | `--status --module <id>` runs one module’s `--status` |
-| R-ORCH-4 | `--run` without `--module` runs all modules in dependency order (topological sort of `dependsOn`; tie-break by `number`) |
+| R-ORCH-4 | `--run` without `--module` runs all modules in `modules.json` list order (GUI multi-select run still topological-sorts `dependsOn`) |
 | R-ORCH-5 | `--run --module <id>` runs one module; does not auto-run dependencies unless documented in that module’s `--help` |
 | R-ORCH-6 | `--dry-run` passed through to every module (see R-MOD-8) |
 | R-ORCH-7 | Optional `--json` on `--status` emits machine-readable aggregate for the GUI |
 | R-ORCH-8 | Exit code: `0` only if every invoked module succeeds; otherwise non-zero |
 | R-ORCH-9 | Orchestrator **dispatches** to module scripts; it does not embed module logic and does not delegate to one giant script |
 
-### 5.3 Module script contract (every `modules/NN-*.sh`)
+### 5.3 Module script contract (every `modules/<id>.sh`)
 
 | ID | Requirement |
 |----|-------------|
@@ -148,7 +148,7 @@ registries	ok	quay.io and registry.redhat.io integrations configured
 slack-notifier	needs-run	Slack integration not configured
 ```
 
-**JSON (`--json`):** array of objects `{ "id", "number", "label", "state", "message", "dependsOn" }`.
+**JSON (`--json`):** array of objects `{ "id", "number", "label", "state", "message", "dependsOn" }` (`number` is the 1-based catalog position, not stored in `modules.json`).
 
 ### 5.5 Implementation constraints
 
@@ -376,7 +376,7 @@ The GUI is **required from the first deliverable** (module M1 `registries`). No 
 Shipping M1 is not complete until all of the following work:
 
 1. `config/modules.json` includes module `registries` as M1
-2. `modules/01-registries.sh` meets R-MOD-* and M1 acceptance
+2. `modules/registries.sh` meets R-MOD-* and M1 acceptance
 3. `scripts/acs-setup.sh` can `--status` and `--run --module registries`
 4. GUI lists module `registries`, shows its status, and triggers run
 5. Lab credentials form saves Central endpoint and API token (manual prerequisite)

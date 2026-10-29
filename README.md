@@ -1,40 +1,36 @@
 # ACS demo setup
 
-Repeatable automation to **prepare a RHACS demo lab** after Central and a secured cluster are already running: credentials, `roxctl`, sample apps, users, OAuth, integrations, compliance, Splunk — driven primarily through a **web GUI**.
+This tool helps you finish preparing an RHACS (Red Hat Advanced Cluster Security) demo lab **after** Central and a secured cluster are already installed and running. It handles the repeatable follow-on work: storing lab credentials, checking what is already configured, and running setup steps (modules) such as registry integrations or the Compliance Operator.
 
-| Doc | Contents |
-|-----|----------|
-| [REQUIREMENTS.md](REQUIREMENTS.md) | Problem, lab assumptions, modules, CLI contract, functional GUI behavior |
-| [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) | **Look and feel** — PatternFly v6 + Felt, masthead, credentials, modules, status, log |
+You mostly use the **web GUI**. The CLI is available for scripting and is what the GUI calls under the hood.
 
-**Repo:** https://github.com/boazmichaely/ACS-demo-setup (private)
-
-## Layout
-
-| Piece | Role |
-|-------|------|
-| `./serve.sh` | **Primary entrypoint** — starts the GUI |
-| `gui/` | Web UI (FastAPI + static front end) |
-| `scripts/acs-setup.sh` | CLI orchestrator + GUI backend (`--status`, `--run`, `--help`) |
-| `config/modules.json` | Module registry |
-| `config/lab-credentials.schema.json` | Credentials file shape (see `lab-credentials.example.json`) |
-| `modules/NN-<id>.sh` | Module entrypoints (bash/jq; Python where it helps) |
-
-**Lab prerequisites:** OpenShift with `oc`, RHACS Operator installed, Central and secured cluster already up. See [REQUIREMENTS.md §3](REQUIREMENTS.md).
-
-**Secrets:** gitignored `lab-credentials.json` at the repo root (schema v2: multi-lab + multi secured cluster). Shape: [config/lab-credentials.example.json](config/lab-credentials.example.json). Override path with `ACS_LAB_CREDENTIALS_FILE`. Edit via the GUI **Active lab** strip / **Lab credentials** panel or by hand.
+Private repo: https://github.com/boazmichaely/ACS-demo-setup
 
 ## Run the GUI
 
 ```bash
 cd ~/code/acs-demo-setup
 ./serve.sh
-./serve.sh --help
 ```
 
-Opens on http://127.0.0.1:8765 by default. If that port is busy, the next free port is used - use the URL printed at startup.
+By default the UI is at http://127.0.0.1:8765. If that port is already in use, the script picks the next free port. Use the URL printed in the terminal.
+
+## Lab credentials
+
+Put secrets in `lab-credentials.json` at the repo root. That file is gitignored. You can edit it in the GUI (**Lab credentials** panel) or by hand. For the JSON shape, see [config/lab-credentials.example.json](config/lab-credentials.example.json).
+
+You can point at a different file with `ACS_LAB_CREDENTIALS_FILE` if you want.
+
+When a module needs OpenShift (`oc`), it does **not** use your normal `~/.kube/config`. It uses a per-lab kubeconfig derived from `lab-credentials.json`, stored under `.cache/kubeconfigs/`.
+
+```bash
+./scripts/acs-setup.sh --oc-status    # Is oc ready for the active lab?
+./scripts/acs-setup.sh --oc-login     # Create or refresh that kubeconfig (add --force to redo login)
+```
 
 ## CLI
+
+Useful when you are not in the browser:
 
 ```bash
 ./scripts/acs-setup.sh --help
@@ -42,21 +38,23 @@ Opens on http://127.0.0.1:8765 by default. If that port is busy, the next free p
 ./scripts/acs-setup.sh --run --module registries
 ```
 
-### OpenShift kubeconfigs (per active lab)
+## Repo layout
 
-**Source of truth:** `lab-credentials.json`. Modules use a derived file under `.cache/kubeconfigs/<lab-id>.kubeconfig`, not your interactive `~/.kube/config`.
+| Path | Role |
+|------|------|
+| `./serve.sh` | Starts the GUI |
+| `gui/` | Web UI (FastAPI + static pages) |
+| `scripts/acs-setup.sh` | Orchestrator: status, run, and oc helpers |
+| `config/modules.json` | List of modules (display order, labels, dependencies) |
+| `modules/<id>.sh` | One shell entrypoint per module |
+| `templates/module-skeleton.sh` | Copy-paste starting point for a new module |
+| `templates/module-helper.py` | Optional Python helper template (Central / heavy JSON) |
+| `lib/` | Shared helpers for Central API and OpenShift login |
 
-| Need | Command |
-|------|---------|
-| Is oc ready for the active lab? | `./scripts/acs-setup.sh --oc-status` |
-| Create/refresh that kubeconfig | `./scripts/acs-setup.sh --oc-login` (add `--force` to redo login) |
+Today, `registries` and `compliance-operator` have real scripts. Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
 
-After a lab switch, if modules still look wrong: `--oc-status`, then `--oc-login --force` if needed. Empty OpenShift fields (e.g. ACSCS) correctly refuse leftover sessions from another lab.
+## Adding a module
 
-## Status
+See [ADDING-A-MODULE.md](ADDING-A-MODULE.md) for the full walkthrough.
 
-| Area | State |
-|------|--------|
-| Requirements | Approved ([§9](REQUIREMENTS.md)) |
-| GUI | PatternFly v6 + Felt shell per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) |
-| Modules | `registries`, `compliance-operator` implemented; others listed in `config/modules.json` |
+Each module should also explain itself when you run `./modules/<id>.sh --help` (what it does, what it needs, what it changes).

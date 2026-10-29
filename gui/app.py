@@ -112,12 +112,15 @@ def list_modules() -> list[dict]:
     if not MODULES_JSON.is_file():
         raise HTTPException(status_code=500, detail=f"missing {MODULES_JSON}")
     data = json.loads(MODULES_JSON.read_text(encoding="utf-8"))
-    modules = sorted(data.get("modules", []), key=lambda m: m.get("number", 0))
-    for mod in modules:
-        num = mod.get("number")
-        mid = (mod.get("id") or "").strip()
-        script = REPO_ROOT / "modules" / f"{int(num):02d}-{mid}.sh"
-        mod["scriptInstalled"] = script.is_file() and os.access(script, os.X_OK)
+    # Preserve catalog order; expose 1-based "number" for GUI display only.
+    modules: list[dict] = []
+    for index, mod in enumerate(data.get("modules", []), start=1):
+        entry = dict(mod)
+        mid = (entry.get("id") or "").strip()
+        entry["number"] = index
+        script = REPO_ROOT / "modules" / f"{mid}.sh"
+        entry["scriptInstalled"] = script.is_file() and os.access(script, os.X_OK)
+        modules.append(entry)
     return modules
 
 
