@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" class="pf-v6-theme-felt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Help · ACS demo setup</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly-addons.min.css"
+    />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell33" />
+    <style>
+      html,
+      body {
+        height: auto;
+        overflow: auto;
+      }
+      .help-page {
+        max-width: 52rem;
+        margin: 0 auto;
+        padding: var(--pf-t--global--spacer--lg);
+        padding-bottom: 4rem;
+      }
+      .help-page__nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--pf-t--global--spacer--sm);
+        align-items: center;
+        margin-bottom: var(--pf-t--global--spacer--md);
+      }
+      .help-page__nav a {
+        font-size: var(--pf-t--global--font--size--sm);
+      }
+      .help-page h1 {
+        font-size: var(--pf-t--global--font--size--xl);
+        margin: 0 0 var(--pf-t--global--spacer--md);
+      }
+      .help-page__body {
+        font-size: var(--pf-t--global--font--size--md);
+        line-height: 1.55;
+      }
+      .help-page__body h1,
+      .help-page__body h2,
+      .help-page__body h3 {
+        margin-top: 1.4em;
+        margin-bottom: 0.5em;
+      }
+      .help-page__body h1:first-child {
+        display: none; /* title already shown above */
+      }
+      .help-page__body pre {
+        overflow-x: auto;
+        padding: var(--pf-t--global--spacer--md);
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--sm, 4px);
+        background: var(--pf-t--global--background--color--secondary--default);
+        font-size: var(--pf-t--global--font--size--sm);
+      }
+      .help-page__body code {
+        font-family: var(--pf-t--global--font--family--mono, ui-monospace, monospace);
+        font-size: 0.92em;
+      }
+      .help-page__body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.75rem 0 1.25rem;
+        font-size: var(--pf-t--global--font--size--sm);
+      }
+      .help-page__body th,
+      .help-page__body td {
+        border: 1px solid var(--pf-t--global--border--color--default);
+        padding: 0.4rem 0.6rem;
+        vertical-align: top;
+        text-align: left;
+      }
+      .help-page__body img {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--pf-t--global--border--color--default);
+        border-radius: var(--pf-t--global--border--radius--md, 8px);
+      }
+      .help-page__err {
+        color: var(--pf-t--global--text--color--status--danger--default, #c9190b);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="help-page">
+      <nav class="help-page__nav" aria-label="Help documents">
+        <a href="/">← ACS demo setup</a>
+        <span aria-hidden="true">·</span>
+        <a href="/help?doc=readme">README</a>
+        <a href="/help?doc=adding-a-module">How to add a module</a>
+        <a href="/static/status-sections-map.html">Status folds field map</a>
+      </nav>
+      <h1 id="helpTitle">Help</h1>
+      <div id="helpBody" class="help-page__body">
+        <p>Loading…</p>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var docId = params.get("doc") || "readme";
+        var titleEl = document.getElementById("helpTitle");
+        var bodyEl = document.getElementById("helpBody");
+
+        fetch("/api/help/" + encodeURIComponent(docId))
+          .then(function (res) {
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            document.title = data.title + " · ACS demo setup";
+            titleEl.textContent = data.title;
+            bodyEl.innerHTML = marked.parse(data.markdown || "");
+          })
+          .catch(function (err) {
+            titleEl.textContent = "Help unavailable";
+            bodyEl.innerHTML =
+              '<p class="help-page__err">Could not load help document <code>' +
+              docId +
+              "</code>: " +
+              String(err.message || err) +
+              "</p>";
+          });
+      })();
+    </script>
+  </body>
+</html>

@@ -236,6 +236,39 @@ def run_module(
     return StreamingResponse(stream_output(), media_type="text/plain; charset=utf-8")
 
 
+HELP_DOCS: dict[str, tuple[str, Path]] = {
+    "readme": ("README", REPO_ROOT / "README.md"),
+    "adding-a-module": ("How to add a module", REPO_ROOT / "ADDING-A-MODULE.md"),
+}
+
+
+@app.get("/api/help/{doc_id}")
+def help_doc(doc_id: str) -> dict[str, str]:
+    """Return a repo Markdown help page for the GUI help viewer."""
+    entry = HELP_DOCS.get(doc_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail=f"Unknown help doc: {doc_id}")
+    title, path = entry
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Missing help file: {path.name}")
+    text = path.read_text(encoding="utf-8")
+    # Help viewer loads images from /help-assets/… (docs/ mounted below).
+    text = text.replace("](docs/", "](/help-assets/")
+    return {"id": doc_id, "title": title, "markdown": text}
+
+
+@app.get("/help")
+def help_viewer() -> FileResponse:
+    return FileResponse(
+        GUI_DIR / "static" / "help.html",
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+app.mount("/help-assets", StaticFiles(directory=REPO_ROOT / "docs"), name="help_assets")
 app.mount("/static", StaticFiles(directory=GUI_DIR / "static"), name="static")
 
 

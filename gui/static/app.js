@@ -385,12 +385,14 @@ function applyStatusExpandState(state, { defaultModulesOpen = false } = {}) {
 function setGroupExpandButton(btn, expanded) {
   if (!btn) return;
   btn.dataset.expanded = expanded ? "true" : "false";
-  btn.textContent = expanded ? "Collapse all" : "Expand all";
+  btn.classList.toggle("is-expanded", expanded);
   const group = btn.closest(".demo-sec-group-block")?.dataset.group || "group";
-  btn.setAttribute(
-    "aria-label",
-    expanded ? `Collapse all sections in ${group}` : `Expand all sections in ${group}`
-  );
+  const label = expanded
+    ? `Collapse all sections in ${group}`
+    : `Expand all sections in ${group}`;
+  btn.setAttribute("aria-label", label);
+  btn.setAttribute("title", expanded ? "Collapse all" : "Expand all");
+  btn.setAttribute("aria-expanded", expanded ? "true" : "false");
 }
 
 function syncGroupExpandButtons(root) {
@@ -448,8 +450,10 @@ function renderSectionsHtml(sections, moduleId = "") {
       if (group) {
         html += `<div class="demo-sec-group-block" data-group="${escapeHtml(group)}">
           <div class="demo-sec-group">
+            <button type="button" class="pf-v6-c-button pf-m-plain demo-sec-group__expand" data-expanded="false" aria-expanded="false" title="Expand all" aria-label="Expand all sections in ${escapeHtml(group)}">
+              <span class="demo-sec-group__expand-icon" aria-hidden="true"></span>
+            </button>
             <span class="demo-sec-group__label">${escapeHtml(group)}</span>
-            <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline demo-sec-group__expand" data-expanded="false">Expand all</button>
           </div>`;
         groupOpen = true;
       }
@@ -473,7 +477,7 @@ function renderSectionsHtml(sections, moduleId = "") {
 
     html += `<details class="demo-sec" data-section-key="${escapeHtml(key)}">
       <summary>
-        <span class="demo-sec__chev" aria-hidden="true"></span>
+        <span class="demo-sec__toggle" aria-hidden="true"><span class="demo-sec__chev"></span></span>
         ${tag}<span class="demo-sec__title">${escapeHtml(title)}</span>${summary}
       </summary>
       ${body}
@@ -946,6 +950,32 @@ function setupExpandAll() {
       expanded ? "Collapse all modules" : "Expand all modules"
     );
     btnPreflightExpandAll.textContent = expanded ? "Collapse all" : "Expand all";
+  });
+}
+
+function setupHelpMenu() {
+  const toggle = document.getElementById("btnHelpMenu");
+  const menu = document.getElementById("helpMenu");
+  if (!toggle || !menu) return;
+
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+
+  toggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(menu.hidden);
+  });
+
+  menu.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
+  document.addEventListener("click", () => setOpen(false));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setOpen(false);
   });
 }
 
@@ -2031,6 +2061,7 @@ document.getElementById("btnRunFull").addEventListener("click", () => {
 modSelectAll.addEventListener("change", () => applySelectAll(modSelectAll.checked));
 
 setupExpandAll();
+setupHelpMenu();
 syncDryRunToggleUi();
 
 async function markPageLoadInDiskLog() {

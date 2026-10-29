@@ -44,22 +44,63 @@ EOF
 # See ADDING-A-MODULE.md ("Status output").
 #
 # Build the sections object with jq (readable), then emit one compact line.
+# Supported bodyFormat values in the GUI: "prose" (default) and "json" only.
 emit_status_sections() {
   # TODO: replace this object with real fold data for the lab.
-  local sections_json body
-  body="Replace this Status fold with real checks for ${MODULE_ID}."
+  local sections_json prose_multiline
+  prose_multiline="$(
+    cat <<'EOF'
+Body of a multi-line prose blob.
+Each newline becomes a line break in the GUI.
+
+Use bodyFormat "prose" for normal readable text (this is the default if omitted).
+EOF
+  )"
   sections_json="$(
-    jq -nc --arg body "$body" '{
-      sections: [
-        {
-          group: "Overview",
-          title: "Implementation",
-          summary: "TODO",
-          body: $body,
-          bodyFormat: "prose"
-        }
-      ]
-    }'
+    jq -nc \
+      --arg prose_multi "$prose_multiline" \
+      '{
+        sections: [
+          {
+            group: "Group 1 header. e.g. Overview",
+            title: "Title of first blob. e.g. Installed components",
+            summary: "(optional) right hand side info (1/1 ready)",
+            body: "Body of the first blob. e.g.: Installed network-policy.yaml, application.yaml",
+            bodyFormat: "prose"
+          },
+          {
+            group: "Group 2 header. e.g. Notes",
+            title: "Title of second blob. e.g. Multi-line prose",
+            summary: "(optional) right hand side info",
+            body: $prose_multi,
+            bodyFormat: "prose"
+          },
+          {
+            group: "Group 3 header. e.g. Config",
+            title: "Title of third blob. e.g. Config object",
+            summary: "(optional) right hand side info (matched)",
+            tag: "ok",
+            tagLabel: "(optional) badge text; tag sets color (ok/ready, error/fail)",
+            body: {
+              note: "Body of the third blob. bodyFormat json pretty-prints this object in a monospace block",
+              replicas: 1,
+              image: "quay.io/example/app:1.0"
+            },
+            bodyFormat: "json"
+          },
+          {
+            group: "Group 4 header. e.g. Workloads",
+            title: "Title of fourth blob. e.g. Deployment",
+            summary: "(optional) right hand side info (0/1 ready)",
+            tag: "error",
+            tagLabel: "(optional) badge text; tag sets color (ok/ready, error/fail)",
+            body: {
+              note: "Body of the fourth blob. e.g. status detail"
+            },
+            bodyFormat: "json"
+          }
+        ]
+      }'
   )"
   printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
 }

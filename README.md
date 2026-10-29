@@ -55,6 +55,8 @@ Today, `registries` and `compliance-operator` have real scripts. Other modules c
 
 ## Adding a module
 
-See [ADDING-A-MODULE.md](ADDING-A-MODULE.md) for the full walkthrough.
+See [ADDING-A-MODULE.md](ADDING-A-MODULE.md) for the full walkthrough: catalog entry, `--status` contract, and the Status folds presentation language (tab-separated values summary line plus `ACS_SECTIONS_JSON`).
+
+In the running GUI, the masthead **?** menu opens this README, the module guide, and an interactive Status folds field map.
 
 Each module should also explain itself when you run `./modules/<id>.sh --help` (what it does, what it needs, what it changes).
