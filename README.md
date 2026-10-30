@@ -4,7 +4,7 @@ This tool helps you finish preparing an RHACS (Red Hat Advanced Cluster Security
 
 You mostly use the **web GUI**. The CLI is available for scripting and is what the GUI calls under the hood.
 
-Private repo: https://github.com/boazmichaely/ACS-demo-setup
+Repo: https://github.com/boazmichaely/ACS-demo-setup
 
 ## Run the GUI
 
@@ -60,3 +60,7 @@ See [ADDING-A-MODULE.md](ADDING-A-MODULE.md) for the full walkthrough: catalog e
 In the running GUI, the masthead **?** menu opens this README, the module guide, and an interactive Status folds field map.
 
 Each module should also explain itself when you run `./modules/<id>.sh --help` (what it does, what it needs, what it changes).
+
+## License
+
+[MIT](LICENSE) © 2026 Boaz Michaely. Keep `lab-credentials.json` local (it is gitignored); do not commit real tokens or passwords.

@@ -1,33 +1,33 @@
 # What is a module
 
-A **module** is used to perform one setup step for the demo lab. It is a shell/python program that can do anything you like. The GUI acts as an orchestrator and renderer that talks to modules using the hooks listed below.   
+A **module** is used to perform one setup step for the demo lab. It is a shell/Python program that can do anything you like. The GUI acts as an orchestrator and renderer that talks to modules using the hooks listed below.
 
-- **Triggers**: The module is triggered to **run** (install) or **uninstall**, both with a **dry-run** option. 
-- **Output**: The module provides structured **status** info for the GUI to render.
+- **Triggers:** The module is triggered to **run** (install) or **uninstall**, both with a **dry-run** option.
+- **Output:** The module provides structured **status** info for the GUI to render.
 
-Template files are provided to start you off., and a common python library provides a unified way to use admin credentials to the associated Central and OpenShift clusters in your lab. 
+Template files are provided to start you off, and a common Python library provides a unified way to use admin credentials for the associated Central and OpenShift clusters in your lab.
 
-| Flag                    | What the module must do (Module Contract)                                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--help`                | Explain the purpose of the module, what it depends on, which environment variables it needs, and what `--run` and `--uninstall` change.           |
-| `--status`              | Report whether this step is already done. Print both a short summary line and detailed Status folds (described later). Both outputs are required. |
-| `--run`                 | Apply the step. Running it again when nothing has drifted must still succeed.                                                                     |
-| `--run --dry-run`       | Describe what `--run` would change, without changing the cluster or Central.                                                                      |
-| `--uninstall`           | Remove what this module created, or refuse with a clear error.                                                                                    |
-| `--uninstall --dry-run` | Describe what `--uninstall` would remove, or refuse the same way.                                                                                 |
+| Flag | What the module must do (Module Contract) |
+|------|-------------------------------------------|
+| `--help` | Explain the purpose of the module, what it depends on, which environment variables it needs, and what `--run` and `--uninstall` change. |
+| `--status` | Report whether this step is already done. Print both a short summary line and detailed Status folds (described later). Both outputs are required. |
+| `--run` | Apply the step. Running it again when nothing has drifted must still succeed. |
+| `--run --dry-run` | Describe what `--run` would change, without changing the cluster or Central. |
+| `--uninstall` | Remove what this module created, or refuse with a clear error. |
+| `--uninstall --dry-run` | Describe what `--uninstall` would remove, or refuse the same way. |
+
+The rest of this page is the recipe: catalog row, skeleton, status shape, credentials, then smoke test.
 
 ## What you must create
 
-A module appears in the GUI and the orchestrator only when both of the following exist:
+A module shows up in the GUI and the CLI orchestrator only when both exist:
 
 1. An executable script at `modules/<id>.sh`.
 2. A matching row in `config/modules.json`.
 
-The orchestrator discovers modules only from `config/modules.json`, then runs `modules/<id>.sh`. A catalog row without a script still appears in the GUI as **not installed**, which is useful for placeholders. A script with no catalog row is invisible to both the GUI and the orchestrator.
+The orchestrator reads the catalog, then runs `modules/<id>.sh`. A catalog row without a script still appears as **not installed** (handy as a placeholder). A script with no catalog row is invisible.
 
 ## Fast path
-
-The commands below create a new module from the skeleton and run a first smoke test:
 
 ```bash
 # 1. Choose a short kebab-case id, for example my-feature
@@ -50,13 +50,11 @@ chmod +x "modules/${ID}.sh"
 ./scripts/acs-setup.sh --status --module "${ID}"
 ```
 
-Copy Status folds from `templates/module-skeleton.sh`. Keep that file open while you write your own `emit_status_sections()`.
+Keep `templates/module-skeleton.sh` open while you write `emit_status_sections()`. You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/ms-demo.sh) module as a lightweight example. In the GUI, kebab **Help** shows the same text as `--help`.
 
 ## Catalog entry
 
-Add one object to the `modules` array in `config/modules.json`. The array order is the order shown in the GUI and the default order for a full install. If this module must run after another module, put that module’s `id` in `dependsOn`.
-
-Below is a minimal catalog row:
+Add one object to the `modules` array in `config/modules.json`. Array order is GUI order and the default full-install order. If this module must run after another, put that module’s `id` in `dependsOn`.
 
 ```json
 {
@@ -66,140 +64,103 @@ Below is a minimal catalog row:
 }
 ```
 
-Follow these rules when you fill in that object:
-
-- `id` is the module key. It must match the script name `modules/<id>.sh`, the CLI `--module` value, entries in other modules’ `dependsOn` lists, and the **Module** column in the GUI. Do not repeat the id inside `label`.
-- `label` is human text for the Description column only. Use a plain sentence or phrase, capitalized at the start. Do not write `id - description`.
-- Do not put a number prefix on the filename. Prefer `my-feature.sh` over `07-my-feature.sh`.
+- `id` is the module key. It must match `modules/<id>.sh`, CLI `--module`, other modules’ `dependsOn`, and the **Module** column. Do not repeat the id inside `label`.
+- `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
+- Prefer `my-feature.sh` over `07-my-feature.sh`.
 
 ## Optional Python helper
 
-Most modules remain a single shell script. Put `oc` checks and straightforward logic in the `do_*` functions inside `modules/<id>.sh`.
+Most modules stay one shell script. Put simple `oc` checks in the `do_*` functions.
 
-Add a Python helper only when bash is a poor fit. The usual cases are Central HTTP calls and heavy JSON work. The commands below copy the helper template for id `my-feature`. The helper filename uses underscores instead of hyphens:
+Add Python when bash is a poor fit - usually Central HTTP or heavy JSON:
 
 ```bash
 cp templates/module-helper.py modules/my_feature.py
 ```
 
-In `modules/my-feature.sh`, uncomment the “Optional: call a Python helper” block from the skeleton and set `HELPER` to `modules/my_feature.py`. Keep `--help` and flag parsing in the shell script. Put the heavy work in the `.py` file.
+In `modules/my-feature.sh`, wire the helper block from the skeleton and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put the heavy work in the `.py` file.
 
-If you are unsure whether you need Python, stay in bash until the shell version becomes hard to maintain.
+If you are unsure, stay in bash until it hurts.
 
-## Status output 
+## Status output
 
 `--status` must print two machine-readable results. Order does not matter. Extra log lines on stdout or stderr are fine.
 
-1. A **summary line** in tab-separated values (TSV) form.
-2. Exactly one **Status folds** line that starts with `ACS_SECTIONS_JSON=`.
+1. A **summary line** (TSV): badge + one sentence.
+2. Exactly one **Status folds** line: `ACS_SECTIONS_JSON=...` for the detailed Status card.
 
-If the Status folds line is missing, the Status card shows “No section details.” If the TSV summary is missing or unusable, the Modules table and the Status header have no sensible badge or message to display.
+Missing folds → Status shows “No section details.” Missing or bad TSV → no sensible badge or header message.
 
 ### Summary line (TSV)
 
-**Tab-separated values (TSV)** means the fields on the line are separated by a single tab character, not by commas or spaces.
-
-The summary line has three fields: module `id`, `state`, and a short human `message`. Below is an example:
+**TSV** means fields separated by a single tab, not commas or spaces. Three fields: module `id`, `state`, short human `message`.
 
 ```text
 my-feature	ok	short human summary
 ```
 
-Below is the same line written in bash:
-
 ```bash
 printf '%s\t%s\t%s\n' "$MODULE_ID" "ok" "short human summary"
 ```
 
-The orchestrator keeps the last line that contains at least three tab-separated fields.
+The orchestrator keeps the last line with at least three tab-separated fields.
 
 | State | Meaning |
 |-------|---------|
 | `ok` | This step is already in good shape. |
 | `needs-run` | The lab is reachable, but this step is missing or has drifted. |
-| `error` | The module cannot decide (for example, bad credentials or an API that is down). |
+| `error` | The module cannot decide (bad credentials, API down, and so on). |
 
-In the rest of this guide, **TSV summary** means that three-field tab-separated line.
-
-The TSV summary fills the badge and message in the Modules table, and the module header row in the Status card (id, state badge, and message). It does not fill the grouped folds under that header. Those folds come from Status folds.
+That line fills the Modules table badge/message and the Status module header. It does not fill the grouped folds underneath - those come from Status folds.
 
 ### Status folds (`ACS_SECTIONS_JSON`)
 
-Status folds are a small presentation language built for this project. Your module does not draw PatternFly widgets. It emits structured facts, and the GUI turns those facts into grouped, expandable rows under the module.
+Your module does not draw PatternFly widgets. It emits structured facts; the GUI turns them into grouped, expandable rows.
 
-One `--status` run therefore feeds three consumers:
+One `--status` run feeds the CLI (`acs-setup.sh --status --json`), the Modules table (TSV), and the Status card (`ACS_SECTIONS_JSON`).
 
-- the CLI result from `./scripts/acs-setup.sh --status --json`
-- the Modules table, through the TSV summary
-- the detailed Status card, through `ACS_SECTIONS_JSON`
+**Why folds exist:** a TSV line is enough for one badge and one sentence. It is not enough when a step has many independent checks. Folds are a tiny report format (`prose` or `json` bodies only) that bash can emit with `jq` (or Python with `json.dumps`). Presentation stays in the GUI.
 
-#### Why this exists
+#### How it looks
 
-Modules are mostly bash, sometimes with a thin Python helper. Authors need a format they can emit with `jq` or `json.dumps`, not a front-end SDK.
-
-A TSV summary alone is enough for one badge and one sentence. It is not enough when a module has many independent checks. Compliance Operator status routinely includes dozens of facts.
-
-Other approaches fall short here:
-
-- Putting Markdown or HTML in the TSV `message` couples modules to GUI escaping. It also gives you no reliable grouping, expand and collapse, badges, or typed JSON bodies.
-- Dumping a free-form log into Status is hard to scan.
-- Shipping a UI toolkit from each module is too heavy for shell authors and would fork the look of the product.
-- Large external schemas such as SARIF or full Kubernetes condition trees are oversized for “is this demo step ready?” and are painful to emit from bash.
-
-This repo therefore uses a narrow JSON schema on one machine line. That design keeps three properties in balance:
-
-- The schema is small enough to teach from `templates/module-skeleton.sh`.
-- It is rich enough for groups, folds, optional badges, right-hand summaries, and prose or JSON bodies.
-- Presentation stays in the GUI, and modules stay data producers.
-
-Only two body formats are supported on purpose: `prose` and `json`. Treat Status folds as a tiny report format, not as a general markup language.
-
-#### How it looks in the GUI
-
-The screenshot below shows the teaching folds from the skeleton after a Status refresh. Group headers sit on the left with an expand-all caret. Each fold is indented under its group. Optional `tag` and `tagLabel` values become colored badges. Optional `summary` text sits on the right side of the fold row.
+The screenshot below is the skeleton’s teaching folds after a Status refresh. Groups on the left with expand-all; folds indented under each group; optional badge and right-hand summary.
 
 ![Status folds from the module skeleton: four groups with indented folds, optional badges, and right-hand summaries](docs/images/status-sections-example.png)
 
-There is also an interactive field map. It uses the same Status CSS as the live GUI and labels each visible piece with the field name that produced it (`group`, `title`, `summary`, `tag`, `tagLabel`, `body`, `bodyFormat`). Open that map while you edit `emit_status_sections()`, so you can match a key in your `jq` object to the UI element it controls.
+Interactive field map (same CSS as live Status; each piece labeled with the JSON field name):
 
-After you start the GUI with `./serve.sh`, open the map in either of these ways:
-
-- In the GUI, open the **?** help menu in the masthead and choose **Status folds field map**.
-- Or open [gui/static/status-sections-map.html](gui/static/status-sections-map.html) in the browser at [http://127.0.0.1:8765/static/status-sections-map.html](http://127.0.0.1:8765/static/status-sections-map.html). If `./serve.sh` printed a different port, use that port instead.
+- GUI **?** menu → **Status folds field map**
+- Or [gui/static/status-sections-map.html](gui/static/status-sections-map.html) at [http://127.0.0.1:8765/static/status-sections-map.html](http://127.0.0.1:8765/static/status-sections-map.html) (use the port `./serve.sh` printed if different)
 
 #### Wire format
 
-Print exactly one line: the prefix `ACS_SECTIONS_JSON=` followed by compact JSON. Build the JSON with `jq` or with Python `json.dumps`. Do not hand-escape a giant string inside `printf`.
-
-Below is how you print that line:
+One line: `ACS_SECTIONS_JSON=` plus compact JSON. Build with `jq` or `json.dumps` - do not hand-escape a giant string in `printf`.
 
 ```bash
 printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
 ```
 
-Below is the root JSON object that `$sections_json` must contain:
+Root object:
 
 ```json
 { "sections": [ ]
 }
 ```
 
-Each element of `sections` is one fold. The table below lists every supported field:
+Each element of `sections` is one fold:
 
 | Field | Required? | Role in the UI |
 |-------|-----------|----------------|
-| `group` | Recommended | Heading above a batch of folds. Reuse the same string to keep items under one heading. A new string starts a new heading. The group row also gets an expand-all control for every fold in that batch. |
-| `title` | Yes | Main label on the fold row. This is the text you click to expand the fold. |
-| `summary` | No | Muted hint on the right side of the fold row. |
-| `tag` / `tagLabel` | No | Badge to the left of `title`. `tag` chooses the color: `ok` or `ready` is green, `error` or `fail` is red, and anything else is warn. `tagLabel` is the visible badge text. If you omit `tagLabel`, the GUI falls back to `tag`. |
-| `body` | Yes | Content shown when the fold is expanded. |
-| `bodyFormat` | No | `prose` (the default) renders ordinary text and turns newlines into line breaks. `json` renders a pretty-printed monospace block from an object, an array, or a JSON string. |
+| `group` | Recommended | Heading above a batch of folds. Same string = same heading. Group row gets expand-all for that batch. |
+| `title` | Yes | Main label; click to expand. |
+| `summary` | No | Muted hint on the right. |
+| `tag` / `tagLabel` | No | Badge left of `title`. `tag` sets color (`ok`/`ready` green, `error`/`fail` red, else warn). `tagLabel` is visible text (falls back to `tag`). |
+| `body` | Yes | Expanded content. |
+| `bodyFormat` | No | `prose` (default) or `json`. |
 
 #### Skeleton example
 
-The file `templates/module-skeleton.sh` includes an `emit_status_sections()` function that teaches the Status folds shape. It shows four groups: ordinary prose, multi-line prose, JSON with an ok badge, and JSON with an error badge. Copy that function into your module, then replace the sample data with real checks against the lab.
-
-Below is a short version of the same emit pattern. It is abbreviated on purpose. Open the skeleton for the complete teaching set, including the badge and JSON examples:
+Copy `emit_status_sections()` from `templates/module-skeleton.sh`, then replace the sample data. Short version:
 
 ```bash
 emit_status_sections() {
@@ -238,33 +199,75 @@ do_status() {
 }
 ```
 
-`jq` is already required by the orchestrator. Prefer `--arg` and `--argjson` for dynamic values instead of interpolating shell text into the `jq` program.
-
-For a large real-world example of the same schema, see the Compliance Operator overview emitter in `scripts/compliance_co_overview.py`.
+Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. Large real example: `scripts/compliance_co_overview.py`.
 
 ## Run, dry-run, and uninstall
 
-Keep these behaviors in mind when you implement `--run` and `--uninstall`:
+- `--run` should leave the lab in the desired state. Safe to run twice when nothing drifted.
+- `--run --dry-run` describes the plan, exits 0, changes nothing.
+- `--uninstall` removes what this module owns. Prefer cleanup that is safe when already gone.
+- If uninstall is not safe or not defined, refuse: clear message, TSV `error`, non-zero exit. Do not pretend success.
+- Orchestrator uninstall always needs `--module <id>` (no uninstall-everything CLI).
+- Hard failure: non-zero exit and a clear message on stderr.
 
-- `--run` should leave the lab in the desired state. Running it again when nothing has drifted should still succeed.
-- `--run --dry-run` should describe the plan and exit 0 without changing the cluster or Central.
-- `--uninstall` should remove what this module owns. Prefer cleanup that is safe when the resources are already gone.
-- If uninstall is not safe or not defined, refuse: print a clear message, emit a TSV summary with state `error`, and exit non-zero. Do not pretend success.
-- Orchestrator uninstall always requires `--module <id>`. There is no CLI path that uninstalls every module at once.
-- On hard failure, exit non-zero and print a clear message on stderr.
+## Credentials and auth
 
-## Credentials and ACS style
+Do not invent your own login path. The lab stores credentials in gitignored `lab-credentials.json` (edit them in the GUI). Modules should read that file through the shared libraries so every module sees the **active lab** the same way.
 
-Do not invent a second credential path:
+There are two different “doors”:
 
-- For Central, use `lib/central.py`.
-- For OpenShift, use `lib/openshift.py`. That helper reads `lab-credentials.json`; it does not use `~/.kube/config`.
+| Door | Library | What it is for |
+|------|---------|----------------|
+| **Central** (RHACS API) | `lib/central.py` | HTTP calls to Central (integrations, policies, scan schedules, …) |
+| **OpenShift** (`oc`) | `lib/openshift.py` | Cluster objects on the OpenShift the lab marked **OpenShift for modules** |
 
-If the RHACS UI configures something in Central, prefer the Central API. Avoid applying lower-level cluster objects that bypass Central when Central already owns that feature. Compliance scan schedules are the usual example.
+OpenShift modules do **not** use your interactive `~/.kube/config`.  Instead, `lib/openshift.py` logs in with the lab’s OpenShift admin fields and writes a per-lab kubeconfig under `.cache/`. In the GUI, pick which secured cluster is **OpenShift for modules** when a lab has more than one. If the lab has no secured clusters, OpenShift helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
+
+Env fallbacks (`ROX_API_TOKEN`, `ACS_CENTRAL_ENDPOINT`, and friends) only fill empty file fields. Prefer the credentials file.
+
+### Minimal OpenShift example (shell)
+
+Same pattern as `ms-demo`: ask Python for a kubeconfig path, export it, then run `oc`.
+
+```bash
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="${ROOT}/gui/.venv/bin/python"
+# or: PYTHON="$(command -v python3)"
+
+ensure_oc() {
+  local kc
+  kc="$(cd "$ROOT" && "$PYTHON" -m lib.openshift login --print-kubeconfig)" || return 1
+  export KUBECONFIG="$kc"
+}
+
+do_run() {
+  ensure_oc || return 1
+  oc get project ms-demo >/dev/null 2>&1 || oc new-project ms-demo
+  # … oc apply …
+}
+```
+
+Call `ensure_oc` in the current shell (not inside `$(...)`), or `KUBECONFIG` will not stick for later `oc` commands.
+
+### Minimal Central example (Python helper)
+
+```python
+from lib.central import central_connection, central_request, load_lab_credentials
+
+creds = load_lab_credentials()
+base, authorization = central_connection(creds)
+code, body = central_request(
+    base, authorization, "GET", "/v1/imageintegrations", creds=creds
+)
+```
+
+`central_connection` resolves console URL + `Authorization` (API token or admin password per the lab’s `authPreference`). Use that instead of reading tokens by hand.
+
+### Style tip
+
+If the RHACS UI configures something in Central, prefer the Central API. Avoid applying lower-level cluster objects that bypass Central when Central already owns that feature (compliance scan schedules are the usual example).
 
 ## Verify end-to-end
-
-The commands below exercise status, dry-run, run, uninstall dry-run, and the GUI:
 
 ```bash
 ./scripts/acs-setup.sh --status --module my-feature
@@ -274,8 +277,8 @@ The commands below exercise status, dry-run, run, uninstall dry-run, and the GUI
 ./serve.sh
 ```
 
-In the GUI you should see an enabled Modules row, a sensible Status view after refresh, and Run and Uninstall actions on the row menu. The Dry run toggle applies to both actions.
+In the GUI you should see an enabled Modules row, sensible Status after refresh, Run / Uninstall / Help on the row menu, and Dry run applying to Run and Uninstall.
 
 ## Contributing
 
-Open a pull request with the `config/modules.json` entry and `modules/<id>.sh`. Include a helper `.py` file only if you added one. There is no plugin store and no auto-discovery of scripts outside the catalog. Private experiments can use the same layout on your machine. Share them with a pull request when they are useful beyond your lab.
+Open a pull request with the `config/modules.json` entry and `modules/<id>.sh`. Include a helper `.py` only if you added one. There is no plugin store and no auto-discovery outside the catalog. Private experiments can use the same layout locally; share them with a PR when they help beyond your lab.
