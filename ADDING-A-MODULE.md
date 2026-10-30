@@ -5,7 +5,10 @@ A **module** is used to perform one setup step for the demo lab. It is a shell/P
 - **Triggers:** The module is triggered to **run** (install) or **uninstall**, both with a **dry-run** option.
 - **Output:** The module provides structured **status** info for the GUI to render.
 
-Template files are provided to start you off, and a common Python library provides a unified way to use admin credentials for the associated Central and OpenShift clusters in your lab.
+Template files ([`module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh), [`module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py)) are provided to start you off, and a common Python library ([`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py), [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py)) provides a unified way to use admin credentials for the associated Central and OpenShift clusters in your lab.
+
+You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/ms-demo.sh) module as a lightweight example.
+
 
 | Flag | What the module must do (Module Contract) |
 |------|-------------------------------------------|
@@ -23,7 +26,7 @@ The rest of this page is the recipe: catalog row, skeleton, status shape, creden
 A module shows up in the GUI and the CLI orchestrator only when both exist:
 
 1. An executable script at `modules/<id>.sh`.
-2. A matching row in `config/modules.json`.
+2. A matching row in [`config/modules.json`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/config/modules.json).
 
 The orchestrator reads the catalog, then runs `modules/<id>.sh`. A catalog row without a script still appears as **not installed** (handy as a placeholder). A script with no catalog row is invisible.
 
@@ -50,11 +53,11 @@ chmod +x "modules/${ID}.sh"
 ./scripts/acs-setup.sh --status --module "${ID}"
 ```
 
-Keep `templates/module-skeleton.sh` open while you write `emit_status_sections()`. You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/ms-demo.sh) module as a lightweight example. In the GUI, kebab **Help** shows the same text as `--help`.
+
 
 ## Catalog entry
 
-Add one object to the `modules` array in `config/modules.json`. Array order is GUI order and the default full-install order. If this module must run after another, put that module’s `id` in `dependsOn`.
+Add one object to the `modules` array in [`config/modules.json`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/config/modules.json). Array order is GUI order and the default full-install order. If this module must run after another, put that module’s `id` in `dependsOn`.
 
 ```json
 {
@@ -68,19 +71,21 @@ Add one object to the `modules` array in `config/modules.json`. Array order is G
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
 - Prefer `my-feature.sh` over `07-my-feature.sh`.
 
-## Optional Python helper
+## Python helper (required for Central)
 
-Most modules stay one shell script. Put simple `oc` checks in the `do_*` functions.
+The entrypoint is always `modules/<id>.sh`. Whether you also need a `.py` file depends on what the module talks to:
 
-Add Python when bash is a poor fit - usually Central HTTP or heavy JSON:
+- **OpenShift only** (`oc`) - shell is enough. Call `python -m lib.openshift` for login, then use `oc` (see [Credentials and auth](#credentials-and-auth) below).
+- **Central** (RHACS HTTP API) - you need a Python helper. Shared Central auth lives only in [`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py); there is no bash equivalent (see [Credentials and auth](#credentials-and-auth) below).
+- **Heavy JSON** in bash - a helper is also a good idea even without Central.
+
+Copy the helper template when you need one:
 
 ```bash
 cp templates/module-helper.py modules/my_feature.py
 ```
 
-In `modules/my-feature.sh`, wire the helper block from the skeleton and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put the heavy work in the `.py` file.
-
-If you are unsure, stay in bash until it hurts.
+In `modules/my-feature.sh`, wire the helper block from the [skeleton](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh) and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put Central / heavy work in the `.py` file.
 
 ## Status output
 
@@ -117,7 +122,7 @@ That line fills the Modules table badge/message and the Status module header. It
 
 Your module does not draw PatternFly widgets. It emits structured facts; the GUI turns them into grouped, expandable rows.
 
-One `--status` run feeds the CLI (`acs-setup.sh --status --json`), the Modules table (TSV), and the Status card (`ACS_SECTIONS_JSON`).
+One `--status` run feeds the CLI ([`scripts/acs-setup.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/scripts/acs-setup.sh) `--status --json`), the Modules table (TSV), and the Status card (`ACS_SECTIONS_JSON`).
 
 **Why folds exist:** a TSV line is enough for one badge and one sentence. It is not enough when a step has many independent checks. Folds are a tiny report format (`prose` or `json` bodies only) that bash can emit with `jq` (or Python with `json.dumps`). Presentation stays in the GUI.
 
@@ -160,7 +165,7 @@ Each element of `sections` is one fold:
 
 #### Skeleton example
 
-Copy `emit_status_sections()` from `templates/module-skeleton.sh`, then replace the sample data. Short version:
+Copy `emit_status_sections()` from [`templates/module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh), then replace the sample data. Short version:
 
 ```bash
 emit_status_sections() {
@@ -199,7 +204,7 @@ do_status() {
 }
 ```
 
-Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. Large real example: `scripts/compliance_co_overview.py`.
+Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. Large real example: [`scripts/compliance_co_overview.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/scripts/compliance_co_overview.py).
 
 ## Run, dry-run, and uninstall
 
@@ -212,22 +217,22 @@ Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. 
 
 ## Credentials and auth
 
-Do not invent your own login path. The lab stores credentials in gitignored `lab-credentials.json` (edit them in the GUI). Modules should read that file through the shared libraries so every module sees the **active lab** the same way.
+Do not invent your own login path. The lab stores credentials in gitignored `lab-credentials.json` (edit them in the GUI; shape in [`config/lab-credentials.example.json`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/config/lab-credentials.example.json)). Modules should read that file through the shared libraries so every module sees the **active lab** the same way.
 
 There are two different “doors”:
 
 | Door | Library | What it is for |
 |------|---------|----------------|
-| **Central** (RHACS API) | `lib/central.py` | HTTP calls to Central (integrations, policies, scan schedules, …) |
-| **OpenShift** (`oc`) | `lib/openshift.py` | Cluster objects on the OpenShift the lab marked **OpenShift for modules** |
+| **Central** (RHACS API) | [`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py) | HTTP calls to Central (integrations, policies, scan schedules, …). **Requires a Python helper** from your module. |
+| **OpenShift** (`oc`) | [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) | Cluster objects on the OpenShift the lab marked **OpenShift for modules**. Shell can call `python -m lib.openshift`, then use `oc`. |
 
-OpenShift modules do **not** use your interactive `~/.kube/config`.  Instead, `lib/openshift.py` logs in with the lab’s OpenShift admin fields and writes a per-lab kubeconfig under `.cache/`. In the GUI, pick which secured cluster is **OpenShift for modules** when a lab has more than one. If the lab has no secured clusters, OpenShift helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
+OpenShift modules do **not** use your interactive `~/.kube/config`. Instead, [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) logs in with the lab’s OpenShift admin fields and writes a per-lab kubeconfig under `.cache/`. In the GUI, pick which secured cluster is **OpenShift for modules** when a lab has more than one. If the lab has no secured clusters, OpenShift helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
 
 Env fallbacks (`ROX_API_TOKEN`, `ACS_CENTRAL_ENDPOINT`, and friends) only fill empty file fields. Prefer the credentials file.
 
 ### Minimal OpenShift example (shell)
 
-Same pattern as `ms-demo`: ask Python for a kubeconfig path, export it, then run `oc`.
+Ask Python for a kubeconfig path, export it, then run `oc`:
 
 ```bash
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -263,9 +268,11 @@ code, body = central_request(
 
 `central_connection` resolves console URL + `Authorization` (API token or admin password per the lab’s `authPreference`). Use that instead of reading tokens by hand.
 
+**Bottom line:** a module that works on Central practically must ship a `.py` helper and call it from `modules/<id>.sh`. Copy [`templates/module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py) and wire it as in [Python helper (required for Central)](#python-helper-required-for-central).
+
 ### Style tip
 
-If the RHACS UI configures something in Central, prefer the Central API. Avoid applying lower-level cluster objects that bypass Central when Central already owns that feature (compliance scan schedules are the usual example).
+If the RHACS UI configures something in Central, prefer the Central API. Avoid applying lower-level cluster objects that bypass Central when Central already owns that feature (compliance scan schedules are a good example).
 
 ## Verify end-to-end
 
