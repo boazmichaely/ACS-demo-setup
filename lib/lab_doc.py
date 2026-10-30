@@ -157,8 +157,12 @@ def normalize_document(raw: dict[str, Any] | None) -> dict[str, Any]:
             elif not clusters:
                 lab["securedClusters"] = []
                 lab["activeSecuredClusterId"] = ""
-            elif not lab.get("activeSecuredClusterId"):
-                lab["activeSecuredClusterId"] = clusters[0].get("id") or ""
+            else:
+                aid = (lab.get("activeSecuredClusterId") or "").strip()
+                ids = {c.get("id") for c in clusters if c.get("id")}
+                if not aid or aid not in ids:
+                    # Missing or stale id: pick first row (create/repair only).
+                    lab["activeSecuredClusterId"] = clusters[0].get("id") or ""
             if "insecureSkipTlsVerify" not in lab and "insecureSkipTlsVerify" in raw:
                 lab["insecureSkipTlsVerify"] = bool(raw.get("insecureSkipTlsVerify"))
         return doc
@@ -200,25 +204,32 @@ def active_lab(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def preferred_secured_cluster(lab: dict[str, Any]) -> dict[str, Any]:
-    """OpenShift creds for module ``oc``: prefer same-as-Central, else first SC.
+    """OpenShift creds for module ``oc`` from the user-selected secured cluster.
 
-    Secured-cluster rows are primarily stored for control-plane access; there is
-    no UI “active SC” selector. ``activeSecuredClusterId`` is kept for schema
-    compatibility and used only when it still matches a row.
+    Uses ``activeSecuredClusterId`` only when the lab has securedClusters.
+    Empty securedClusters → Central OpenShift (Central-only lab).
+    Missing or unknown id → RuntimeError (no silent first-row / same-as-Central pick).
     """
     clusters = lab.get("securedClusters") or []
     if not clusters:
         # Central-only lab: modules that need oc fall back to Central OpenShift.
         return empty_secured_cluster(name="", same_as_central=True)
-    aid = lab.get("activeSecuredClusterId")
-    if aid:
-        for sc in clusters:
-            if sc.get("id") == aid:
-                return sc
+    aid = (lab.get("activeSecuredClusterId") or "").strip()
+    if not aid:
+        raise RuntimeError(
+            "lab has secured clusters but activeSecuredClusterId is unset; "
+            "pick “OpenShift for modules” in Lab credentials"
+        )
     for sc in clusters:
-        if sc.get("sameAsCentralCluster", True):
+        if sc.get("id") == aid:
             return sc
-    return clusters[0]
+    names = ", ".join(
+        f"{c.get('name') or c.get('id')}" for c in clusters
+    ) or "(none)"
+    raise RuntimeError(
+        f"activeSecuredClusterId {aid!r} is not in securedClusters ({names}); "
+        "pick “OpenShift for modules” in Lab credentials"
+    )
 
 
 def active_secured_cluster(lab: dict[str, Any]) -> dict[str, Any]:

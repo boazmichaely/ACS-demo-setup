@@ -107,6 +107,13 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _catalog_module_ids() -> set[str]:
+    if not MODULES_JSON.is_file():
+        return set()
+    data = json.loads(MODULES_JSON.read_text(encoding="utf-8"))
+    return {(m.get("id") or "").strip() for m in data.get("modules", []) if m.get("id")}
+
+
 @app.get("/api/modules")
 def list_modules() -> list[dict]:
     if not MODULES_JSON.is_file():
@@ -122,6 +129,32 @@ def list_modules() -> list[dict]:
         entry["scriptInstalled"] = script.is_file() and os.access(script, os.X_OK)
         modules.append(entry)
     return modules
+
+
+@app.get("/api/modules/{module_id}/help")
+def module_help(module_id: str) -> dict[str, str]:
+    """Return ``modules/<id>.sh --help`` text for the kebab Help action."""
+    mid = (module_id or "").strip()
+    if mid not in _catalog_module_ids():
+        raise HTTPException(status_code=404, detail=f"unknown module: {mid}")
+    script = REPO_ROOT / "modules" / f"{mid}.sh"
+    if not script.is_file() or not os.access(script, os.X_OK):
+        raise HTTPException(status_code=404, detail=f"module script not installed: {mid}")
+    result = subprocess.run(
+        [str(script), "--help"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=subprocess_env(),
+    )
+    text = (result.stdout or "").strip() or (result.stderr or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=500,
+            detail=f"{mid} --help produced no output (exit {result.returncode})",
+        )
+    return {"id": mid, "text": text}
 
 
 @app.get("/api/status")

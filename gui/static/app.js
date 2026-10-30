@@ -354,6 +354,15 @@ function bindSelectableSummaries(root) {
   });
 }
 
+function linkifyProseHtml(escaped) {
+  // escaped is already HTML-escaped; only turn http(s) URLs into anchors.
+  return escaped.replace(
+    /https?:\/\/[^\s<]+/g,
+    (url) =>
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
+}
+
 function renderSectionBody(item) {
   const format = item.bodyFormat || "prose";
   const body = item.body ?? "";
@@ -364,7 +373,8 @@ function renderSectionBody(item) {
   }
 
   const text = typeof body === "string" ? body : String(body ?? "");
-  return `<div class="demo-sec__body">${escapeHtml(text).replace(/\n/g, "<br>")}</div>`;
+  const withBreaks = linkifyProseHtml(escapeHtml(text)).replace(/\n/g, "<br>");
+  return `<div class="demo-sec__body">${withBreaks}</div>`;
 }
 
 function sectionExpandKey(moduleId, index, title) {
@@ -577,6 +587,7 @@ function moduleActionsCellHtml(m) {
       <ul class="demo-mod__menu" hidden>
         <li><button type="button" class="js-mod-menu-run" data-module-id="${id}">Run</button></li>
         <li><button type="button" class="js-mod-menu-uninstall is-danger" data-module-id="${id}">Uninstall</button></li>
+        <li><button type="button" class="js-mod-menu-help" data-module-id="${id}">Help</button></li>
       </ul>
     </div>
   </td>`;
@@ -649,10 +660,193 @@ function bindModuleMenus() {
       runModule(id, { uninstall: true, dryRun: dry }).catch((err) =>
         log(`\n${err.message}\n`)
       );
+      return;
+    }
+
+    const helpBtn = e.target.closest(".js-mod-menu-help");
+    if (helpBtn && modulesTbody.contains(helpBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAllModuleMenus();
+      showModuleHelp(helpBtn.dataset.moduleId).catch((err) =>
+        log(`\n${err.message}\n`)
+      );
     }
   });
 
   document.addEventListener("click", () => closeAllModuleMenus());
+}
+
+/** Split module --help text into Usage / Purpose / … blocks (contract shape). */
+function parseModuleHelp(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const blocks = [];
+  let title = null;
+  let buf = [];
+  const flush = () => {
+    const body = buf.join("\n").replace(/^\n+|\n+$/g, "");
+    if (title !== null || body) blocks.push({ title, body });
+    title = null;
+    buf = [];
+  };
+  for (const line of lines) {
+    const usageInline = line.match(/^Usage:\s*(.*)$/);
+    if (usageInline && title === null && buf.length === 0) {
+      title = "Usage";
+      if (usageInline[1]) buf.push(usageInline[1]);
+      continue;
+    }
+    const header = line.match(/^([A-Za-z][A-Za-z0-9 /.+_-]{0,40}):\s*$/);
+    if (header) {
+      flush();
+      title = header[1];
+      continue;
+    }
+    buf.push(line);
+  }
+  flush();
+  return blocks;
+}
+
+function dedentHelpBody(body) {
+  const lines = String(body || "").split("\n");
+  const indents = lines
+    .filter((l) => l.trim())
+    .map((l) => (l.match(/^ */) || [""])[0].length);
+  const n = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l) => l.slice(n)).join("\n");
+}
+
+function helpProseHtml(body) {
+  const dedented = dedentHelpBody(body);
+  const paras = dedented
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/^\n+|\n+$/g, ""))
+    .filter(Boolean);
+  if (!paras.length) {
+    return `<p class="demo-mod-help__prose">${linkifyProseHtml(escapeHtml(dedented || ""))}</p>`;
+  }
+  return paras
+    .map((p) => {
+      const html = linkifyProseHtml(escapeHtml(p)).replace(/\n/g, " ");
+      return `<p class="demo-mod-help__prose">${html}</p>`;
+    })
+    .join("");
+}
+
+function helpListHtml(body) {
+  const lines = String(body || "").split("\n");
+  const nonempty = lines.filter((l) => l.trim());
+  const bulletish =
+    nonempty.length > 0 && nonempty.every((l) => /^\s*[-*]/.test(l));
+  if (!bulletish) return helpProseHtml(body);
+  const items = nonempty.map((l) => l.replace(/^\s*[-*]\s+/, "").trim());
+  const lis = items
+    .map((item) => `<li>${linkifyProseHtml(escapeHtml(item))}</li>`)
+    .join("");
+  return `<ul class="demo-mod-help__list">${lis}</ul>`;
+}
+
+function helpEnvHtml(body) {
+  // Terminal help often uses padded columns + wrapped continuation lines.
+  // Stack name + description; do not keep a 2-column grid (long names / wraps break it).
+  const rows = [];
+  for (const line of String(body || "").split("\n")) {
+    if (!line.trim()) continue;
+    const start = line.match(
+      /^\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s{2,}|\s+)?(.*)$/
+    );
+    const looksLikeVar = start && /^[A-Z][A-Z0-9_]*$/.test(start[1]);
+    if (looksLikeVar) {
+      rows.push({ key: start[1], val: (start[2] || "").trim() });
+      continue;
+    }
+    if (rows.length) {
+      const bit = line.trim();
+      rows[rows.length - 1].val = rows[rows.length - 1].val
+        ? `${rows[rows.length - 1].val} ${bit}`
+        : bit;
+    }
+  }
+  if (!rows.length) return helpProseHtml(body);
+  return `<div class="demo-mod-help__env">${rows
+    .map((r) => {
+      const desc = r.val
+        ? `<div class="demo-mod-help__env-desc">${linkifyProseHtml(escapeHtml(r.val))}</div>`
+        : "";
+      return `<div class="demo-mod-help__env-item"><div class="demo-mod-help__env-name">${escapeHtml(
+        r.key
+      )}</div>${desc}</div>`;
+    })
+    .join("")}</div>`;
+}
+
+function renderModuleHelpHtml(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return `<p class="demo-mod-help__prose">(empty help)</p>`;
+  const blocks = parseModuleHelp(raw);
+  const hasHeaders = blocks.some((b) => b.title);
+  if (!hasHeaders) {
+    return `<pre class="demo-mod-help__fallback">${escapeHtml(raw)}</pre>`;
+  }
+  return blocks
+    .map((block) => {
+      const title = block.title || "Notes";
+      const key = title.toLowerCase();
+      let content;
+      if (key === "usage") {
+        const usageBody = block.body.startsWith("Usage:")
+          ? block.body
+          : `Usage: ${block.body}`;
+        content = `<pre class="demo-mod-help__usage">${escapeHtml(usageBody)}</pre>`;
+      } else if (key === "environment") {
+        content = helpEnvHtml(block.body);
+      } else if (key === "depends on") {
+        content = helpListHtml(block.body);
+      } else {
+        content = helpProseHtml(block.body);
+      }
+      return `<section class="demo-mod-help__section">
+        <h3 class="demo-mod-help__section-title">${escapeHtml(title)}</h3>
+        ${content}
+      </section>`;
+    })
+    .join("");
+}
+
+async function showModuleHelp(moduleId) {
+  if (!moduleId) return;
+  const dialog = document.getElementById("moduleHelpDialog");
+  const titleEl = document.getElementById("moduleHelpTitle");
+  const bodyEl = document.getElementById("moduleHelpBody");
+  if (!dialog || !bodyEl) {
+    throw new Error("Module help dialog missing from page");
+  }
+  if (titleEl) titleEl.textContent = `${moduleId} - help`;
+  bodyEl.innerHTML = `<p class="demo-mod-help__loading">Loading…</p>`;
+  if (typeof dialog.showModal === "function") {
+    dialog.showModal();
+  } else {
+    dialog.setAttribute("open", "");
+  }
+  const data = await api(`/api/modules/${encodeURIComponent(moduleId)}/help`);
+  bodyEl.innerHTML = renderModuleHelpHtml(data.text || "");
+}
+
+function setupModuleHelpDialog() {
+  const dialog = document.getElementById("moduleHelpDialog");
+  const closeBtn = document.getElementById("moduleHelpClose");
+  if (!dialog) return;
+  closeBtn?.addEventListener("click", () => {
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
+  });
+  dialog.addEventListener("click", (e) => {
+    if (e.target === dialog) {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    }
+  });
 }
 
 function missingDeps(moduleId) {
@@ -1332,10 +1526,24 @@ function scSubLabel(sc) {
   return hostOnly(sc.openshift?.consoleUrl) || "needs OCP login";
 }
 
-function preferredScId(clusters) {
+/** First cluster id only - used when creating/repairing, never as a silent same-as-Central heuristic. */
+function firstScId(clusters) {
+  return (clusters || [])[0]?.id || "";
+}
+
+/** User-selected OpenShift-for-modules id from the radio, else lab value if still valid, else first. */
+function readActiveScIdFromDom(clusters) {
   const list = clusters || [];
-  const same = list.find((sc) => sc.sameAsCentralCluster !== false);
-  return (same || list[0] || {}).id || "";
+  const checked = securedClusterList?.querySelector(".js-sc-active:checked");
+  if (checked) {
+    const row = checked.closest(".demo-sc-row");
+    const id = row?.dataset.scId || "";
+    if (id && list.some((c) => c.id === id)) return id;
+  }
+  const lab = editingLab();
+  const prev = lab?.activeSecuredClusterId || "";
+  if (prev && list.some((c) => c.id === prev)) return prev;
+  return firstScId(list);
 }
 
 function readSecuredClustersFromDom() {
@@ -1428,9 +1636,22 @@ function scSameBodyHtml() {
     <p class="demo-sc-hint" style="margin:0">Uses Central OpenShift console/user/password.</p>`;
 }
 
+function scActiveRadioHtml(scId, activeId) {
+  const checked = scId && scId === activeId ? " checked" : "";
+  return `<label class="pf-v6-c-radio demo-sc-active">
+      <input class="pf-v6-c-radio__input js-sc-active" type="radio" name="sc-active-for-modules" value="${escapeHtml(scId)}"${checked} />
+      <span class="pf-v6-c-radio__label">OpenShift for modules</span>
+    </label>`;
+}
+
 function renderSecuredClusters(lab) {
   if (!securedClusterList) return;
   const clusters = lab.securedClusters || [];
+  const activeId =
+    (lab.activeSecuredClusterId &&
+      clusters.some((c) => c.id === lab.activeSecuredClusterId) &&
+      lab.activeSecuredClusterId) ||
+    firstScId(clusters);
 
   if (!clusters.length) {
     securedClusterList.innerHTML =
@@ -1445,11 +1666,18 @@ function renderSecuredClusters(lab) {
       const ocp = sc.openshift || emptyOpenshift();
       const badgeClass = same ? "pf-m-blue" : "pf-m-grey";
       const badgeText = same ? "Same as Central" : "Remote OCP";
-      const body = same ? scSameBodyHtml() : scRemoteBodyHtml(sc, ocp);
+      const isActive = sc.id === activeId;
+      const modulesBadge = isActive
+        ? `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge"><span class="pf-v6-c-label__content">OpenShift for modules</span></span>`
+        : `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge" hidden><span class="pf-v6-c-label__content">OpenShift for modules</span></span>`;
+      const body = `${scActiveRadioHtml(sc.id, activeId)}${
+        same ? scSameBodyHtml() : scRemoteBodyHtml(sc, ocp)
+      }`;
       return `<details class="demo-sc-row" data-sc-id="${escapeHtml(sc.id)}">
         <summary class="demo-sc-row__summary">
           <span class="demo-sc-row__name js-sc-title">${escapeHtml(sc.name || "secured")}</span>
           <span class="pf-v6-c-label pf-m-compact ${badgeClass} js-sc-badge"><span class="pf-v6-c-label__content">${badgeText}</span></span>
+          ${modulesBadge}
           <span class="demo-sc-row__hint js-sc-sub">${escapeHtml(scSubLabel(sc))}</span>
           <button type="button" class="pf-v6-c-button pf-m-link pf-m-danger pf-m-inline js-sc-remove"
             title="Remove secured cluster">Remove</button>
@@ -1463,7 +1691,7 @@ function renderSecuredClusters(lab) {
     bindSecuredClusterRow(row);
   });
 
-  updateFoldMetas(lab);
+  updateFoldMetas({ ...lab, activeSecuredClusterId: activeId });
   setupCredentialCopyButtons();
 }
 
@@ -1491,9 +1719,18 @@ function refreshScRowChrome(row) {
   const lab = editingLab();
   if (lab) {
     lab.securedClusters = readSecuredClustersFromDom();
-    lab.activeSecuredClusterId = preferredScId(lab.securedClusters);
+    lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
+    syncScModulesBadges(lab.activeSecuredClusterId);
     updateFoldMetas(lab);
   }
+}
+
+function syncScModulesBadges(activeId) {
+  securedClusterList?.querySelectorAll(".demo-sc-row").forEach((row) => {
+    const badge = row.querySelector(".js-sc-modules-badge");
+    if (!badge) return;
+    badge.hidden = row.dataset.scId !== activeId;
+  });
 }
 
 function wireScRowBodyControls(row) {
@@ -1501,6 +1738,18 @@ function wireScRowBodyControls(row) {
   sameCb?.addEventListener("change", () => applyScSameToggle(row));
   row.querySelector(".js-sc-name")?.addEventListener("input", () => refreshScRowChrome(row));
   row.querySelector(".js-sc-console")?.addEventListener("input", () => refreshScRowChrome(row));
+  row.querySelector(".js-sc-active")?.addEventListener("change", () => {
+    const clusters = readSecuredClustersFromDom();
+    const activeId = readActiveScIdFromDom(clusters);
+    const lab = editingLab();
+    if (lab) {
+      lab.securedClusters = clusters;
+      lab.activeSecuredClusterId = activeId;
+      updateFoldMetas(lab);
+    }
+    syncScModulesBadges(activeId);
+    syncCredCancelButton();
+  });
 }
 
 function applyScSameToggle(row) {
@@ -1518,9 +1767,10 @@ function applyScSameToggle(row) {
     adminPassword: row.querySelector(".js-sc-password")?.value || "",
   };
 
-  body.innerHTML = same
-    ? scSameBodyHtml()
-    : scRemoteBodyHtml({ name }, ocp);
+  const activeId = readActiveScIdFromDom(readSecuredClustersFromDom());
+  body.innerHTML = `${scActiveRadioHtml(row.dataset.scId || "", activeId)}${
+    same ? scSameBodyHtml() : scRemoteBodyHtml({ name }, ocp)
+  }`;
 
   row.open = true;
   wireScRowBodyControls(row);
@@ -1537,11 +1787,17 @@ function bindSecuredClusterRow(row) {
     row.remove();
     const remaining = readSecuredClustersFromDom();
     const lab = editingLab();
+    let activeId = lab?.activeSecuredClusterId || "";
+    if (!remaining.some((c) => c.id === activeId)) {
+      activeId = firstScId(remaining);
+    }
     updateFoldMetas({
       ...(lab || {}),
       securedClusters: remaining,
-      activeSecuredClusterId: preferredScId(remaining),
+      activeSecuredClusterId: activeId,
     });
+    if (lab) lab.activeSecuredClusterId = activeId;
+    syncScModulesBadges(activeId);
     if (!remaining.length && securedClusterList) {
       securedClusterList.innerHTML =
         '<p class="demo-sc-empty">No secured clusters. Add one when a module needs sensor-side OpenShift.</p>';
@@ -1663,7 +1919,7 @@ function fillEditingLabForm() {
 function buildCredentialsPayload() {
   const lab = editingLab() || emptyLab();
   const scRows = readSecuredClustersFromDom();
-  const activeSc = preferredScId(scRows) || lab.activeSecuredClusterId;
+  const activeSc = readActiveScIdFromDom(scRows);
 
   const updatedLab = {
     id: lab.id,
@@ -1972,11 +2228,17 @@ function addSecuredCluster() {
   const current = readSecuredClustersFromDom();
   const sc = emptySecuredCluster(`secured-${current.length + 1}`);
   sc.sameAsCentralCluster = false;
+  const next = [...current, sc];
+  // Keep existing OpenShift-for-modules choice; only default when none yet.
+  let activeId = lab.activeSecuredClusterId || "";
+  if (!current.some((c) => c.id === activeId)) {
+    activeId = firstScId(next);
+  }
   // Draft in DOM only; Save writes it. Avoid mutating credDoc so dirty tracking works.
   const draft = {
     ...lab,
-    securedClusters: [...current, sc],
-    activeSecuredClusterId: preferredScId([...current, sc]),
+    securedClusters: next,
+    activeSecuredClusterId: activeId,
   };
   renderSecuredClusters(draft);
   const row = securedClusterList?.querySelector(`[data-sc-id="${CSS.escape(sc.id)}"]`);
@@ -2011,6 +2273,7 @@ function refreshFoldMetasFromForm() {
     },
   };
   lab.securedClusters = readSecuredClustersFromDom();
+  lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
   updateFoldMetas(lab);
 }
 
@@ -2091,6 +2354,7 @@ modSelectAll.addEventListener("change", () => applySelectAll(modSelectAll.checke
 
 setupExpandAll();
 setupHelpMenu();
+setupModuleHelpDialog();
 syncDryRunToggleUi();
 
 async function markPageLoadInDiskLog() {

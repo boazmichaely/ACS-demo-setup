@@ -51,7 +51,7 @@ Useful when you are not in the browser:
 | `templates/module-helper.py` | Optional Python helper template (Central / heavy JSON) |
 | `lib/` | Shared helpers for Central API and OpenShift login |
 
-Today, `registries` and `compliance-operator` have real scripts. Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
+Today, `registries`, `compliance-operator`, and `ms-demo` have real scripts (`ms-demo` is the minimal shell example). Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
 
 ## Adding a module
 

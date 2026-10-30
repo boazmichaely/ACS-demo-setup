@@ -1,15 +1,20 @@
-# How to add a module
+# What is a module
 
-A **module** is one setup step for the demo lab. Examples include configuring registry integrations and installing the Compliance Operator. The web GUI and the command-line orchestrator (`scripts/acs-setup.sh`) both call the same module scripts with the same flags.
+A **module** is used to perform one setup step for the demo lab. It is a shell/python program that can do anything you like. The GUI acts as an orchestrator and renderer that talks to modules using the hooks listed below.   
 
-| Flag | What the module must do |
-|------|-------------------------|
-| `--help` | Explain the purpose of the module, what it depends on, which environment variables it needs, and what `--run` and `--uninstall` change. |
-| `--status` | Report whether this step is already done. Print both a short summary line and detailed Status folds (described later). Both outputs are required. |
-| `--run` | Apply the step. Running it again when nothing has drifted must still succeed. |
-| `--run --dry-run` | Describe what `--run` would change, without changing the cluster or Central. |
-| `--uninstall` | Remove what this module created, or refuse with a clear error. |
-| `--uninstall --dry-run` | Describe what `--uninstall` would remove, or refuse the same way. |
+- **Triggers**: The module is triggered to **run** (install) or **uninstall**, both with a **dry-run** option. 
+- **Output**: The module provides structured **status** info for the GUI to render.
+
+Template files are provided to start you off., and a common python library provides a unified way to use admin credentials to the associated Central and OpenShift clusters in your lab. 
+
+| Flag                    | What the module must do (Module Contract)                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--help`                | Explain the purpose of the module, what it depends on, which environment variables it needs, and what `--run` and `--uninstall` change.           |
+| `--status`              | Report whether this step is already done. Print both a short summary line and detailed Status folds (described later). Both outputs are required. |
+| `--run`                 | Apply the step. Running it again when nothing has drifted must still succeed.                                                                     |
+| `--run --dry-run`       | Describe what `--run` would change, without changing the cluster or Central.                                                                      |
+| `--uninstall`           | Remove what this module created, or refuse with a clear error.                                                                                    |
+| `--uninstall --dry-run` | Describe what `--uninstall` would remove, or refuse the same way.                                                                                 |
 
 ## What you must create
 
@@ -81,7 +86,7 @@ In `modules/my-feature.sh`, uncomment the “Optional: call a Python helper” b
 
 If you are unsure whether you need Python, stay in bash until the shell version becomes hard to maintain.
 
-## Status output (required)
+## Status output 
 
 `--status` must print two machine-readable results. Order does not matter. Extra log lines on stdout or stderr are fine.
 

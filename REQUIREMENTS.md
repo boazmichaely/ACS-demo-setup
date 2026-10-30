@@ -63,7 +63,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password | OCP admin fields optional when the user relies on `oc login` |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true`; modules use `activeSecuredClusterId` only |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true`; **`activeSecuredClusterId` is user-selected** (GUI: OpenShift for modules) and is the OpenShift target for module `oc` work. Empty `securedClusters` → Central OpenShift |
 
 Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
