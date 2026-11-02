@@ -1,6 +1,5 @@
 {
   "modules": [
-    
     {
       "id": "registries",
       "label": "Configure ACS image integrations",
@@ -18,28 +17,37 @@
     },
     {
       "id": "init-demo",
-      "label": "Init Containers app (project init-demo)",
+      "label": "Init-container Clean/Dirty/Blue/Red (acs-init-container-test)",
       "dependsOn": []
     },
     {
-      "id": "ocp-users",
-      "label": "HTPasswd, IdP, and RBAC",
-      "dependsOn": []
+      "id": "users-part1-ocp",
+      "label": "Users Part 1 (OCP)",
+      "dependsOn": [
+        "ms-demo",
+        "init-demo"
+      ]
     },
     {
-      "id": "ocp-OAuth",
-      "label": "Central OpenShift login",
-      "dependsOn": []
+      "id": "users-part2-oauth",
+      "label": "Users Part 2 (OAuth)",
+      "dependsOn": [
+        "users-part1-ocp"
+      ]
     },
     {
-      "id": "acs-users",
-      "label": "Scopes, roles, and rules",
-      "dependsOn": ["ocp-OAuth"]
+      "id": "users-part3-acs",
+      "label": "Users Part 3 (ACS)",
+      "dependsOn": [
+        "users-part2-oauth"
+      ]
     },
     {
       "id": "slack-notifier",
       "label": "Central Slack integration",
-      "dependsOn": ["roxctl-env"]
+      "dependsOn": [
+        "roxctl-env"
+      ]
     },
     {
       "id": "splunk",

@@ -245,35 +245,41 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ---
 
-### M4 — `init-demo` (Init Containers sample)
+### M4 — `init-demo` (Init-container Clean/Dirty/Blue/Red)
 
-**Purpose:** Deploy the Init Containers demo app in project `init-demo`.
-
-**Depends on:** none
-
-**Status / run / acceptance:** Same pattern as M3 for project `init-demo`
-
----
-
-### M5 — `ocp-users` (OpenShift demo users)
-
-**Purpose:** Regenerate HTPasswd-backed users, Identity Provider, and RBAC needed for OpenShift login demos.
+**Purpose:** Install the [ACS-init-container-test](https://github.com/boazmichaely/ACS-init-container-test) demo: four Deployments (`clean-app`, `dirty-app`, `blue-app`, `red-app`) in OpenShift project `acs-init-container-test`, plus three namespace-scoped Central `DEMO-Init-Test` policies from upstream. Shows Central scanning and policy evaluation on init containers.
 
 **Depends on:** none
 
-**Status must verify:** IdP, users, and bindings match demo spec
+**Status must verify:** Project exists; all four Deployments present; `clean-app`/`dirty-app` ready (`blue-app`/`red-app` may stay `0/1` without privileged SCC - expected); three `DEMO-Init-Test: …` policies present; Status folds list active namespace violations (informational).
 
-**Run must do:** Apply/regenerate HTPasswd secret, OAuth IdP, roles/bindings per demo spec
+**Run must do:** Create project if needed; apply four upstream manifests from GitHub; wait for clean/dirty; upsert the three DEMO-named policies via Central API.
 
-**Acceptance:** Documented demo users can log in to OpenShift
+**Uninstall must do:** Delete the three DEMO policies; delete project `acs-init-container-test` and wait until gone.
+
+**Acceptance:** `--status` is `ok` when workloads (with clean/dirty ready) and DEMO policies are present; drift if project or policies are removed.
 
 ---
 
-### M6 — `ocp-OAuth` (Central OpenShift login)
+### M5 — `users-part1-ocp` — Users Part 1 (OCP)
+
+**Purpose:** Lead-in for the ACS console plugin visibility demo: HTPasswd users (adam/boaz/chris), IdP, and OpenShift project RBAC. Full walkthrough lives in `modules/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed.
+
+**Depends on:** `ms-demo`, `init-demo` (catalog) so app projects exist for boaz/chris RBAC
+
+**Status must verify:** IdP, users, and bindings match demo spec; Demo fold shows the walkthrough; Credentials fold lists fixed lab passwords
+
+**Run must do:** Apply/regenerate HTPasswd secret, OAuth IdP `lab_htpasswd`, roles/bindings (adam cluster-admin; boaz admin on `ms-demo`; chris admin on `ms-demo` + `acs-init-container-test`)
+
+**Acceptance:** Documented demo users can log in to OpenShift; personas match the demo script
+
+---
+
+### M6 — `users-part2-oauth` — Users Part 2 (OAuth)
 
 **Purpose:** Configure Central to use OpenShift as an identity provider for UI login demos.
 
-**Depends on:** none (may assume M5 users exist for end-to-end login)
+**Depends on:** `users-part1-ocp` (catalog; end-to-end login needs M5 users)
 
 **Status must verify:** Central auth provider configured for OpenShift OAuth
 
@@ -283,17 +289,19 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ---
 
-### M7 — `acs-users` (Central RBAC for demo users)
+### M7 — `users-part3-acs` — Users Part 3 (ACS)
 
 **Purpose:** Create ACS access scopes, roles, and permission sets for demo personas.
 
-**Depends on:** `ocp-OAuth`
+**Depends on:** `users-part2-oauth`
 
 **Status must verify:** Expected roles/scopes exist and map to demo users
 
 **Run must do:** Idempotent Central API configuration
 
 **Acceptance:** Demo user sees expected ACS access after OpenShift login
+
+**When implementing:** Update `modules/users-part1-ocp-demo.md` Phase 2 with the concrete ACS role/scope names for adam/boaz/chris (todo: update demo script).
 
 ---
 
