@@ -26,6 +26,8 @@ Purpose:
   Configure Central image registry integrations needed for vulnerability scanning:
     - Public Quay.io (robot credentials from pull-secret quay.io)
     - registry.redhat.io (docker registry from pull-secret)
+    - Public Google Artifact Registry us-central1-docker.pkg.dev (anonymous;
+      needed so ms-demo Online Boutique images can be scanned)
 
 Depends on:
   - lab-credentials.json Central API token and/or admin password (or ROX_API_TOKEN)

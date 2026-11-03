@@ -51,7 +51,7 @@ Useful when you are not in the browser:
 | `templates/module-helper.py` | Python helper template (required for Central; also useful for heavy JSON) |
 | `lib/` | Shared helpers for Central API and OpenShift login |
 
-Today, `registries`, `compliance-operator`, `ms-demo`, `init-demo`, `users-part1-ocp`, and `users-part2-oauth` have real scripts (`ms-demo` is the minimal shell example; `init-demo` installs the [ACS-init-container-test](https://github.com/boazmichaely/ACS-init-container-test) Clean/Dirty/Blue/Red workloads plus `DEMO-Init-Test` Central policies; `users-part1-ocp` / `users-part2-oauth` are Users Part 1-2 for the ACS console plugin demo). Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
+Today, `registries`, `compliance-operator`, `virt-vm-demo`, `ms-demo`, `init-demo`, `users-part1-ocp`, `users-part2-oauth`, and `users-part3-acs` have real scripts (`virt-vm-demo` installs OpenShift Virtualization with KVM emulation, two dnf-primed RHEL guests, and the ACS `roxagent` for the guest CVE talk track in `modules/virt-vm-demo.md`; `ms-demo` is the minimal shell example; `init-demo` installs the [ACS-init-container-test](https://github.com/boazmichaely/ACS-init-container-test) Clean/Dirty/Blue/Red workloads plus `DEMO-Init-Test` Central policies; `users-part1-ocp` / `users-part2-oauth` / `users-part3-acs` are Users Part 1-3 for the ACS console plugin demo). Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
 
 ## Adding a module
 

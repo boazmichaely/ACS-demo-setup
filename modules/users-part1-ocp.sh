@@ -9,6 +9,7 @@ SECRET_NAME="htpasswd-secret"
 PW_ADAM="adam"
 PW_BOAZ="boaz"
 PW_CHRIS="chris"
+DEMO_USERS=(adam boaz chris)
 MS_NS="ms-demo"
 INIT_NS="acs-init-container-test"
 
@@ -45,9 +46,10 @@ Purpose:
     Administration → Cluster Settings → Configuration → Console →
     Console plugins, then enable advanced-cluster-security.
 
-  Full two-phase walkthrough:
+  Demo script (before/after tables for adam, boaz, chris):
     modules/users-part1-ocp-demo.md
-  (also rendered under Status → Demo)
+    GUI: /help?doc=users-part1-ocp-demo
+  (Status → Demo also links there.)
 
   Personas (password = username):
     adam   cluster-admin
@@ -70,7 +72,10 @@ Environment:
 Side effects:
   --run ensures Secret ${SECRET_NS}/${SECRET_NAME}, IdP ${IDP_NAME},
     and named RoleBindings for adam/boaz/chris
-  --uninstall removes those RoleBindings, IdP ${IDP_NAME}, and the Secret
+  --uninstall removes those RoleBindings, IdP ${IDP_NAME}, the Secret,
+    OCP User and Identity objects for adam/boaz/chris (lab_htpasswd:*),
+    and waits for oauth-openshift to roll out so the login page drops
+    the IdP. Hard-refresh the browser if the old IdP name still appears.
 
 EOF
 }
@@ -220,6 +225,34 @@ print(json.dumps(j))
   printf '%s\n' "$edited" | oc replace -f -
 }
 
+# First login via HTPasswd creates User + Identity; uninstall must remove them too.
+remove_demo_users_and_identities() {
+  local u
+  for u in "${DEMO_USERS[@]}"; do
+    if oc get "identity/${IDP_NAME}:${u}" >/dev/null 2>&1; then
+      echo "${MODULE_ID}: deleting identity/${IDP_NAME}:${u}"
+      oc delete "identity/${IDP_NAME}:${u}" --ignore-not-found=true
+    else
+      echo "${MODULE_ID}: identity/${IDP_NAME}:${u} already absent"
+    fi
+    if oc get "user/${u}" >/dev/null 2>&1; then
+      echo "${MODULE_ID}: deleting user/${u}"
+      oc delete "user/${u}" --ignore-not-found=true
+    else
+      echo "${MODULE_ID}: user/${u} already absent"
+    fi
+  done
+}
+
+# OAuth pods must reload before the login page stops listing a removed IdP.
+wait_for_oauth_rollout() {
+  echo "${MODULE_ID}: waiting for oauth-openshift rollout (login page IdP list)"
+  if ! oc -n openshift-authentication rollout status deploy/oauth-openshift --timeout=180s; then
+    echo "${MODULE_ID}: warning: oauth-openshift rollout did not finish in time; hard-refresh the login page" >&2
+    return 0
+  fi
+}
+
 ensure_rbac() {
   if oc get clusterrolebinding adam-cluster-admin >/dev/null 2>&1; then
     echo "${MODULE_ID}: RBAC adam-cluster-admin already present"
@@ -313,8 +346,8 @@ emit_status_sections() {
         sections: [
           {
             group: "Demo",
-            title: "ACS console plugin walkthrough",
-            summary: "two-phase script",
+            title: "Demo script",
+            summary: "users walkthrough",
             tag: "ok",
             tagLabel: "guide",
             body: $demo,
@@ -372,9 +405,16 @@ do_status() {
   local u present_n=0 required_rbac_ok=1
 
   if [[ -f "$DEMO_MD" ]]; then
-    demo_body="$(cat "$DEMO_MD")"
+    demo_body="Users Part 1 (OCP): OpenShift users and project RBAC for the ACS console plugin demo.
+
+Before/after experience tables for adam, boaz, and chris:
+  modules/users-part1-ocp-demo.md
+  GUI: /help?doc=users-part1-ocp-demo
+
+Run Part 2 and Part 3 for Act 2 (console vs ACS Central: boaz aligned, chris misaligned)."
   else
-    demo_body="Missing demo script: ${DEMO_MD}"
+    demo_body="Missing demo script: ${DEMO_MD}
+GUI: /help?doc=users-part1-ocp-demo"
   fi
 
   errf="$(mktemp)"
@@ -396,19 +436,33 @@ do_status() {
   cred_body+="  boaz / ${PW_BOAZ}"$'\n'
   cred_body+="  chris / ${PW_CHRIS}"$'\n'
   cred_body+=$'\n'"Cluster htpasswd lines:"$'\n'
-  for u in adam boaz chris; do
+  local residue=""
+  for u in "${DEMO_USERS[@]}"; do
     if htpasswd_user_present "$u"; then
       cred_body+="  ${u}: present"$'\n'
       present_n=$((present_n + 1))
     else
       cred_body+="  ${u}: MISSING"$'\n'
     fi
+    if oc get "user/${u}" >/dev/null 2>&1 || oc get "identity/${IDP_NAME}:${u}" >/dev/null 2>&1; then
+      residue+="${u} "
+    fi
   done
+  if [[ -n "$residue" ]]; then
+    cred_body+=$'\n'"OCP User/Identity objects: ${residue}(created on first login; removed on uninstall)"$'\n'
+  else
+    cred_body+=$'\n'"OCP User/Identity objects: none for adam/boaz/chris"$'\n'
+  fi
   cred_sum="${present_n}/3 users"
   if [[ "$present_n" -eq 3 ]]; then
     cred_tag="ok"
   else
     cred_tag="warn"
+  fi
+  # After uninstall, htpasswd is gone but User/Identity can linger without this check.
+  if [[ "$present_n" -eq 0 && -n "$residue" ]]; then
+    cred_tag="warn"
+    cred_sum="residue"
   fi
 
   if idp_present; then
@@ -580,8 +634,10 @@ do_uninstall() {
   remove_rbac
   remove_htpasswd_idp
   oc -n "$SECRET_NS" delete secret "$SECRET_NAME" --ignore-not-found=true
+  remove_demo_users_and_identities
+  wait_for_oauth_rollout
 
-  printf '%s\tok\tremoved users-part1-ocp IdP, secret, and RoleBindings\n' "$MODULE_ID"
+  printf '%s\tok\tremoved IdP, secret, RoleBindings, Users/Identities; oauth rolled out\n' "$MODULE_ID"
   return 0
 }
 
@@ -617,6 +673,16 @@ do_uninstall_dry_run() {
   if oc -n "$SECRET_NS" get secret "$SECRET_NAME" >/dev/null 2>&1; then
     echo "    secret/${SECRET_NAME} -n ${SECRET_NS}"
   fi
+  local u
+  for u in "${DEMO_USERS[@]}"; do
+    if oc get "identity/${IDP_NAME}:${u}" >/dev/null 2>&1; then
+      echo "    identity/${IDP_NAME}:${u}"
+    fi
+    if oc get "user/${u}" >/dev/null 2>&1; then
+      echo "    user/${u}"
+    fi
+  done
+  echo "    wait for deploy/oauth-openshift rollout in openshift-authentication"
   printf '%s\tok\tuninstall dry-run only\n' "$MODULE_ID"
 }
 

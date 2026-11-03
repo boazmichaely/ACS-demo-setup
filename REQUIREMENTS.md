@@ -144,7 +144,7 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 
 ```text
 id	state	message
-registries	ok	quay.io and registry.redhat.io integrations configured
+registries	ok	quay.io, registry.redhat.io, and us-central1-docker.pkg.dev integrations configured
 slack-notifier	needs-run	Slack integration not configured
 ```
 
@@ -176,7 +176,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ### M1 — `registries` (ACS image integrations)
 
-**Purpose:** Configure RHACS image integrations needed for vulnerability scanning on the secured cluster. Reads registry credentials from the OpenShift cluster pull secret and applies them to Central.
+**Purpose:** Configure RHACS image integrations needed for vulnerability scanning on the secured cluster. Reads Quay and `registry.redhat.io` credentials from the OpenShift cluster pull secret, and adds an anonymous public integration for Google Artifact Registry (`us-central1-docker.pkg.dev`) so `ms-demo` Online Boutique images can be scanned.
 
 **Depends on:** none (Central credentials via `lib/central`; OpenShift via `lib/openshift` / `oc`)
 
@@ -186,19 +186,32 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 2. `pull-secret` in `openshift-config` is readable via `oc`
 3. `Public Quay.io` integration has robot credentials matching pull-secret `quay.io`
 4. `registry.redhat.io` docker registry integration exists and matches pull-secret
+5. Public docker integration for `us-central1-docker.pkg.dev` exists (anonymous; no pull-secret)
 
 **Run must do:**
 
 1. Read `quay.io` and `registry.redhat.io` credentials from the secured-cluster pull secret
 2. Update `Public Quay.io` with `registryRobotCredentials` (replaces OAuth-only auth)
 3. Create or update `registry.redhat.io` integration idempotently
-4. Test integrations when applying (not on dry-run)
+4. Create or update `Public Google Artifact Registry (us-central1)` for `us-central1-docker.pkg.dev`
+5. After creating/updating that Artifact Registry integration, best-effort rescan of unscanned images from that host
+6. Test integrations when applying (not on dry-run)
 
 **Acceptance:**
 
-- `--status` is `ok` when both integrations match the pull secret
+- `--status` is `ok` when Quay, `registry.redhat.io`, and Artifact Registry integrations are configured
 - `--run` is idempotent on a configured lab
-- Image scans for `quay.io/openshift-release-dev` images succeed after run
+- Image scans for `quay.io/openshift-release-dev` and `us-central1-docker.pkg.dev/google-samples/...` images succeed after run
+
+---
+
+### M11 — `signature-integration` (ACS Cosign / signature verification) — stub
+
+**Purpose:** Configure Central signature integration(s) (Cosign public keys / trust roots) so ACS can verify image signatures for trust and policy demos. Complements `registries` (pull/scan) with signature verification; many lab images currently show `MISSING_SIGNATURE` until this exists.
+
+**Depends on:** none (catalog stub; implementation may optionally follow `registries`)
+
+**Status / Run / Acceptance:** TBD when implemented. Catalog row only for now (GUI shows **not installed** until `modules/signature-integration.sh` exists).
 
 ---
 
@@ -228,6 +241,22 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 **Acceptance (full module):** Compliance scans visible in Central for demo cluster.
 
 **Acceptance (phase 1):** `--status` is `ok` when the operator is installed and healthy on the secured cluster.
+
+---
+
+### M2b — `virt-vm-demo` (ACS guest vulnerabilities on OCP Virt)
+
+**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`.
+
+**Depends on:** none (ACS already installed on the lab)
+
+**Status must verify:** HyperConverged healthy; ACS flags on Central + SecuredCluster; both demo VMIs Running; Central reports CVE findings on both VMs in `acs-virt-demo`.
+
+**Run must do:** Patch ACS CRs; install/ensure CNV; create pull secret + two VMs; install agent from Sensor image `/stackrox/bin/roxagent`; wait until both VMs have CVE findings (fail if timeout).
+
+**Uninstall must do:** Delete project `acs-virt-demo` (CNV and ACS flags retained).
+
+**Acceptance:** `--status` is `ok` when CNV is healthy, flags are set, both demo VMIs are Running, and both have CVE findings in Central.
 
 ---
 
@@ -291,17 +320,15 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ### M7 — `users-part3-acs` — Users Part 3 (ACS)
 
-**Purpose:** Create ACS access scopes, roles, and permission sets for demo personas.
+**Purpose:** Map OpenShift logins adam, boaz, and chris to ACS roles and access scopes for Central. Adam becomes built-in Admin. Boaz and chris become Analysts (`boaz-in-acs`, `chris-in-acs`) with access scope limited to `ms-demo`. The OpenShift console Security plugin still follows OpenShift RBAC (Part 1); this module does not change that. Act 2 of the demo compares console vs ACS Central: boaz is aligned (both sides `ms-demo` only); chris is misaligned (OCP admin on `ms-demo` and `acs-init-container-test`, ACS only `ms-demo`). Full walkthrough lives in `modules/users-part1-ocp-demo.md`.
 
 **Depends on:** `users-part2-oauth`
 
-**Status must verify:** Expected roles/scopes exist and map to demo users
+**Status must verify:** Access scope `ms-demo` exists with the expected namespace rule; roles `boaz-in-acs` and `chris-in-acs` use Analyst with that scope; OpenShift auth group rules map adam to Admin, boaz to `boaz-in-acs`, and chris to `chris-in-acs`
 
-**Run must do:** Idempotent Central API configuration
+**Run must do:** Idempotent Central API reconcile for that scope, those roles, and those group rules (including the empty-key default `None` rule when missing)
 
-**Acceptance:** Demo user sees expected ACS access after OpenShift login
-
-**When implementing:** Update `modules/users-part1-ocp-demo.md` Phase 2 with the concrete ACS role/scope names for adam/boaz/chris (todo: update demo script).
+**Acceptance:** After OpenShift login to Central, adam has Admin access; boaz and chris have Analyst access on `ms-demo`; chris has no useful ACS access on `acs-init-container-test` despite OpenShift admin there; console Security for those users still matches Part 1 OpenShift RBAC
 
 ---
 

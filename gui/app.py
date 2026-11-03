@@ -272,6 +272,10 @@ def run_module(
 HELP_DOCS: dict[str, tuple[str, Path]] = {
     "readme": ("README", REPO_ROOT / "README.md"),
     "adding-a-module": ("How to add a module", REPO_ROOT / "ADDING-A-MODULE.md"),
+    "users-part1-ocp-demo": (
+        "Users series demo script",
+        REPO_ROOT / "modules" / "users-part1-ocp-demo.md",
+    ),
 }
 
 

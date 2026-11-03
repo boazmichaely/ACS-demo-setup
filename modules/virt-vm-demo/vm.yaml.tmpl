@@ -1,0 +1,60 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: ${VM_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/part-of: virt-vm-demo
+    app.kubernetes.io/name: ${VM_NAME}
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: ${VM_NAME}
+        app.kubernetes.io/part-of: virt-vm-demo
+    spec:
+      imagePullSecrets:
+        - name: acs-vm-pull-secret
+      domain:
+        cpu:
+          cores: 1
+          sockets: 1
+          threads: 1
+        devices:
+          autoattachVSOCK: true
+          disks:
+            - name: containerdisk
+              bootOrder: 1
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              bootOrder: 2
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+        memory:
+          guest: 2Gi
+        resources:
+          requests:
+            memory: 2Gi
+            cpu: 100m
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: ${CONTAINER_IMAGE}
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              user: ${SSH_USER}
+              password: ${VM_PASSWORD}
+              chpasswd: { expire: False }
+              ssh_pwauth: True
+              ssh_authorized_keys:
+                - ${SSH_PUBKEY}

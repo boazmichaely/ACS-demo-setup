@@ -56,6 +56,24 @@ def find_openshift_provider(
     return None
 
 
+DEMO_SCRIPT_SECTION: dict[str, Any] = {
+    "group": "Demo",
+    "title": "Demo script",
+    "summary": "users walkthrough",
+    "tag": "ok",
+    "tagLabel": "guide",
+    "body": (
+        "Users Part 2 (OAuth): Central Login with OpenShift for the ACS "
+        "console plugin demo.\n\n"
+        "Before/after experience tables for adam, boaz, and chris:\n"
+        "  modules/users-part1-ocp-demo.md\n"
+        "  GUI: /help?doc=users-part1-ocp-demo\n\n"
+        "This module is required before OpenShift login works in that walkthrough."
+    ),
+    "bodyFormat": "prose",
+}
+
+
 def build_sections(
     *,
     central_ok: bool,
@@ -65,6 +83,7 @@ def build_sections(
 ) -> list[dict[str, Any]]:
     if not central_ok:
         return [
+            dict(DEMO_SCRIPT_SECTION),
             {
                 "group": "Central",
                 "title": "API",
@@ -119,7 +138,7 @@ def build_sections(
             "bodyFormat": "prose",
         }
 
-    return [central_section, auth_section]
+    return [dict(DEMO_SCRIPT_SECTION), central_section, auth_section]
 
 
 def evaluate() -> dict[str, Any]:

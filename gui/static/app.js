@@ -355,12 +355,18 @@ function bindSelectableSummaries(root) {
 }
 
 function linkifyProseHtml(escaped) {
-  // escaped is already HTML-escaped; only turn http(s) URLs into anchors.
-  return escaped.replace(
+  // escaped is already HTML-escaped. Link http(s) URLs and local GUI help paths.
+  let out = escaped.replace(
     /https?:\/\/[^\s<]+/g,
     (url) =>
       `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
   );
+  out = out.replace(
+    /\/help\?doc=[A-Za-z0-9_-]+/g,
+    (path) =>
+      `<a href="${path}" target="_blank" rel="noopener noreferrer">${path}</a>`
+  );
+  return out;
 }
 
 function renderSectionBody(item) {
@@ -947,7 +953,12 @@ function syncDependencyLocks() {
       cb.disabled = true;
       tr.classList.add("demo-mod--locked");
       if (hint) {
-        hint.textContent = `Locked: needs ${missing.join(", ")} ready or selected.`;
+        const names = missing.map((dep) => {
+          const depMeta = moduleMetaById.get(dep);
+          const label = (depMeta?.label || "").trim();
+          return label ? `${dep} (${label})` : dep;
+        });
+        hint.textContent = `Locked: needs ${names.join(", ")} ready or selected.`;
         hint.hidden = false;
       }
     } else {

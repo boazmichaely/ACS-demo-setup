@@ -26,6 +26,9 @@ from lib.openshift import ensure_oc  # noqa: E402
 MODULE_ID = "registries"
 QUAY_INTEGRATION_NAME = "Public Quay.io"
 RHEL_INTEGRATION_NAME = "registry.redhat.io"
+# Public Google Artifact Registry host used by Mostmark / Online Boutique (ms-demo).
+GAR_INTEGRATION_NAME = "Public Google Artifact Registry (us-central1)"
+GAR_ENDPOINT = "us-central1-docker.pkg.dev"
 REQUIRED_PULL_SECRET_HOSTS = ("quay.io", "registry.redhat.io")
 
 
@@ -90,6 +93,16 @@ def find_rhel_integration(integrations: list[dict[str, Any]]) -> dict[str, Any] 
     return None
 
 
+def find_gar_integration(integrations: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for item in integrations:
+        if item.get("name") == GAR_INTEGRATION_NAME:
+            return item
+        endpoint = (item.get("docker") or {}).get("endpoint")
+        if item.get("type") == "docker" and endpoint == GAR_ENDPOINT:
+            return item
+    return None
+
+
 def quay_is_configured(integration: dict[str, Any] | None, expected_user: str) -> bool:
     if not integration:
         return False
@@ -102,6 +115,17 @@ def rhel_is_configured(integration: dict[str, Any] | None, expected_user: str) -
         return False
     docker = integration.get("docker") or {}
     return docker.get("endpoint") == "registry.redhat.io" and docker.get("username") == expected_user
+
+
+def gar_is_configured(integration: dict[str, Any] | None) -> bool:
+    if not integration:
+        return False
+    docker = integration.get("docker") or {}
+    return (
+        integration.get("type") == "docker"
+        and docker.get("endpoint") == GAR_ENDPOINT
+        and "REGISTRY" in (integration.get("categories") or [])
+    )
 
 
 def build_quay_payload(
@@ -139,6 +163,62 @@ def build_rhel_payload(username: str, password: str, *, skip_test: bool) -> dict
         },
         "skipTestIntegration": skip_test,
     }
+
+
+def build_gar_payload(*, integration_id: str | None = None, skip_test: bool) -> dict[str, Any]:
+    """Anonymous public docker registry for Google Artifact Registry (Online Boutique)."""
+    payload: dict[str, Any] = {
+        "name": GAR_INTEGRATION_NAME,
+        "type": "docker",
+        "categories": ["REGISTRY"],
+        "docker": {
+            "endpoint": GAR_ENDPOINT,
+            "username": "",
+            "password": "",
+            "insecure": False,
+        },
+        "skipTestIntegration": skip_test,
+    }
+    if integration_id:
+        payload["id"] = integration_id
+    return payload
+
+
+def rescan_unscanned_gar_images(
+    base: str, authorization: str, *, creds: dict[str, Any] | None = None
+) -> list[str]:
+    """Best-effort rescan of images from GAR_ENDPOINT that still lack scan data."""
+    code, body = central_request(
+        base, authorization, "GET", "/v1/images", creds=creds
+    )
+    if code != 200:
+        return [f"list images for rescan failed ({code})"]
+    log: list[str] = []
+    for img in body.get("images") or []:
+        name = str(img.get("name") or "")
+        if not name.startswith(f"{GAR_ENDPOINT}/"):
+            continue
+        notes = img.get("notes") or []
+        comps = int(img.get("components") or 0)
+        if comps > 0 and "MISSING_SCAN_DATA" not in notes:
+            continue
+        scode, sbody = central_request(
+            base,
+            authorization,
+            "POST",
+            "/v1/images/scan",
+            {"imageName": name},
+            creds=creds,
+        )
+        if scode not in (200, 201):
+            log.append(f"rescan failed for {name} ({scode}): {sbody}")
+            continue
+        new_comps = (sbody or {}).get("components") if isinstance(sbody, dict) else None
+        new_cves = (sbody or {}).get("cves") if isinstance(sbody, dict) else None
+        log.append(f"rescanned {name} (components={new_comps}, cves={new_cves})")
+    if not log:
+        log.append(f"no unscanned {GAR_ENDPOINT} images needed a rescan")
+    return log
 
 
 def evaluate() -> dict[str, Any]:
@@ -192,18 +272,23 @@ def evaluate() -> dict[str, Any]:
     integrations = list_integrations(base, authorization, creds=creds)
     quay = find_quay_integration(integrations)
     rhel = find_rhel_integration(integrations)
+    gar = find_gar_integration(integrations)
 
     quay_ok = quay_is_configured(quay, quay_user)
     rhel_ok = rhel_is_configured(rhel, rhel_user)
+    gar_ok = gar_is_configured(gar)
 
     result: dict[str, Any] = {
         "central": base,
         "quayIntegrationId": quay.get("id") if quay else None,
         "rhelIntegrationId": rhel.get("id") if rhel else None,
+        "garIntegrationId": gar.get("id") if gar else None,
         "quayPresent": quay is not None,
         "rhelPresent": rhel is not None,
+        "garPresent": gar is not None,
         "quayConfigured": quay_ok,
         "rhelConfigured": rhel_ok,
+        "garConfigured": gar_ok,
         "quayUser": quay_user,
         "rhelUser": rhel_user,
         "quayPassword": quay_password,
@@ -224,11 +309,14 @@ def evaluate() -> dict[str, Any]:
         },
     }
 
-    if quay_ok and rhel_ok:
+    if quay_ok and rhel_ok and gar_ok:
         result.update(
             {
                 "state": "ok",
-                "message": "quay.io and registry.redhat.io integrations configured",
+                "message": (
+                    "quay.io, registry.redhat.io, and "
+                    f"{GAR_ENDPOINT} integrations configured"
+                ),
             }
         )
         return result
@@ -238,6 +326,8 @@ def evaluate() -> dict[str, Any]:
         missing.append("quay.io robot credentials on Public Quay.io")
     if not rhel_ok:
         missing.append("registry.redhat.io integration")
+    if not gar_ok:
+        missing.append(f"{GAR_ENDPOINT} public registry integration")
     result.update(
         {
             "state": "needs-run",
@@ -286,6 +376,28 @@ def _integration_fold(
         f"Central integration: {'present' if present else 'absent'}",
         f"Credentials match pull-secret: {'yes' if configured else 'no'}",
         *_pull_secret_lines(host, host_meta),
+    ]
+    return {
+        "group": "Integrations",
+        "title": title,
+        **_ready_fields(configured),
+        "body": "\n".join(body),
+        "bodyFormat": "prose",
+    }
+
+
+def _public_registry_fold(
+    *,
+    title: str,
+    endpoint: str,
+    present: bool,
+    configured: bool,
+) -> dict[str, Any]:
+    body = [
+        f"Central integration: {'present' if present else 'absent'}",
+        f"Endpoint: {endpoint}",
+        "Auth: anonymous public (no pull-secret)",
+        "Used by: ms-demo Online Boutique images",
     ]
     return {
         "group": "Integrations",
@@ -348,6 +460,14 @@ def build_sections(result: dict[str, Any]) -> list[dict[str, Any]]:
             host_meta=host_meta.get("registry.redhat.io"),
         )
     )
+    sections.append(
+        _public_registry_fold(
+            title=GAR_ENDPOINT,
+            endpoint=GAR_ENDPOINT,
+            present=bool(result.get("garPresent") or result.get("garIntegrationId")),
+            configured=bool(result.get("garConfigured")),
+        )
+    )
 
     actions = result.get("actions") or []
     if actions:
@@ -373,7 +493,10 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
     if status["state"] == "ok":
         return {
             **status,
-            "log": ["No changes planned. quay.io and registry.redhat.io already match pull-secret."],
+            "log": [
+                "No changes planned. quay.io, registry.redhat.io, and "
+                f"{GAR_ENDPOINT} already configured."
+            ],
         }
 
     actions: list[str] = []
@@ -384,6 +507,12 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
             actions.append(f"update {RHEL_INTEGRATION_NAME} integration")
         else:
             actions.append(f"create {RHEL_INTEGRATION_NAME} integration")
+    if not status.get("garConfigured"):
+        if status.get("garIntegrationId"):
+            actions.append(f"update {GAR_INTEGRATION_NAME} integration")
+        else:
+            actions.append(f"create {GAR_INTEGRATION_NAME} integration")
+        actions.append(f"rescan unscanned images from {GAR_ENDPOINT}")
 
     if dry_run:
         return {
@@ -400,6 +529,7 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
     quay_password = status["quayPassword"]
     rhel_user = status["rhelUser"]
     rhel_password = status["rhelPassword"]
+    log: list[str] = []
 
     if not status.get("quayConfigured"):
         quay_id = status.get("quayIntegrationId")
@@ -411,9 +541,11 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
             "PUT",
             f"/v1/imageintegrations/{quay_id}",
             build_quay_payload(quay_id, quay_user, quay_password, skip_test=False),
+            creds=creds,
         )
         if code != 200:
             return {"state": "error", "message": f"update {QUAY_INTEGRATION_NAME} failed ({code}): {body}"}
+        log.append(f"updated {QUAY_INTEGRATION_NAME}")
 
     if not status.get("rhelConfigured"):
         if status.get("rhelIntegrationId"):
@@ -427,7 +559,9 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
                     "id": rhel_id,
                     **build_rhel_payload(rhel_user, rhel_password, skip_test=False),
                 },
+                creds=creds,
             )
+            action = "updated"
         else:
             code, body = central_request(
                 base,
@@ -435,13 +569,50 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
                 "POST",
                 "/v1/imageintegrations",
                 build_rhel_payload(rhel_user, rhel_password, skip_test=False),
+                creds=creds,
             )
+            action = "created"
         if code != 200:
             return {"state": "error", "message": f"upsert {RHEL_INTEGRATION_NAME} failed ({code}): {body}"}
+        log.append(f"{action} {RHEL_INTEGRATION_NAME}")
+
+    if not status.get("garConfigured"):
+        if status.get("garIntegrationId"):
+            gar_id = status["garIntegrationId"]
+            code, body = central_request(
+                base,
+                token,
+                "PUT",
+                f"/v1/imageintegrations/{gar_id}",
+                build_gar_payload(integration_id=gar_id, skip_test=False),
+                creds=creds,
+            )
+            action = "updated"
+        else:
+            code, body = central_request(
+                base,
+                token,
+                "POST",
+                "/v1/imageintegrations",
+                build_gar_payload(skip_test=False),
+                creds=creds,
+            )
+            action = "created"
+        if code != 200:
+            return {
+                "state": "error",
+                "message": f"upsert {GAR_INTEGRATION_NAME} failed ({code}): {body}",
+            }
+        log.append(f"{action} {GAR_INTEGRATION_NAME}")
+        log.extend(rescan_unscanned_gar_images(base, token, creds=creds))
 
     final = evaluate()
     if final.get("state") == "ok":
-        final["log"] = ["Applied registry integrations from secured-cluster pull-secret."]
+        final["log"] = log or [
+            "Applied registry integrations (pull-secret + public Artifact Registry)."
+        ]
+    else:
+        final["log"] = log
     return final
 
 

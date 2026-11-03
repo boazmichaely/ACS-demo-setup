@@ -6,8 +6,18 @@
       "dependsOn": []
     },
     {
+      "id": "signature-integration",
+      "label": "ACS Cosign / signature integration",
+      "dependsOn": []
+    },
+    {
       "id": "compliance-operator",
       "label": "Compliance Operator + scan schedule",
+      "dependsOn": []
+    },
+    {
+      "id": "virt-vm-demo",
+      "label": "Deploy OCP Virt + RHEL VMs for ACS guest vulnerability demo",
       "dependsOn": []
     },
     {

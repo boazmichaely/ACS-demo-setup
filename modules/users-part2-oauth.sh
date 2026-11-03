@@ -30,8 +30,10 @@ Purpose:
     Part 2 (OAuth) - this module
     Part 3 (ACS)   - ACS roles and scopes   (users-part3-acs)
 
-  Full console-plugin walkthrough (Phase 2 uses this module):
+  Demo script (before/after tables for adam, boaz, chris):
     modules/users-part1-ocp-demo.md
+    GUI: /help?doc=users-part1-ocp-demo
+  (Status → Demo also links there. Part 2 enables Login with OpenShift.)
 
 Depends on:
   users-part1-ocp (catalog; needed for end-to-end login demos)
