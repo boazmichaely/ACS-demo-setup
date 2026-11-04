@@ -40,7 +40,7 @@
       "id": "users-part1-ocp",
       "label": "Users Part 1 (OCP)",
       "dependsOn": [],
-      "statusComplexity": 6
+      "statusComplexity": 2
     },
     {
       "id": "users-part2-oauth",
@@ -61,9 +61,7 @@
     {
       "id": "slack-notifier",
       "label": "Central Slack integration",
-      "dependsOn": [
-        "roxctl-env"
-      ],
+      "dependsOn": [],
       "statusComplexity": 3
     },
     {
@@ -71,12 +69,6 @@
       "label": "Splunk Operator + RHACS TA",
       "dependsOn": [],
       "statusComplexity": 6
-    },
-    {
-      "id": "roxctl-env",
-      "label": "Roxctl route and API token (~/.roxctl)",
-      "dependsOn": [],
-      "statusComplexity": 2
     },
     {
       "id": "openshift-mcp",

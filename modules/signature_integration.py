@@ -20,6 +20,11 @@ from lib.central import (  # noqa: E402
     load_lab_credentials,
     ssl_context_for_central,
 )
+from lib.demo_policies import (  # noqa: E402
+    DEMO_CATEGORY,
+    ensure_managed_policy,
+    find_policy_by_name,
+)
 
 
 def _auth_header(authorization: str) -> str:
@@ -214,20 +219,6 @@ def ensure_integration(
     return result
 
 
-def find_policy_by_name(
-    base: str, authorization: str, name: str, *, creds: dict[str, Any]
-) -> dict[str, Any] | None:
-    code, body = central_request(
-        base, authorization, "GET", "/v1/policies", creds=creds
-    )
-    if code != 200:
-        raise RuntimeError(f"GET /v1/policies failed ({code}): {body}")
-    for policy in (body or {}).get("policies") or []:
-        if policy.get("name") == name:
-            return policy
-    return None
-
-
 def build_policy_payload(integration_id: str, *, policy_id: str = "") -> dict[str, Any]:
     policy: dict[str, Any] = {
         "name": POLICY_NAME,
@@ -244,7 +235,7 @@ def build_policy_payload(integration_id: str, *, policy_id: str = "") -> dict[st
             "Red Hat Public signature integration."
         ),
         "disabled": False,
-        "categories": ["Supply Chain Security"],
+        "categories": ["Supply Chain Security", DEMO_CATEGORY],
         "lifecycleStages": ["BUILD", "DEPLOY"],
         "eventSource": "NOT_APPLICABLE",
         "severity": "HIGH_SEVERITY",
@@ -276,6 +267,8 @@ def policy_matches(
     if not policy:
         return False
     if policy.get("disabled"):
+        return False
+    if DEMO_CATEGORY not in (policy.get("categories") or []):
         return False
     stages = set(policy.get("lifecycleStages") or [])
     if stages != {"BUILD", "DEPLOY"}:
@@ -321,42 +314,19 @@ def ensure_policy(
         integration_id,
         policy_id=(full_existing or {}).get("id") or "",
     )
+    result = ensure_managed_policy(
+        base,
+        authorization,
+        payload,
+        creds=creds,
+        dry_run=dry_run,
+        preserve_notifiers=True,
+    )
     if dry_run:
-        action = "update" if existing else "create"
-        print(f"dry-run: would {action} policy '{POLICY_NAME}'")
-        return existing or {"name": POLICY_NAME, "id": "(new)"}
-
-    if existing:
-        payload["id"] = existing["id"]
-        code, body = central_request(
-            base,
-            authorization,
-            "PUT",
-            f"/v1/policies/{existing['id']}",
-            payload,
-            creds=creds,
-        )
-        action = "updated"
-    else:
-        payload.pop("id", None)
-        code, body = central_request(
-            base, authorization, "POST", "/v1/policies", payload, creds=creds
-        )
-        action = "created"
-
-    if code not in (200, 201):
-        raise RuntimeError(f"{action} policy '{POLICY_NAME}' failed ({code}): {body}")
-    pid = (body.get("id") if isinstance(body, dict) else None) or (
-        existing or {}
-    ).get("id")
-    print(f"{action} policy '{POLICY_NAME}' (id={pid})")
-    if pid and pid != "(new)":
-        code, full = central_request(
-            base, authorization, "GET", f"/v1/policies/{pid}", creds=creds
-        )
-        if code == 200 and isinstance(full, dict):
-            return full
-    return body if isinstance(body, dict) else {"name": POLICY_NAME, "id": pid}
+        return result
+    action = "updated" if existing else "created"
+    print(f"{action} policy '{POLICY_NAME}' (id={result.get('id')})")
+    return result
 
 
 def image_id_from_ref(ref: str) -> str:

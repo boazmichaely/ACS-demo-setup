@@ -5,7 +5,7 @@ A **module** is used to perform one setup step for the demo lab. It is a shell/P
 - **Triggers:** The module is triggered to **run** (install) or **uninstall**, both with a **dry-run** option.
 - **Output:** The module provides structured **status** info for the GUI to render.
 
-Template files ([`module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh), [`module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py)) are provided to start you off, and a common Python library ([`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py), [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py)) provides a unified way to use admin credentials for the associated Central and OpenShift clusters in your lab.
+Template files ([`module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh), [`module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py)) are provided to start you off, and a common Python library ([`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py), [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py), [`lib/demo_policies.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/demo_policies.py)) provides a unified way to use admin credentials for the associated Central and OpenShift clusters in your lab (and to stamp demo policies with category `DEMO`).
 
 You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/ms-demo.sh) module as a lightweight example.
 
@@ -275,6 +275,16 @@ code, body = central_request(
 ### Style tip
 
 If the RHACS UI configures something in Central, prefer the Central API. Avoid applying lower-level cluster objects that bypass Central when Central already owns that feature (compliance scan schedules are a good example).
+
+## Creating Central policies
+
+When a module creates or updates RHACS policies for the demo:
+
+1. Upsert through [`lib/demo_policies.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/demo_policies.py) `ensure_managed_policy`. That helper merges category **`DEMO`** into the policy (visible in Policy Management) and preserves any existing notifiers on update.
+2. **Do not** attach Slack (or other) notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier.sh) attaches/detaches the Slack notifier on `--run` / `--uninstall` by discovering policies with category `DEMO`.
+3. After first creating DEMO policies on a lab (or after adding a new demo policy), re-run `slack-notifier` once so the notifier is wired. A full install that already runs `slack-notifier` after the policy modules is enough.
+
+Examples: [`modules/init_demo.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/init_demo.py), [`modules/signature_integration.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/signature_integration.py).
 
 ## Verify end-to-end
 

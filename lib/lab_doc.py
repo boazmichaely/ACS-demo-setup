@@ -68,6 +68,24 @@ def empty_secured_cluster(
     }
 
 
+def empty_slack_notifier() -> dict[str, Any]:
+    return {
+        "webhookUrl": "",
+        "notifierName": "#acs-demo-notifier",
+        "channelUrl": "",
+    }
+
+
+def normalize_slack_notifier(raw: Any) -> dict[str, Any]:
+    src = raw if isinstance(raw, dict) else {}
+    name = (src.get("notifierName") or "").strip() or "#acs-demo-notifier"
+    return {
+        "webhookUrl": (src.get("webhookUrl") or "").strip(),
+        "notifierName": name,
+        "channelUrl": (src.get("channelUrl") or "").strip(),
+    }
+
+
 def empty_lab(*, lab_id: str | None = None, name: str = "default") -> dict[str, Any]:
     lid = lab_id or "default"
     sc = empty_secured_cluster(name="production", same_as_central=True)
@@ -81,6 +99,7 @@ def empty_lab(*, lab_id: str | None = None, name: str = "default") -> dict[str, 
         },
         "securedClusters": [sc],
         "activeSecuredClusterId": sc["id"],
+        "slackNotifier": empty_slack_notifier(),
     }
 
 
@@ -134,6 +153,7 @@ def migrate_v1_to_v2(raw: dict[str, Any]) -> dict[str, Any]:
         },
         "securedClusters": [sc],
         "activeSecuredClusterId": sc["id"],
+        "slackNotifier": empty_slack_notifier(),
     }
     return {
         "$schema": "./config/lab-credentials.schema.json",
@@ -175,6 +195,7 @@ def normalize_document(raw: dict[str, Any] | None) -> dict[str, Any]:
             cc["openshift"] = normalize_openshift(cc.get("openshift"))
             for sc in lab.get("securedClusters") or []:
                 sc["openshift"] = normalize_openshift(sc.get("openshift"))
+            lab["slackNotifier"] = normalize_slack_notifier(lab.get("slackNotifier"))
         return doc
     if "centralCluster" in raw:
         return migrate_v1_to_v2(raw)
@@ -248,8 +269,11 @@ def active_secured_cluster(lab: dict[str, Any]) -> dict[str, Any]:
 
 def flatten_active_lab(doc: dict[str, Any]) -> dict[str, Any]:
     """v1-shaped view of the active lab for module helpers (centralCluster + securedCluster)."""
+    from lib.slack_notifier_defaults import effective_slack_notifier
+
     lab = active_lab(doc)
     sc = active_secured_cluster(lab)
+    slack = effective_slack_notifier(lab.get("slackNotifier"))
     return {
         "version": 1,
         "insecureSkipTlsVerify": bool(lab.get("insecureSkipTlsVerify", False)),
@@ -259,6 +283,7 @@ def flatten_active_lab(doc: dict[str, Any]) -> dict[str, Any]:
             "sameAsCentralCluster": bool(sc.get("sameAsCentralCluster", True)),
             "openshift": sc.get("openshift") or empty_openshift(),
         },
+        "slackNotifier": slack,
         # Extras for logging (ignored by old readers)
         "_activeLabId": lab.get("id") or "",
         "_activeLabName": lab.get("name") or "",
