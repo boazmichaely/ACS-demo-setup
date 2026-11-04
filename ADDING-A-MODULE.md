@@ -63,11 +63,13 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
 {
   "id": "my-feature",
   "label": "Short description for the Description column",
-  "dependsOn": []
+  "dependsOn": [],
+  "statusComplexity": 5
 }
 ```
 
 - `id` is the module key. It must match `modules/<id>.sh`, CLI `--module`, other modules’ `dependsOn`, and the **Module** column. Do not repeat the id inside `label`.
+- `statusComplexity` is an integer **1-10** hint for GUI status refresh order (lower = cheaper `--status`, refreshed first). Default to `5` if unsure; heavy OpenShift/Central probes (for example virt) belong near 8-10.
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
 - Prefer `my-feature.sh` over `07-my-feature.sh`.
 

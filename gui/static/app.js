@@ -32,12 +32,16 @@ let busy = false;
 let statusReady = false;
 /** True while a status refresh is in flight. */
 let statusRefreshing = false;
+/** Installed module ids still waiting in the current progressive refresh. */
+let statusPendingIds = new Set();
 
 /** In-memory v2 credentials document (activeLabId + labs[]). */
 let credDoc = { activeLabId: "", labs: [] };
 /** Lab id currently shown in the credentials form (independent of activeLabId). */
 let editingLabId = "";
 let labUiBusy = false;
+/** When false, lab detail fields are read-only until the user hits Edit. */
+let credEditMode = false;
 
 const fields = {
   labName: document.getElementById("labName"),
@@ -213,6 +217,7 @@ function setBusy(on) {
   busy = on;
   // Module runs lock credentials + lab selectors. Status refresh must not.
   const ids = [
+    "btnCredEdit",
     "btnCredSave",
     "btnCredCancel",
     "btnAddLab",
@@ -233,13 +238,12 @@ function setBusy(on) {
   });
   if (on) closeAllModuleMenus();
   if (activeLabSelect) activeLabSelect.disabled = on;
-  if (editLabSelect) editLabSelect.disabled = on;
   syncRefreshActionButtons();
   if (!on) {
-    syncMakeActiveButton();
-    syncDeleteLabButton();
-    syncCredCancelButton();
+    syncCredChrome();
     syncModuleMenuButtons();
+  } else if (editLabSelect) {
+    editLabSelect.disabled = true;
   }
 }
 
@@ -535,19 +539,12 @@ function renderSectionsHtml(sections, moduleId = "") {
   return html;
 }
 
-function dependsOnHintHtml(m) {
-  const deps = m.dependsOn;
-  if (!Array.isArray(deps) || deps.length === 0) return "";
-  return `<span class="demo-mod__deps">Requires: ${deps.map(escapeHtml).join(", ")}</span>`;
-}
-
 function moduleCellHtml(m) {
   const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
   const id = String(m.id ?? "");
   return `<div class="demo-mod__line">
     <span class="demo-mod__idx">${idx}</span>
     <span class="demo-mod__slug">${escapeHtml(id)}</span>
-    <span class="js-deps-lock-hint demo-mod__lock" hidden></span>
   </div>`;
 }
 
@@ -861,16 +858,32 @@ function missingDeps(moduleId) {
   return meta.dependsOn.filter((dep) => lastStatusMap.get(dep)?.state !== "ok");
 }
 
+function isDependencyLocked(moduleId) {
+  return (
+    statusReady &&
+    !statusPendingIds.has(moduleId) &&
+    isScriptInstalled(moduleId) &&
+    missingDeps(moduleId).length > 0
+  );
+}
+
 function badgeHtml(moduleId, { linkToStatus = false } = {}) {
   let tone = "pf-m-grey";
   let label = "…";
   let title = "";
+  let locked = false;
   if (!isScriptInstalled(moduleId)) {
     label = "not installed";
     title = "module script not installed";
-  } else if (!statusReady) {
+  } else if (!statusReady || statusPendingIds.has(moduleId)) {
     label = "checking";
     title = "Refreshing status…";
+  } else if (isDependencyLocked(moduleId)) {
+    locked = true;
+    tone = "pf-m-grey";
+    label = "needs run";
+    const missing = missingDeps(moduleId);
+    title = `Waiting on: ${missing.join(", ")}`;
   } else {
     const st = lastStatusMap.get(moduleId);
     if (st) {
@@ -882,12 +895,20 @@ function badgeHtml(moduleId, { linkToStatus = false } = {}) {
       title = String(st.message || "");
     }
   }
-  const inner = `<span class="pf-v6-c-label__content">${escapeHtml(label)}</span>`;
-  const canJump = linkToStatus && isScriptInstalled(moduleId) && statusReady;
+  const lockIcon = locked
+    ? `<span class="material-symbols-outlined demo-mod__lock-icon" aria-hidden="true">lock</span>`
+    : "";
+  const inner = `<span class="pf-v6-c-label__content">${lockIcon}${escapeHtml(label)}</span>`;
+  const canJump =
+    linkToStatus &&
+    isScriptInstalled(moduleId) &&
+    statusReady &&
+    !statusPendingIds.has(moduleId);
+  const lockClass = locked ? " demo-mod__status--locked" : "";
   if (canJump) {
-    return `<a class="pf-v6-c-label ${tone} pf-m-compact demo-mod__status-link" href="#status-mod-${escapeHtml(moduleId)}" title="${escapeHtml(title || `Jump to ${moduleId} in Status`)}" data-status-jump="${escapeHtml(moduleId)}">${inner}</a>`;
+    return `<a class="pf-v6-c-label ${tone} pf-m-compact demo-mod__status-link${lockClass}" href="#status-mod-${escapeHtml(moduleId)}" title="${escapeHtml(title || `Jump to ${moduleId} in Status`)}" data-status-jump="${escapeHtml(moduleId)}">${inner}</a>`;
   }
-  return `<span class="pf-v6-c-label ${tone} pf-m-compact" title="${escapeHtml(title)}">${inner}</span>`;
+  return `<span class="pf-v6-c-label ${tone} pf-m-compact${lockClass}" title="${escapeHtml(title)}">${inner}</span>`;
 }
 
 function moduleStatusCellHtml(moduleId) {
@@ -921,7 +942,6 @@ function syncDependencyLocks() {
     const tr = modulesTbody.querySelector(`tr[data-module-id="${CSS.escape(id)}"]`);
     if (!tr) continue;
     const cb = tr.querySelector("input.js-mod-cb");
-    const hint = tr.querySelector(".js-deps-lock-hint");
     if (!cb) continue;
 
     if (!isScriptInstalled(id)) {
@@ -930,7 +950,6 @@ function syncDependencyLocks() {
       tr.classList.add("demo-mod--unavailable");
       tr.classList.remove("demo-mod--locked");
       tr.setAttribute("aria-disabled", "true");
-      if (hint) hint.hidden = true;
       continue;
     }
 
@@ -941,7 +960,6 @@ function syncDependencyLocks() {
     if (!statusReady) {
       cb.disabled = false;
       tr.classList.remove("demo-mod--locked");
-      if (hint) hint.hidden = true;
       continue;
     }
 
@@ -952,19 +970,9 @@ function syncDependencyLocks() {
       cb.checked = false;
       cb.disabled = true;
       tr.classList.add("demo-mod--locked");
-      if (hint) {
-        const names = missing.map((dep) => {
-          const depMeta = moduleMetaById.get(dep);
-          const label = (depMeta?.label || "").trim();
-          return label ? `${dep} (${label})` : dep;
-        });
-        hint.textContent = `Locked: needs ${names.join(", ")} ready or selected.`;
-        hint.hidden = false;
-      }
     } else {
       cb.disabled = false;
       tr.classList.remove("demo-mod--locked");
-      if (hint) hint.hidden = true;
     }
   }
   syncModuleMenuButtons();
@@ -1231,6 +1239,27 @@ function topologicalRunOrder(ids) {
   return order;
 }
 
+function catalogModuleIndex(moduleId) {
+  const idx = registryModules.findIndex((m) => m.id === moduleId);
+  return idx >= 0 ? idx : 999;
+}
+
+function statusComplexityOf(moduleId) {
+  const raw = moduleMetaById.get(moduleId)?.statusComplexity;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 1 && n <= 10) return n;
+  return 5;
+}
+
+function statusRefreshOrder(moduleIds) {
+  return [...moduleIds].sort((a, b) => {
+    const ca = statusComplexityOf(a);
+    const cb = statusComplexityOf(b);
+    if (ca !== cb) return ca - cb;
+    return catalogModuleIndex(a) - catalogModuleIndex(b);
+  });
+}
+
 async function fetchStatus(moduleIds = null) {
   const qs =
     moduleIds && moduleIds.length
@@ -1242,25 +1271,28 @@ async function fetchStatus(moduleIds = null) {
     lastStatusMap = statusMapFromModules(data);
     return;
   }
-  const map = statusMapFromModules(lastStatusModules);
+  const byId = new Map(
+    (lastStatusModules || []).map((row) => [row.id, row]).filter(([id]) => id)
+  );
   for (const row of data) {
-    map.set(row.id, {
-      state: row.state,
-      message: row.message,
-      sections: Array.isArray(row.sections) ? row.sections : [],
-    });
+    if (row?.id) byId.set(row.id, row);
   }
   lastStatusModules = registryModules.map((m) => {
-    const hit = data.find((r) => r.id === m.id);
-    if (hit) return hit;
-    return map.get(m.id)
-      ? {
-          ...m,
-          state: map.get(m.id).state,
-          message: map.get(m.id).message,
-          sections: map.get(m.id).sections,
-        }
-      : { ...m, state: "needs-run", message: "not refreshed" };
+    const hit = byId.get(m.id);
+    if (hit) {
+      return {
+        ...m,
+        ...hit,
+        id: m.id,
+        sections: Array.isArray(hit.sections) ? hit.sections : [],
+      };
+    }
+    return {
+      ...m,
+      state: "needs-run",
+      message: statusPendingIds.has(m.id) ? "checking…" : "not refreshed",
+      sections: [],
+    };
   });
   lastStatusMap = statusMapFromModules(lastStatusModules);
 }
@@ -1270,16 +1302,46 @@ let statusRefreshGeneration = 0;
 
 async function refreshAllStatus() {
   const gen = ++statusRefreshGeneration;
-  setStatusRefreshing(true);
+  const installed = registryModules
+    .filter((m) => isScriptInstalled(m.id))
+    .map((m) => m.id);
+  const order = statusRefreshOrder(installed);
+  statusPendingIds = new Set(order);
+  const total = order.length;
+
+  setStatusRefreshing(
+    true,
+    total ? `Refreshing status (0/${total})…` : "Refreshing status…"
+  );
   refreshStatusCells();
   renderStatusModulesPanel();
+
   try {
-    await fetchStatus();
+    if (!total) {
+      statusReady = true;
+      setModuleRefreshFeedback("No installed modules to refresh.");
+      return;
+    }
+
+    let done = 0;
+    for (const id of order) {
+      if (gen !== statusRefreshGeneration) return;
+      await fetchStatus([id]);
+      if (gen !== statusRefreshGeneration) return;
+      statusPendingIds.delete(id);
+      done += 1;
+      statusReady = true;
+      setStatusRefreshing(true, `Refreshing status (${done}/${total})…`);
+      refreshStatusCells();
+      syncDependencyLocks();
+      syncMasterCheckbox();
+      renderStatusModulesPanel();
+    }
     if (gen !== statusRefreshGeneration) return;
-    statusReady = true;
     setModuleRefreshFeedback("Status updated.");
   } finally {
     if (gen === statusRefreshGeneration) {
+      statusPendingIds = new Set();
       setStatusRefreshing(false);
       refreshStatusCells();
       syncDependencyLocks();
@@ -1402,15 +1464,17 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
 }
 
 async function saveCredentials() {
+  if (!credEditMode) return;
   setCredFeedback("");
   try {
     const data = await persistEditingLab();
     applyCredentialsResponse(data, { keepEditingId: editingLabId });
+    setCredEditMode(false);
     setCredFeedback("Saved.");
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
+    syncCredChrome();
   }
-  syncCredCancelButton();
 }
 
 function authPrefValue() {
@@ -1514,7 +1578,8 @@ function syncCredentialCopyButtons() {
   form.querySelectorAll(".cred-field-wrap").forEach((wrap) => {
     const input = wrap.querySelector("input.pf-v6-c-form-control");
     if (!input) return;
-    const empty = input.disabled || !input.value.trim();
+    // Keep copy/launch usable in read-only mode; only empty values disable them.
+    const empty = !input.value.trim();
     wrap.querySelectorAll(".cred-copy-btn").forEach((btn) => {
       btn.disabled = empty;
     });
@@ -1589,11 +1654,27 @@ function preferredOpenshiftForLab(lab) {
 
 function updateCredPanelChrome() {
   const mismatch = document.getElementById("credDualMismatch");
-  if (!mismatch) return;
+  const mismatchText = document.getElementById("credDualMismatchText");
+  const badge = document.getElementById("labActiveBadge");
+  const detailLabel = document.getElementById("credDetailLabLabel");
   const lab = editingLab();
   const active = activeLab();
   const same = Boolean(editingLabId) && editingLabId === credDoc.activeLabId;
-  mismatch.hidden = !(lab && active && same);
+  if (badge) badge.hidden = !(lab && same);
+  if (detailLabel) {
+    detailLabel.textContent = lab?.name || lab?.id || "—";
+  }
+  if (!mismatch) return;
+  if (lab && active && !same) {
+    mismatch.hidden = false;
+    if (mismatchText) {
+      const viewing = lab.name || lab.id;
+      const using = active.name || active.id;
+      mismatchText.textContent = `Viewing “${viewing}”. Modules still use active lab “${using}”.`;
+    }
+  } else {
+    mismatch.hidden = true;
+  }
 }
 
 function updateFoldMetas(lab) {
@@ -1704,6 +1785,7 @@ function renderSecuredClusters(lab) {
 
   updateFoldMetas({ ...lab, activeSecuredClusterId: activeId });
   setupCredentialCopyButtons();
+  syncCredChrome();
 }
 
 function refreshScRowChrome(row) {
@@ -1759,7 +1841,7 @@ function wireScRowBodyControls(row) {
       updateFoldMetas(lab);
     }
     syncScModulesBadges(activeId);
-    syncCredCancelButton();
+    syncCredChrome();
   });
 }
 
@@ -1813,7 +1895,7 @@ function bindSecuredClusterRow(row) {
       securedClusterList.innerHTML =
         '<p class="demo-sc-empty">No secured clusters. Add one when a module needs sensor-side OpenShift.</p>';
     }
-    syncCredCancelButton();
+    syncCredChrome();
   });
 }
 
@@ -1850,7 +1932,8 @@ function updateLabStrip(summary) {
 function syncMakeActiveButton() {
   if (!btnMakeActive) return;
   const same = Boolean(editingLabId) && editingLabId === credDoc.activeLabId;
-  btnMakeActive.disabled = busy || labUiBusy || same || !editingLabId;
+  const catalogLocked = busy || labUiBusy || credEditMode;
+  btnMakeActive.disabled = catalogLocked || same || !editingLabId;
   btnMakeActive.textContent = same ? "Already active" : "Use as active";
   updateCredPanelChrome();
 }
@@ -1865,18 +1948,21 @@ function syncDeleteLabButton() {
     reason = "Keep at least one lab.";
   } else if (editingIsActive) {
     reason = "Switch active to another lab before deleting this one.";
+  } else if (credEditMode) {
+    reason = "Save or Cancel lab edits first.";
   }
   btnDeleteLab.disabled = busy || labUiBusy || Boolean(reason);
-  btnDeleteLab.title = reason || "Delete the lab being edited";
+  btnDeleteLab.title = reason || "Delete the selected lab";
 }
 
 function fillLabSelects() {
   const labs = credDoc.labs || [];
   const options = labs
-    .map(
-      (lab) =>
-        `<option value="${escapeHtml(lab.id)}">${escapeHtml(lab.name || lab.id)}</option>`
-    )
+    .map((lab) => {
+      const label = lab.name || lab.id;
+      const activeMark = lab.id === credDoc.activeLabId ? " (active)" : "";
+      return `<option value="${escapeHtml(lab.id)}">${escapeHtml(label)}${activeMark}</option>`;
+    })
     .join("");
 
   if (activeLabSelect) {
@@ -1887,8 +1973,7 @@ function fillLabSelects() {
     editLabSelect.innerHTML = options;
     editLabSelect.value = editingLabId || credDoc.activeLabId || labs[0]?.id || "";
   }
-  syncMakeActiveButton();
-  syncDeleteLabButton();
+  syncCredChrome();
 }
 
 function fillEditingLabForm() {
@@ -1923,8 +2008,7 @@ function fillEditingLabForm() {
   renderSecuredClusters(lab);
   updateFoldMetas(lab);
   syncCredentialCopyButtons();
-  syncMakeActiveButton();
-  syncDeleteLabButton();
+  syncCredChrome();
 }
 
 function buildCredentialsPayload() {
@@ -1988,7 +2072,7 @@ function applyCredentialsResponse(data, { keepEditingId } = {}) {
   fillEditingLabForm();
   updateLabStrip(data.activeLabSummary);
   captureSavedEditingLabFingerprint();
-  syncCredCancelButton();
+  syncCredChrome();
 }
 
 async function loadCredentials() {
@@ -2012,7 +2096,7 @@ async function persistEditingLab() {
 
 async function setActiveLabOnly(labId) {
   if (!labId || labId === credDoc.activeLabId) {
-    syncMakeActiveButton();
+    syncCredChrome();
     return;
   }
   const data = await api("/api/credentials/active-lab", {
@@ -2035,19 +2119,21 @@ async function setActiveLabOnly(labId) {
 
 async function switchActiveLab(labId) {
   if (!labId || labId === credDoc.activeLabId || labUiBusy) return;
+  if (credEditMode) {
+    setCredFeedback("Save or Cancel lab edits before switching the active lab.", true);
+    fillLabSelects();
+    return;
+  }
   labUiBusy = true;
   setCredFeedback("");
   try {
-    // Keep credentials edits for the lab being edited; do not change the form.
-    await persistEditingLab();
     await setActiveLabOnly(labId);
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
     fillLabSelects();
   } finally {
     labUiBusy = false;
-    syncMakeActiveButton();
-    syncDeleteLabButton();
+    syncCredChrome();
   }
 }
 
@@ -2086,44 +2172,83 @@ function isEditingLabDirty() {
   return JSON.stringify(editingLabFormSnapshot()) !== savedEditingLabFingerprint;
 }
 
-function syncCredCancelButton() {
-  const btn = document.getElementById("btnCredCancel");
-  if (!btn) return;
-  btn.disabled = busy || labUiBusy || !isEditingLabDirty();
+function setCredEditMode(on) {
+  credEditMode = Boolean(on);
+  syncCredChrome();
+}
+
+function syncCredChrome() {
+  const form = document.getElementById("credForm");
+  const btnEdit = document.getElementById("btnCredEdit");
+  const btnSave = document.getElementById("btnCredSave");
+  const btnCancel = document.getElementById("btnCredCancel");
+  const btnAdd = document.getElementById("btnAddLab");
+  const btnAddSc = document.getElementById("btnAddSecuredCluster");
+  const dirty = isEditingLabDirty();
+  const catalogLocked = busy || labUiBusy || credEditMode;
+
+  if (form) form.classList.toggle("is-readonly", !credEditMode);
+  if (btnEdit) {
+    btnEdit.hidden = credEditMode;
+    btnEdit.disabled = busy || labUiBusy;
+  }
+  if (btnSave) {
+    btnSave.hidden = !credEditMode;
+    btnSave.disabled = busy || labUiBusy || !dirty;
+  }
+  if (btnCancel) {
+    btnCancel.hidden = !credEditMode;
+    btnCancel.disabled = busy || labUiBusy;
+  }
+  if (editLabSelect) editLabSelect.disabled = catalogLocked;
+  if (btnAdd) {
+    btnAdd.disabled = catalogLocked;
+    btnAdd.title = credEditMode
+      ? "Save or Cancel lab edits first."
+      : "Add a new lab to this file";
+  }
+
+  form?.querySelectorAll("input, select, textarea").forEach((el) => {
+    el.disabled = !credEditMode || busy || labUiBusy;
+  });
+  form?.querySelectorAll("button.js-sc-remove").forEach((el) => {
+    el.disabled = !credEditMode || busy || labUiBusy;
+  });
+  if (btnAddSc) btnAddSc.disabled = !credEditMode || busy || labUiBusy;
+
+  syncMakeActiveButton();
+  syncDeleteLabButton();
+  syncCredentialCopyButtons();
+  updateCredPanelChrome();
 }
 
 async function cancelEditingLab() {
-  if (labUiBusy) return;
-  if (!isEditingLabDirty()) {
-    setCredFeedback("No unsaved changes.");
-    return;
-  }
+  if (labUiBusy || !credEditMode) return;
   labUiBusy = true;
   setCredFeedback("");
   try {
-    const data = await api("/api/credentials");
-    applyCredentialsResponse(data, { keepEditingId: editingLabId });
-    setCredFeedback("Reverted to file.");
+    if (isEditingLabDirty()) {
+      const data = await api("/api/credentials");
+      applyCredentialsResponse(data, { keepEditingId: editingLabId });
+      setCredFeedback("Reverted to file.");
+    } else {
+      setCredFeedback("");
+    }
+    setCredEditMode(false);
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
   } finally {
     labUiBusy = false;
-    syncMakeActiveButton();
-    syncDeleteLabButton();
-    syncCredCancelButton();
+    syncCredChrome();
   }
 }
 
 async function switchEditingLab(labId) {
   if (!labId || labId === editingLabId || labUiBusy) return;
-  if (isEditingLabDirty()) {
-    const ok = window.confirm(
-      "You have unsaved edits. Switching labs discards them. Continue?"
-    );
-    if (!ok) {
-      fillLabSelects();
-      return;
-    }
+  if (credEditMode) {
+    setCredFeedback("Save or Cancel lab edits before switching labs.", true);
+    fillLabSelects();
+    return;
   }
   labUiBusy = true;
   setCredFeedback("");
@@ -2131,35 +2256,38 @@ async function switchEditingLab(labId) {
     // Always reload from disk so the form shows file state, not in-memory edits.
     const data = await api("/api/credentials");
     applyCredentialsResponse(data, { keepEditingId: labId });
+    setCredEditMode(false);
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
     fillLabSelects();
   } finally {
     labUiBusy = false;
-    syncMakeActiveButton();
-    syncDeleteLabButton();
-    syncCredCancelButton();
+    syncCredChrome();
   }
 }
 
 async function makeEditingLabActive() {
-  if (!editingLabId || editingLabId === credDoc.activeLabId || labUiBusy) return;
+  if (!editingLabId || editingLabId === credDoc.activeLabId || labUiBusy || credEditMode) {
+    return;
+  }
   labUiBusy = true;
   setCredFeedback("");
   try {
-    await persistEditingLab();
     await setActiveLabOnly(editingLabId);
     setCredFeedback("Active lab updated.");
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
   } finally {
     labUiBusy = false;
-    syncMakeActiveButton();
-    syncDeleteLabButton();
+    syncCredChrome();
   }
 }
 
 async function addLab() {
+  if (credEditMode) {
+    setCredFeedback("Save or Cancel lab edits before adding a lab.", true);
+    return;
+  }
   const name = window.prompt("Display name for the new lab?", "new-lab");
   if (name == null) return;
   const lab = emptyLab(name.trim() || "new-lab");
@@ -2178,17 +2306,21 @@ async function addLab() {
     });
     editingLabId = lab.id;
     applyCredentialsResponse(data, { keepEditingId: lab.id });
-    setCredFeedback("Lab added (not active). Edit it, then Use as active when ready.");
+    setCredEditMode(true);
+    setCredFeedback("Lab added. Fill in details, Save, then Use as active when ready.");
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
   } finally {
     labUiBusy = false;
-    syncMakeActiveButton();
-    syncDeleteLabButton();
+    syncCredChrome();
   }
 }
 
 async function deleteEditingLab() {
+  if (credEditMode) {
+    setCredFeedback("Save or Cancel lab edits before deleting a lab.", true);
+    return;
+  }
   const lab = editingLab();
   if (!lab) return;
   if ((credDoc.labs || []).length <= 1) {
@@ -2223,17 +2355,18 @@ async function deleteEditingLab() {
     });
     editingLabId = activeId;
     applyCredentialsResponse(data, { keepEditingId: activeId });
+    setCredEditMode(false);
     setCredFeedback("Lab deleted.");
   } catch (err) {
     setCredFeedback(String(err.message || err), true);
   } finally {
     labUiBusy = false;
-    syncMakeActiveButton();
-    syncDeleteLabButton();
+    syncCredChrome();
   }
 }
 
 function addSecuredCluster() {
+  if (!credEditMode) return;
   const lab = editingLab();
   if (!lab) return;
   const current = readSecuredClustersFromDom();
@@ -2254,7 +2387,7 @@ function addSecuredCluster() {
   renderSecuredClusters(draft);
   const row = securedClusterList?.querySelector(`[data-sc-id="${CSS.escape(sc.id)}"]`);
   if (row) row.open = true;
-  syncCredCancelButton();
+  syncCredChrome();
 }
 
 async function loadRegistry() {
@@ -2293,7 +2426,13 @@ fields.centralApiToken?.addEventListener("input", refreshFoldMetasFromForm);
 fields.labName?.addEventListener("input", refreshFoldMetasFromForm);
 fields.centralOcpConsole?.addEventListener("input", refreshFoldMetasFromForm);
 
-document.getElementById("btnCredSave").addEventListener("click", (e) => {
+document.getElementById("btnCredEdit")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (busy || labUiBusy) return;
+  setCredFeedback("");
+  setCredEditMode(true);
+});
+document.getElementById("btnCredSave")?.addEventListener("click", (e) => {
   e.preventDefault();
   saveCredentials();
 });
@@ -2302,10 +2441,14 @@ document.getElementById("btnCredCancel")?.addEventListener("click", (e) => {
   cancelEditingLab().catch((err) => setCredFeedback(err.message, true));
 });
 
-// Keep Cancel enabled/disabled as the form changes.
+// Keep Save enabled/disabled as the form changes while editing.
 const credFormEl = document.getElementById("credForm");
-credFormEl?.addEventListener("input", () => syncCredCancelButton());
-credFormEl?.addEventListener("change", () => syncCredCancelButton());
+credFormEl?.addEventListener("input", () => {
+  if (credEditMode) syncCredChrome();
+});
+credFormEl?.addEventListener("change", () => {
+  if (credEditMode) syncCredChrome();
+});
 document.getElementById("btnAddLab")?.addEventListener("click", () => {
   addLab().catch((e) => setCredFeedback(e.message, true));
 });

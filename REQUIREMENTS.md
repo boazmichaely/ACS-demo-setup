@@ -102,7 +102,7 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 
 | ID | Requirement |
 |----|-------------|
-| R-LAY-1 | `config/modules.json` is the single registry: `id` (script / CLI / Module column), `label` (Description only), list order, and `dependsOn` |
+| R-LAY-1 | `config/modules.json` is the single registry: `id` (script / CLI / Module column), `label` (Description only), list order, `dependsOn`, and `statusComplexity` (1-10 hint for GUI status refresh order; lower refreshes first) |
 | R-LAY-2 | Each module has a documented entrypoint: `modules/<id>.sh` (may delegate to helpers in the same directory) |
 | R-LAY-3 | `./serve.sh` is the top-level GUI entrypoint; `scripts/acs-setup.sh` is the CLI orchestrator |
 | R-LAY-4 | `gui/` is part of the repo from the first shipped module; not a later add-on |
@@ -294,7 +294,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 **Purpose:** Lead-in for the ACS console plugin visibility demo: HTPasswd users (adam/boaz/chris), IdP, and OpenShift project RBAC. Full walkthrough lives in `modules/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed.
 
-**Depends on:** `ms-demo`, `init-demo` (catalog) so app projects exist for boaz/chris RBAC
+**Depends on:** none (demo walkthrough uses `ms-demo` / `init-demo` projects when those modules are installed; Part 1 itself does not require them)
 
 **Status must verify:** IdP, users, and bindings match demo spec; Demo fold shows the walkthrough; Credentials fold lists fixed lab passwords
 
@@ -395,11 +395,12 @@ The GUI is **required from the first deliverable** (module M1 `registries`). No 
 | ID | Requirement |
 |----|-------------|
 | R-GUI-1 | `gui/` exists before M1 is considered done |
-| R-GUI-2 | Reads `config/modules.json` for module list, order, labels, and dependencies |
+| R-GUI-2 | Reads `config/modules.json` for module list, order, labels, dependencies, and `statusComplexity` |
+| R-GUI-2b | Status refresh probes installed modules one at a time in ascending `statusComplexity` (1-10), updating the UI after each; missing complexity defaults to 5 |
 | R-GUI-3 | Shows per-module status (invokes orchestrator `--status --json` or equivalent API) |
 | R-GUI-4 | Lab credentials form per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) §3; persisted to `lab-credentials.json` |
 | R-GUI-5 | For each shipped module: control to run that module (with confirmation when `--run` is destructive) |
-| R-GUI-6 | Refresh status on demand and after a run completes |
+| R-GUI-6 | Refresh status on demand and after a run completes; full refresh is progressive (per module, ordered by `statusComplexity`) |
 | R-GUI-7 | Does not commit secrets; server-side gitignored storage preferred over browser localStorage for tokens |
 | R-GUI-8 | GUI backend invokes `scripts/acs-setup.sh` (or module entrypoints directly with the same contract); GUI does not reimplement module logic |
 | R-GUI-9 | New modules add GUI affordances in the **same PR/change** as the module script |

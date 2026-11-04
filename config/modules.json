@@ -3,101 +3,116 @@
     {
       "id": "registries",
       "label": "Configure ACS image integrations",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 3
     },
     {
       "id": "signature-integration",
       "label": "ACS Cosign / signature integration",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 4
     },
     {
       "id": "compliance-operator",
       "label": "Compliance Operator + scan schedule",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 7
     },
     {
       "id": "virt-vm-demo",
       "label": "Deploy OCP Virt + RHEL VMs for ACS guest vulnerability demo",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 9
     },
     {
       "id": "ms-demo",
       "label": "Mostmark microservices (project ms-demo)",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 4
     },
     {
       "id": "init-demo",
       "label": "Init-container Clean/Dirty/Blue/Red (acs-init-container-test)",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 3
     },
     {
       "id": "users-part1-ocp",
       "label": "Users Part 1 (OCP)",
-      "dependsOn": [
-        "ms-demo",
-        "init-demo"
-      ]
+      "dependsOn": [],
+      "statusComplexity": 6
     },
     {
       "id": "users-part2-oauth",
       "label": "Users Part 2 (OAuth)",
       "dependsOn": [
         "users-part1-ocp"
-      ]
+      ],
+      "statusComplexity": 2
     },
     {
       "id": "users-part3-acs",
       "label": "Users Part 3 (ACS)",
       "dependsOn": [
         "users-part2-oauth"
-      ]
+      ],
+      "statusComplexity": 2
     },
     {
       "id": "slack-notifier",
       "label": "Central Slack integration",
       "dependsOn": [
         "roxctl-env"
-      ]
+      ],
+      "statusComplexity": 3
     },
     {
       "id": "splunk",
       "label": "Splunk Operator + RHACS TA",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 6
     },
     {
       "id": "roxctl-env",
       "label": "Roxctl route and API token (~/.roxctl)",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 2
     },
     {
       "id": "openshift-mcp",
       "label": "Installs/updates an OpenShift MCP server on your cluster and wires it to your preferred AI agent",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 5
     },
     {
       "id": "openshift-mcp-gateway",
       "label": "Launches an MCP gateway on the cluster you designate",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 5
     },
     {
       "id": "acs-lightspeed",
       "label": "Configures OpenShift Lightspeed integration",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 4
     },
     {
       "id": "acs-mcp",
       "label": "Installs/updates an ACS MCP server on your cluster and wires it to your agent",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 5
     },
     {
       "id": "prometheus",
       "label": "Install Prometheus on your cluster and wire ACS monitoring",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 5
     },
     {
       "id": "secrets-manager",
       "label": "Install Hashi on your cluster, enable External Secret Management Console plugin, External Secrets Operator (ESO) and a demo application",
-      "dependsOn": []
+      "dependsOn": [],
+      "statusComplexity": 6
     }
   ]
 }

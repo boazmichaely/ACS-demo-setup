@@ -60,7 +60,7 @@ Purpose:
   Lab passwords are listed under Status → Credentials.
 
 Depends on:
-  ms-demo, init-demo (catalog) so app projects exist for boaz/chris RBAC
+  none (catalog). Demo namespaces ${MS_NS} / ${INIT_NS} are used when present.
   Lab credentials with OpenShift access (“OpenShift for modules”)
   oc, htpasswd, openssl, python3, jq on PATH
 

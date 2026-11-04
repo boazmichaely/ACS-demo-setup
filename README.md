@@ -45,7 +45,7 @@ Useful when you are not in the browser:
 | `./serve.sh` | Starts the GUI |
 | `gui/` | Web UI (FastAPI + static pages) |
 | `scripts/acs-setup.sh` | Orchestrator: status, run, and oc helpers |
-| `config/modules.json` | List of modules (display order, labels, dependencies) |
+| `config/modules.json` | List of modules (display order, labels, dependencies, `statusComplexity` 1-10) |
 | `modules/<id>.sh` | One shell entrypoint per module |
 | `templates/module-skeleton.sh` | Copy-paste starting point for a new module |
 | `templates/module-helper.py` | Python helper template (required for Central; also useful for heavy JSON) |
