@@ -61,7 +61,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 |------|--------|--------|
 | **Document** | `activeLabId`, `labs[]` | Switch active lab in the GUI strip; disk log records `lab-switch` / `page-load` with a short lab blurb |
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
-| **Central cluster → OpenShift** | console URL, admin username, admin password | OCP admin fields optional when the user relies on `oc login` |
+| **Central cluster → OpenShift** | console URL, admin username, admin password, optional `apiToken` | If `apiToken` is set, modules use `oc login --token=` (SSO labs). Else username/password. |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
 | **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true`; **`activeSecuredClusterId` is user-selected** (GUI: OpenShift for modules) and is the OpenShift target for module `oc` work. Empty `securedClusters` → Central OpenShift |
 

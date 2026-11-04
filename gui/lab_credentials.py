@@ -127,6 +127,10 @@ def _merge_openshift(incoming: dict[str, Any], existing: dict[str, Any]) -> dict
             incoming.get("adminPassword") or "",
             existing.get("adminPassword") or "",
         ),
+        "apiToken": _merge_secret(
+            incoming.get("apiToken") or "",
+            existing.get("apiToken") or "",
+        ),
     }
 
 
@@ -264,6 +268,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
                         "consoleUrl": ocp.get("consoleUrl") or "",
                         "adminUsername": ocp.get("adminUsername") or "",
                         "adminPassword": ocp.get("adminPassword") or "",
+                        "apiToken": ocp.get("apiToken") or "",
                     },
                 }
             )
@@ -278,6 +283,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
                         "consoleUrl": c_ocp.get("consoleUrl") or "",
                         "adminUsername": c_ocp.get("adminUsername") or "",
                         "adminPassword": c_ocp.get("adminPassword") or "",
+                        "apiToken": c_ocp.get("apiToken") or "",
                     },
                     "central": {
                         "consoleUrl": c_central.get("consoleUrl") or "",

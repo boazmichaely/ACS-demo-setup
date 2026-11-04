@@ -182,31 +182,39 @@ def oc_show_server(kubeconfig: Path | None = None) -> str:
 
 def _login_to_lab(creds: dict[str, Any], kubeconfig: Path, api: str) -> None:
     ocp = _openshift_block(creds)
+    token = (ocp.get("apiToken") or "").strip()
     user = (ocp.get("adminUsername") or "").strip()
     password = (ocp.get("adminPassword") or "").strip()
-    missing: list[str] = []
-    if not user:
-        missing.append("adminUsername")
-    if not password:
-        missing.append("adminPassword")
-    if missing:
-        raise RuntimeError(
-            "OpenShift credentials incomplete in lab-credentials.json for active lab "
-            f"(missing: {', '.join(missing)}). Target API would be {api}."
-        )
 
     kubeconfig.parent.mkdir(parents=True, exist_ok=True)
-    login = _run_oc(
-        [
+    if token:
+        login_args = [
+            "login",
+            api,
+            f"--token={token}",
+            "--insecure-skip-tls-verify=true",
+        ]
+    else:
+        missing: list[str] = []
+        if not user:
+            missing.append("adminUsername")
+        if not password:
+            missing.append("adminPassword")
+        if missing:
+            raise RuntimeError(
+                "OpenShift credentials incomplete in lab-credentials.json for active lab "
+                f"(missing: {', '.join(missing)}; or set apiToken for SSO labs). "
+                f"Target API would be {api}."
+            )
+        login_args = [
             "login",
             api,
             f"--username={user}",
             f"--password={password}",
             "--insecure-skip-tls-verify=true",
-        ],
-        kubeconfig=kubeconfig,
-        timeout=90,
-    )
+        ]
+
+    login = _run_oc(login_args, kubeconfig=kubeconfig, timeout=90)
     if login.returncode != 0:
         detail = (login.stderr or login.stdout or "").strip() or f"exit {login.returncode}"
         raise RuntimeError(f"oc login to {api} (kubeconfig={kubeconfig}) failed: {detail}")
@@ -305,8 +313,8 @@ def show_active(root: Path | None = None) -> dict[str, Any]:
     if info.get("expectedApiError"):
         problems.append(info["expectedApiError"])
         hints.append(
-            "Fill OpenShift console URL (and user/password) for the active lab in "
-            "lab-credentials.json, then: ./scripts/acs-setup.sh --oc-login"
+            "Fill OpenShift console URL and apiToken (SSO) or user/password for the "
+            "active lab in lab-credentials.json, then: ./scripts/acs-setup.sh --oc-login"
         )
     elif not info["kubeconfigExists"]:
         problems.append("no kubeconfig file for this lab yet")

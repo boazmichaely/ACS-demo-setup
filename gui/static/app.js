@@ -49,6 +49,7 @@ const fields = {
   centralOcpConsole: document.getElementById("centralOcpConsole"),
   centralOcpUser: document.getElementById("centralOcpUser"),
   centralOcpPassword: document.getElementById("centralOcpPassword"),
+  centralOcpApiToken: document.getElementById("centralOcpApiToken"),
   centralConsole: document.getElementById("centralConsole"),
   centralApiToken: document.getElementById("centralApiToken"),
   centralApiTokenName: document.getElementById("centralApiTokenName"),
@@ -65,7 +66,7 @@ function newId() {
 }
 
 function emptyOpenshift() {
-  return { consoleUrl: "", adminUsername: "", adminPassword: "" };
+  return { consoleUrl: "", adminUsername: "", adminPassword: "", apiToken: "" };
 }
 
 function emptySecuredCluster(name = "production") {
@@ -1636,6 +1637,7 @@ function readSecuredClustersFromDom() {
         consoleUrl: row.querySelector(".js-sc-console")?.value || "",
         adminUsername: row.querySelector(".js-sc-user")?.value || "",
         adminPassword: row.querySelector(".js-sc-password")?.value || "",
+        apiToken: row.querySelector(".js-sc-token")?.value || "",
       },
     };
   });
@@ -1715,9 +1717,13 @@ function scRemoteBodyHtml(sc, ocp) {
       </label>
       <label class="demo-field">
         <span>Password</span>
-        <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" spellcheck="false" autocomplete="off" />
+        <input class="pf-v6-c-form-control js-sc-password" type="text" value="${escapeHtml(ocp.adminPassword || "")}" spellcheck="false" autocomplete="off" placeholder="Or use API token" />
       </label>
-    </div>`;
+    </div>
+    <label class="demo-field">
+      <span>API token</span>
+      <input class="pf-v6-c-form-control js-sc-token" type="text" value="${escapeHtml(ocp.apiToken || "")}" spellcheck="false" autocomplete="off" placeholder="oc login --token=… (SSO labs)" />
+    </label>`;
 }
 
 function scSameBodyHtml() {
@@ -1725,7 +1731,7 @@ function scSameBodyHtml() {
       <input class="pf-v6-c-check__input js-sc-same" type="checkbox" checked />
       <span class="pf-v6-c-check__label">Same as Central</span>
     </label>
-    <p class="demo-sc-hint" style="margin:0">Uses Central OpenShift console/user/password.</p>`;
+    <p class="demo-sc-hint" style="margin:0">Uses Central OpenShift console / user / password / API token.</p>`;
 }
 
 function scActiveRadioHtml(scId, activeId) {
@@ -1858,6 +1864,7 @@ function applyScSameToggle(row) {
     consoleUrl: row.querySelector(".js-sc-console")?.value || "",
     adminUsername: row.querySelector(".js-sc-user")?.value || "",
     adminPassword: row.querySelector(".js-sc-password")?.value || "",
+    apiToken: row.querySelector(".js-sc-token")?.value || "",
   };
 
   const activeId = readActiveScIdFromDom(readSecuredClustersFromDom());
@@ -1993,6 +2000,7 @@ function fillEditingLabForm() {
   fields.centralOcpConsole.value = ocp.consoleUrl || "";
   fields.centralOcpUser.value = ocp.adminUsername || "";
   fields.centralOcpPassword.value = ocp.adminPassword || "";
+  if (fields.centralOcpApiToken) fields.centralOcpApiToken.value = ocp.apiToken || "";
 
   fields.centralConsole.value = central.consoleUrl || "";
   fields.centralApiToken.value = central.apiToken || "";
@@ -2025,6 +2033,7 @@ function buildCredentialsPayload() {
         consoleUrl: fields.centralOcpConsole.value,
         adminUsername: fields.centralOcpUser.value,
         adminPassword: fields.centralOcpPassword.value,
+        apiToken: fields.centralOcpApiToken?.value || "",
       },
       central: {
         consoleUrl: fields.centralConsole.value,
@@ -2405,6 +2414,7 @@ function refreshFoldMetasFromForm() {
       consoleUrl: fields.centralOcpConsole?.value || "",
       adminUsername: fields.centralOcpUser?.value || "",
       adminPassword: fields.centralOcpPassword?.value || "",
+      apiToken: fields.centralOcpApiToken?.value || "",
     },
     central: {
       consoleUrl: fields.centralConsole?.value || "",

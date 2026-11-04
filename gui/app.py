@@ -36,6 +36,10 @@ class OpenshiftAccessIn(BaseModel):
     consoleUrl: str = ""
     adminUsername: str = ""
     adminPassword: str = Field(default="", description="Blank keeps existing password")
+    apiToken: str = Field(
+        default="",
+        description="Blank keeps existing OpenShift API token; preferred over password when set",
+    )
 
 
 class CentralConsoleIn(BaseModel):

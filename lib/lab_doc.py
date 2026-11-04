@@ -23,7 +23,23 @@ def _host_hint(url: str) -> str:
 
 
 def empty_openshift() -> dict[str, str]:
-    return {"consoleUrl": "", "adminUsername": "", "adminPassword": ""}
+    return {
+        "consoleUrl": "",
+        "adminUsername": "",
+        "adminPassword": "",
+        "apiToken": "",
+    }
+
+
+def normalize_openshift(raw: dict[str, Any] | None) -> dict[str, str]:
+    """Ensure OpenShift access block has all known keys (including optional apiToken)."""
+    src = raw or {}
+    return {
+        "consoleUrl": (src.get("consoleUrl") or "").strip(),
+        "adminUsername": (src.get("adminUsername") or "").strip(),
+        "adminPassword": src.get("adminPassword") or "",
+        "apiToken": src.get("apiToken") or "",
+    }
 
 
 def empty_central() -> dict[str, Any]:
@@ -105,25 +121,15 @@ def migrate_v1_to_v2(raw: dict[str, Any]) -> dict[str, Any]:
         name="production",
         same_as_central=bool(secured.get("sameAsCentralCluster", True)),
     )
-    sc_ocp = secured.get("openshift") or {}
-    sc["openshift"] = {
-        "consoleUrl": (sc_ocp.get("consoleUrl") or "").strip(),
-        "adminUsername": (sc_ocp.get("adminUsername") or "").strip(),
-        "adminPassword": sc_ocp.get("adminPassword") or "",
-    }
+    sc["openshift"] = normalize_openshift(secured.get("openshift"))
 
-    c_ocp = central.get("openshift") or {}
     c_central = dict(central.get("central") or empty_central())
     lab = {
         "id": lab_id,
         "name": name if name != "default" else "default",
         "insecureSkipTlsVerify": bool(raw.get("insecureSkipTlsVerify", False)),
         "centralCluster": {
-            "openshift": {
-                "consoleUrl": (c_ocp.get("consoleUrl") or "").strip(),
-                "adminUsername": (c_ocp.get("adminUsername") or "").strip(),
-                "adminPassword": c_ocp.get("adminPassword") or "",
-            },
+            "openshift": normalize_openshift(central.get("openshift")),
             "central": c_central,
         },
         "securedClusters": [sc],
@@ -165,6 +171,10 @@ def normalize_document(raw: dict[str, Any] | None) -> dict[str, Any]:
                     lab["activeSecuredClusterId"] = clusters[0].get("id") or ""
             if "insecureSkipTlsVerify" not in lab and "insecureSkipTlsVerify" in raw:
                 lab["insecureSkipTlsVerify"] = bool(raw.get("insecureSkipTlsVerify"))
+            cc = lab.setdefault("centralCluster", {})
+            cc["openshift"] = normalize_openshift(cc.get("openshift"))
+            for sc in lab.get("securedClusters") or []:
+                sc["openshift"] = normalize_openshift(sc.get("openshift"))
         return doc
     if "centralCluster" in raw:
         return migrate_v1_to_v2(raw)
