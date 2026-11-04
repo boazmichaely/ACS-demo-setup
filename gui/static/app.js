@@ -56,6 +56,9 @@ const fields = {
   centralApiTokenExpires: document.getElementById("centralApiTokenExpires"),
   centralAdminUser: document.getElementById("centralAdminUser"),
   centralAdminPassword: document.getElementById("centralAdminPassword"),
+  slackNotifierName: document.getElementById("slackNotifierName"),
+  slackWebhookUrl: document.getElementById("slackWebhookUrl"),
+  slackChannelUrl: document.getElementById("slackChannelUrl"),
 };
 
 function newId() {
@@ -78,6 +81,31 @@ function emptySecuredCluster(name = "production") {
   };
 }
 
+function slackNotifierDefaults() {
+  const d = credDoc?.slackNotifierDefaults || {};
+  return {
+    webhookUrl: (d.webhookUrl || "").trim(),
+    notifierName: (d.notifierName || "").trim() || "#acs-demo-notifier",
+    channelUrl: (d.channelUrl || "").trim(),
+  };
+}
+
+function restoreSlackNotifierDefaults() {
+  const defs = slackNotifierDefaults();
+  if (fields.slackNotifierName) fields.slackNotifierName.value = defs.notifierName || "";
+  if (fields.slackWebhookUrl) fields.slackWebhookUrl.value = defs.webhookUrl || "";
+  if (fields.slackChannelUrl) fields.slackChannelUrl.value = defs.channelUrl || "";
+  const lab = editingLab();
+  if (lab) {
+    lab.slackNotifier = { ...defs };
+    updateFoldMetas(lab);
+  }
+}
+
+function emptySlackNotifier() {
+  return { ...slackNotifierDefaults() };
+}
+
 function emptyLab(name = "new-lab") {
   const sc = emptySecuredCluster("production");
   return {
@@ -98,6 +126,7 @@ function emptyLab(name = "new-lab") {
     },
     securedClusters: [sc],
     activeSecuredClusterId: sc.id,
+    slackNotifier: emptySlackNotifier(),
   };
 }
 
@@ -543,9 +572,15 @@ function renderSectionsHtml(sections, moduleId = "") {
 function moduleCellHtml(m) {
   const idx = m.number != null ? `${escapeHtml(String(m.number))}.` : "";
   const id = String(m.id ?? "");
+  const safe = escapeHtml(id);
+  // Quiet link: looks like the bold module id; click jumps to Status fold.
+  const slug =
+    m.scriptInstalled === false
+      ? `<span class="demo-mod__slug">${safe}</span>`
+      : `<a class="demo-mod__slug demo-mod__slug-link" href="#status-mod-${safe}" title="Jump to ${safe} in Status" data-status-jump="${safe}">${safe}</a>`;
   return `<div class="demo-mod__line">
     <span class="demo-mod__idx">${idx}</span>
-    <span class="demo-mod__slug">${escapeHtml(id)}</span>
+    ${slug}
   </div>`;
 }
 
@@ -853,10 +888,36 @@ function setupModuleHelpDialog() {
   });
 }
 
-function missingDeps(moduleId) {
+function depStatusKnown(depId) {
+  if (!isScriptInstalled(depId)) return true;
+  if (statusPendingIds.has(depId)) return false;
+  const st = lastStatusMap.get(depId);
+  if (!st) return false;
+  const msg = String(st.message || "");
+  if (msg === "not refreshed" || /^checking/i.test(msg)) return false;
+  return true;
+}
+
+function missingDeps(moduleId, seen = new Set()) {
   const meta = moduleMetaById.get(moduleId);
   if (!meta?.dependsOn?.length) return [];
-  return meta.dependsOn.filter((dep) => lastStatusMap.get(dep)?.state !== "ok");
+  if (seen.has(moduleId)) return [];
+  seen.add(moduleId);
+  const missing = [];
+  for (const dep of meta.dependsOn) {
+    // While a dependency's own status is still in flight, do not treat it as unmet
+    // (statusReady flips true after the first module; premature locks gray the chain).
+    if (!depStatusKnown(dep)) continue;
+    const st = lastStatusMap.get(dep);
+    if (st?.state !== "ok") {
+      missing.push(dep);
+      continue;
+    }
+    // Transitive: dep is ok itself but still waiting on its own deps.
+    const nested = missingDeps(dep, seen);
+    if (nested.length) missing.push(dep);
+  }
+  return missing;
 }
 
 function isDependencyLocked(moduleId) {
@@ -931,10 +992,14 @@ function collectCheckboxById() {
 }
 
 function prereqMet(depId, statusMap, cbById) {
-  const st = statusMap.get(depId);
-  if (st?.state === "ok") return true;
   const cb = cbById.get(depId);
-  return Boolean(cb?.checked);
+  if (cb?.checked) return true;
+  if (!depStatusKnown(depId)) return true;
+  const st = statusMap.get(depId);
+  if (st?.state !== "ok") return false;
+  // Transitive: checked/ok dep that is still dep-locked does not satisfy children.
+  if (isScriptInstalled(depId) && missingDeps(depId).length > 0) return false;
+  return true;
 }
 
 function syncDependencyLocks() {
@@ -984,13 +1049,17 @@ function syncMasterCheckbox() {
   const selectable = all.filter((c) => !c.disabled);
   const checked = selectable.filter((c) => c.checked).length;
   const n = selectable.length;
-  const unavailable = all.length - n;
+  const notInstalled = all.filter((c) => {
+    const id = c.dataset.moduleId;
+    return id && !isScriptInstalled(id);
+  }).length;
+  const locked = all.length - n - notInstalled;
   modSelectAll.checked = n > 0 && checked === n;
   modSelectAll.indeterminate = checked > 0 && checked < n;
-  modSelectionCount.textContent =
-    unavailable > 0
-      ? `${checked} of ${n} selectable selected (${unavailable} not installed)`
-      : `${checked} of ${n} selected`;
+  const bits = [`${checked} of ${n} selected`];
+  if (locked > 0) bits.push(`${locked} waiting on deps`);
+  if (notInstalled > 0) bits.push(`${notInstalled} not installed`);
+  modSelectionCount.textContent = bits.join(" · ");
   moduleBulkBar.classList.toggle("has-selection", checked > 0);
 }
 
@@ -1070,16 +1139,19 @@ function jumpToStatusModule(moduleId) {
   const target = document.getElementById(`status-mod-${moduleId}`);
   if (!target) return;
   target.open = true;
-  target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  // "start" (not "nearest") so far-away folds actually scroll into view.
+  target.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 function bindStatusJumpLinks(root) {
-  (root || modulesTbody).querySelectorAll("a.demo-mod__status-link").forEach((a) => {
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      jumpToStatusModule(a.dataset.statusJump);
+  (root || modulesTbody)
+    .querySelectorAll("a.demo-mod__status-link, a.demo-mod__slug-link")
+    .forEach((a) => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        jumpToStatusModule(a.dataset.statusJump);
+      });
     });
-  });
 }
 
 function refreshStatusCells() {
@@ -1682,6 +1754,7 @@ function updateCredPanelChrome() {
 function updateFoldMetas(lab) {
   const centralMeta = document.getElementById("centralFoldMeta");
   const scMeta = document.getElementById("scFoldMeta");
+  const slackMeta = document.getElementById("slackFoldMeta");
   const central = ((lab?.centralCluster || {}).central || {});
   const host = hostOnly(central.consoleUrl);
   const tokenBit = (central.apiToken || "").trim() ? "token set" : "no token";
@@ -1693,6 +1766,19 @@ function updateFoldMetas(lab) {
   if (scMeta) {
     const n = clusters.length;
     scMeta.textContent = `${n} cluster${n === 1 ? "" : "s"}${remote ? ` · ${remote} remote` : ""}`;
+  }
+  const sn = lab?.slackNotifier || emptySlackNotifier();
+  const defs = slackNotifierDefaults();
+  const snName = (sn.notifierName || defs.notifierName || "#acs-demo-notifier").trim();
+  const wh = (sn.webhookUrl || "").trim() || (defs.webhookUrl || "").trim();
+  const ch = (sn.channelUrl || "").trim() || (defs.channelUrl || "").trim();
+  const usingDefault =
+    (!wh || wh === (defs.webhookUrl || "").trim()) &&
+    (!sn.notifierName || sn.notifierName === defs.notifierName) &&
+    (!ch || ch === (defs.channelUrl || "").trim());
+  const whBit = !wh ? "no webhook" : usingDefault ? "default" : "custom";
+  if (slackMeta) {
+    slackMeta.textContent = `${snName} · ${whBit}`;
   }
   updateCredPanelChrome();
 }
@@ -2010,8 +2096,23 @@ function fillEditingLabForm() {
   fields.centralAdminPassword.value = central.adminPassword || "";
   setAuthPref(central.authPreference);
 
+  const sn = lab.slackNotifier || emptySlackNotifier();
+  const snDefs = slackNotifierDefaults();
+  if (fields.slackNotifierName) {
+    fields.slackNotifierName.value =
+      sn.notifierName || snDefs.notifierName || "#acs-demo-notifier";
+  }
+  if (fields.slackWebhookUrl) {
+    fields.slackWebhookUrl.value = sn.webhookUrl || snDefs.webhookUrl || "";
+  }
+  if (fields.slackChannelUrl) {
+    fields.slackChannelUrl.value = sn.channelUrl || snDefs.channelUrl || "";
+  }
+
   const centralFold = document.getElementById("centralFold");
   if (centralFold) centralFold.open = false;
+  const slackFold = document.getElementById("slackFold");
+  if (slackFold) slackFold.open = false;
 
   renderSecuredClusters(lab);
   updateFoldMetas(lab);
@@ -2047,6 +2148,11 @@ function buildCredentialsPayload() {
     },
     securedClusters: scRows,
     activeSecuredClusterId: activeSc,
+    slackNotifier: {
+      webhookUrl: fields.slackWebhookUrl?.value || "",
+      notifierName: (fields.slackNotifierName?.value || "").trim() || "#acs-demo-notifier",
+      channelUrl: fields.slackChannelUrl?.value || "",
+    },
   };
 
   const labs = (credDoc.labs || []).map((existing) =>
@@ -2469,6 +2575,21 @@ document.getElementById("btnMakeActive")?.addEventListener("click", () => {
   makeEditingLabActive().catch((e) => setCredFeedback(e.message, true));
 });
 document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSecuredCluster);
+document.getElementById("btnSlackRestoreDefaults")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  restoreSlackNotifierDefaults();
+});
+document.getElementById("btnSlackOpenChannel")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  const raw = (
+    fields.slackChannelUrl?.value ||
+    slackNotifierDefaults().channelUrl ||
+    ""
+  ).trim();
+  if (!raw) return;
+  const href = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  window.open(href, "_blank", "noopener,noreferrer");
+});
 activeLabSelect?.addEventListener("change", () => {
   switchActiveLab(activeLabSelect.value).catch((e) => setCredFeedback(e.message, true));
 });

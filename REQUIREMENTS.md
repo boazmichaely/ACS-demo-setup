@@ -9,7 +9,6 @@ What we are building, for whom, and how we know it works. Read this before touch
 A RHACS demo lab is more than “Central is installed.” Before a presentation you routinely need to:
 
 - Confirm Central is reachable and you have a working API token
-- Point `roxctl` at the right Central
 - Confirm the secured cluster and sensors are healthy
 - Deploy or refresh sample apps that generate violations and network traffic
 - Wire image registries, demo users, OAuth login, ACS RBAC, Slack, compliance scans, and Splunk export
@@ -341,15 +340,19 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M8 — `slack-notifier` (Central → Slack)
 
-**Purpose:** Configure Central’s Slack notification integration for demo alerting.
+**Purpose:** Configure Central’s Slack notifier so demo alerts land in Slack, and attach that notifier to policies stamped with category `DEMO`. Default target is shared RH-internal `#acs-demo-notifier`; labs may override notifier name, webhook, and channel link.
 
-**Depends on:** `roxctl-env` (or equivalent working Central API access)
+**Depends on:** none in catalog. Working Central API access via lab credentials. DEMO policies come from other modules (`init-demo`, `signature-integration`, …); re-run those first if policies lack category `DEMO`.
 
-**Status must verify:** Slack notifier configured in Central
+**Webhook resolution:** module flags (`--webhook` / `--name` / `--channel-url`) → lab-credentials override → [`config/slack-notifier.defaults.json`](config/slack-notifier.defaults.json)
 
-**Run must do:** Create/update notifier; requires Slack webhook/token via env
+**Status / Run / Acceptance:**
 
-**Acceptance:** Test notification or config presence per module spec
+- `--status` is `ok` when the named Slack notifier exists in Central, `labelDefault` matches the resolved webhook, and every policy with category `DEMO` has this notifier attached; folds show webhook + channel URL plus each DEMO policy as wired or missing
+- `--run` creates/updates via `POST`/`PUT /v1/notifiers`, **must** `POST /v1/notifiers/test` (fails if the test fails), posts a lab-context webhook ping, then attaches the notifier to all `DEMO` policies
+- `--uninstall` detaches this notifier from `DEMO` policies (policies and category stay), then deletes only the resolved notifier name
+- Demo notes: [`modules/slack-notifier-demo.md`](modules/slack-notifier-demo.md)
+- Shared policy helper: [`lib/demo_policies.py`](lib/demo_policies.py)
 
 ---
 
@@ -366,30 +369,6 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 **Wrap:** Entrypoint finds `splunk-lab.sh` via `ACS_SPLUNK_LAB_SCRIPT` or documented default under `rhacs-splunk-ta-demo-skill`. Vendoring into this repo is optional follow-up, not required for M9 v1.
 
 **Acceptance:** Events searchable in Splunk after demo traffic; `--status` reflects wrapped script health; clear message if script path or TA bundle missing
-
----
-
-### M10 — `roxctl-env` (`~/.roxctl` for demos)
-
-**Purpose:** Configure the local `roxctl` CLI so demo commands work without manual config editing.
-
-**Depends on:** none (reads endpoint and token from `lab-credentials.json`)
-
-**Status must verify:**
-
-1. `~/.roxctl` (or documented config path) points at the Central endpoint in lab credentials
-2. Configured token works (`roxctl` can authenticate)
-
-**Run must do:**
-
-1. Read endpoint and token from lab credentials / env
-2. Write `roxctl` config for Central URL and admin API token
-3. Not rotate or create Central users unless documented
-
-**Acceptance:**
-
-- After `--run`, a documented `roxctl` command against Central succeeds
-- `--status` is `ok` when config matches current Central endpoint and token
 
 ---
 
@@ -458,6 +437,6 @@ Before implementation starts, confirm:
 
 - [ ] Section 3 (environment) matches your real lab
 - [ ] M1 `registries` acceptance matches lab workflow (pull secret → Central integrations)
-- [ ] Module list M1–M10 is complete; nothing missing, nothing to drop
+- [ ] Module catalog in `config/modules.json` matches what we intend to ship
 - [x] Open decisions in section 9 are answered
 - [ ] First deliverable accepted: M1 + GUI per §7.1

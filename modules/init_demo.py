@@ -27,6 +27,11 @@ from lib.central import (  # noqa: E402
     central_request,
     load_lab_credentials,
 )
+from lib.demo_policies import (  # noqa: E402
+    DEMO_CATEGORY,
+    ensure_managed_policy,
+    find_policy_by_name,
+)
 
 MODULE_ID = "init-demo"
 NS_DEFAULT = "acs-init-container-test"
@@ -66,22 +71,6 @@ def _load_policy(path_or_url: str) -> dict[str, Any]:
     return policy
 
 
-def _find_policy_by_name(
-    base: str, authorization: str, name: str, *, creds: dict[str, Any]
-) -> dict[str, Any] | None:
-    code, body = central_request(
-        base, authorization, "GET", "/v1/policies", creds=creds
-    )
-    if code != 200:
-        sys.exit(f"ERROR listing policies: {code} {body}")
-    if not isinstance(body, dict):
-        sys.exit(f"ERROR listing policies: unexpected body {body!r}")
-    for policy in body.get("policies") or []:
-        if policy.get("name") == name:
-            return policy
-    return None
-
-
 def cmd_upsert_policy(args: argparse.Namespace) -> int:
     creds = load_lab_credentials()
     base, authorization = central_connection(creds)
@@ -91,41 +80,35 @@ def cmd_upsert_policy(args: argparse.Namespace) -> int:
         print("ERROR: policy JSON has no name", file=sys.stderr)
         return 1
 
-    existing = _find_policy_by_name(base, authorization, name, creds=creds)
-    if existing:
-        policy["id"] = existing["id"]
-        code, body = central_request(
-            base,
-            authorization,
-            "PUT",
-            f"/v1/policies/{existing['id']}",
-            policy,
-            creds=creds,
+    try:
+        existing = find_policy_by_name(base, authorization, name, creds=creds)
+        result = ensure_managed_policy(
+            base, authorization, policy, creds=creds, preserve_notifiers=True
         )
-        action = "updated"
-    else:
-        code, body = central_request(
-            base, authorization, "POST", "/v1/policies", policy, creds=creds
-        )
-        action = "created"
-
-    if code not in (200, 201):
-        print(
-            f"ERROR upserting policy '{name}': {code} {json.dumps(body)}",
-            file=sys.stderr,
-        )
+    except RuntimeError as exc:
+        print(f"ERROR upserting policy '{name}': {exc}", file=sys.stderr)
         return 1
-    pid = body.get("id") if isinstance(body, dict) else None
-    if pid is None and existing:
-        pid = existing.get("id")
-    print(f"{action} policy '{name}' (id={pid})")
+    action = "updated" if existing else "created"
+    pid = result.get("id") if isinstance(result, dict) else None
+    cats = result.get("categories") if isinstance(result, dict) else []
+    demo = DEMO_CATEGORY in (cats or [])
+    print(
+        f"{action} policy '{name}' (id={pid}"
+        f"{', category=DEMO' if demo else ''})"
+    )
     return 0
 
 
 def cmd_delete_policy(args: argparse.Namespace) -> int:
     creds = load_lab_credentials()
     base, authorization = central_connection(creds)
-    existing = _find_policy_by_name(base, authorization, args.name, creds=creds)
+    try:
+        existing = find_policy_by_name(
+            base, authorization, args.name, creds=creds
+        )
+    except RuntimeError as exc:
+        print(f"ERROR listing policies: {exc}", file=sys.stderr)
+        return 1
     if not existing:
         print(f"policy '{args.name}' not found, nothing to delete")
         return 0

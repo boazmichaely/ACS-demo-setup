@@ -27,6 +27,11 @@ from lib.lab_doc import (  # noqa: E402
     lab_log_blurb,
     normalize_document,
 )
+from lib.slack_notifier_defaults import (  # noqa: E402
+    effective_slack_notifier,
+    load_defaults as load_slack_notifier_defaults,
+    store_slack_notifier_override,
+)
 
 DEFAULT_RELATIVE_PATH = "lab-credentials.json"
 LEGACY_RELATIVE_PATH = "central-credentials.json"
@@ -215,6 +220,12 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
         if not merged_scs:
             active_sc = ""
 
+        # Blank / equal-to-default → empty override so config/slack-notifier.defaults.json wins.
+        slack_notifier = store_slack_notifier_override(
+            lab_in.get("slackNotifier") if isinstance(lab_in.get("slackNotifier"), dict) else {},
+            repo_root=repo_root,
+        )
+
         merged_labs.append(
             {
                 "id": lab_id,
@@ -223,6 +234,7 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
                 "centralCluster": {"openshift": central_ocp, "central": central},
                 "securedClusters": merged_scs,
                 "activeSecuredClusterId": active_sc,
+                "slackNotifier": slack_notifier,
             }
         )
 
@@ -252,6 +264,7 @@ def set_active_lab(repo_root: Path, lab_id: str) -> dict[str, Any]:
 
 def for_api_response(repo_root: Path) -> dict[str, Any]:
     raw = load_raw(repo_root)
+    slack_defaults = load_slack_notifier_defaults(repo_root)
     labs_out: list[dict[str, Any]] = []
     for lab in raw.get("labs") or []:
         cc = lab.get("centralCluster") or {}
@@ -273,6 +286,11 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
                 }
             )
         c_ocp = cc.get("openshift") or {}
+        sn_eff = effective_slack_notifier(
+            lab.get("slackNotifier"),
+            repo_root=repo_root,
+            defaults=slack_defaults,
+        )
         labs_out.append(
             {
                 "id": lab.get("id") or "",
@@ -299,6 +317,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
                 "activeSecuredClusterId": lab.get("activeSecuredClusterId") or (
                     scs[0]["id"] if scs else ""
                 ),
+                "slackNotifier": sn_eff,
             }
         )
 
@@ -321,6 +340,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
         "version": 2,
         "activeLabId": raw.get("activeLabId") or (labs_out[0]["id"] if labs_out else ""),
         "labs": labs_out,
+        "slackNotifierDefaults": slack_defaults,
         "activeLabSummary": {
             "id": active.get("id") or "",
             "name": active.get("name") or "",
