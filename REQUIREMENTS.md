@@ -205,13 +205,20 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 ---
 
-### M11 — `signature-integration` (ACS Cosign / signature verification) — stub
+### M11 — `signature-integration` (ACS Cosign / Red Hat Public)
 
-**Purpose:** Configure Central signature integration(s) (Cosign public keys / trust roots) so ACS can verify image signatures for trust and policy demos. Complements `registries` (pull/scan) with signature verification; many lab images currently show `MISSING_SIGNATURE` until this exists.
+**Purpose:** Ensure Signature Integration **Red Hat Public** (Red Hat release key 3 Cosign public key), Inform Build+Deploy policy **Images must be signed by Red Hat Public**, and prime three signed images plus one unsigned contrast via `roxctl image scan` (no deploy).
 
-**Depends on:** none (catalog stub; implementation may optionally follow `registries`)
+**Depends on:** none in catalog. Central API auth; Central must be able to pull the primed registries (Quay / `registry.access.redhat.com`).
 
-**Status / Run / Acceptance:** TBD when implemented. Catalog row only for now (GUI shows **not installed** until `modules/signature-integration.sh` exists).
+**Status / Run / Acceptance:**
+
+- `--status` is `ok` when Red Hat Public matches the bundled PEM fingerprint, the Inform policy is present and linked, and all three signed primes report `VERIFIED` under that verifier
+- `--run` is idempotent; creates/updates integration + policy; primes via `POST /v1/images/scan`; fails if a signed prime does not verify
+- `--uninstall` removes the Inform policy only (leaves Red Hat Public)
+- `--hard-delete` (module shell only): print inventory, require interactive `DELETE`, then remove policy + Red Hat Public. Does not modify Signature Integration named exactly `Red Hat`
+
+Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integration-demo.md).
 
 ---
 

@@ -8,7 +8,7 @@
     },
     {
       "id": "signature-integration",
-      "label": "ACS Cosign / signature integration",
+      "label": "ACS Cosign / signature integration (Red Hat Public)",
       "dependsOn": [],
       "statusComplexity": 4
     },

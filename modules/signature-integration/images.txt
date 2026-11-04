@@ -1,0 +1,5 @@
+# signed=yes|no <image reference>
+signed=yes quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:61975639be117c63c60f9da50850972c2618112205f9bb755d451ec4c43096d8
+signed=yes registry.access.redhat.com/ubi8/ubi-minimal@sha256:28efca01a4ebf90c75e20d976ff9864af927bc625a84f488576960bf2d0423fd
+signed=yes registry.access.redhat.com/ubi9/openjdk-17@sha256:f67c90fdc16a637a780da18fd00cacbeaff2e648cf312877815e247f59f4a969
+signed=no  docker.io/library/nginx@sha256:da837cfb72cb98fdd8efa8f2c8d3d29b89b327c07d45bf564d52835d787a0892

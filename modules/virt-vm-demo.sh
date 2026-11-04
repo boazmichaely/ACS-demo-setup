@@ -153,7 +153,7 @@ acs_flags_applied() {
 apply_acs_flags() {
   local dry="$1"
   if [[ "$dry" == "true" ]]; then
-    echo "Would patch Central/SecuredCluster: ROX_VIRTUAL_MACHINES=true, scraper.pollInterval=${POLL_INTERVAL}, collector hostNetwork overlay"
+    echo "Would patch Central/SecuredCluster: ROX_VIRTUAL_MACHINES=true, scraper.pollInterval=${POLL_INTERVAL}"
     return 0
   fi
   oc -n "${STACKROX_NS}" patch central "${CENTRAL_NAME}" --type merge -p \
@@ -173,22 +173,18 @@ apply_acs_flags() {
         "pollInterval": "${POLL_INTERVAL}",
         "concurrency": 20
       }
-    },
-    "overlays": [
-      {
-        "apiVersion": "apps/v1",
-        "kind": "DaemonSet",
-        "name": "collector",
-        "patches": [
-          {"path": "spec.template.spec.hostNetwork", "value": "true"},
-          {"path": "spec.template.spec.dnsPolicy", "value": "\"ClusterFirstWithHostNet\""}
-        ]
-      }
-    ]
+    }
   }
 }
 EOF
   )"
+  # Collector must stay on the pod network: hostNetwork makes traffic look like
+  # the node IP, and the stock Sensor NetworkPolicy then drops Collector→Sensor.
+  # Clear any leftover overlay from older module runs.
+  if oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.overlays}' 2>/dev/null | grep -q .; then
+    echo "${MODULE_ID}: removing SecuredCluster collector hostNetwork overlay (breaks Sensor NetworkPolicy)"
+    oc -n "${STACKROX_NS}" patch securedcluster "${SECURED_NAME}" --type json -p '[{"op":"remove","path":"/spec/overlays"}]'
+  fi
 }
 
 # --- OpenShift Virtualization ----------------------------------------------------
@@ -716,7 +712,7 @@ do_dry_run() {
   ensure_oc
   cat <<EOF
 ${MODULE_ID}: dry-run
-  - Patch Central/SecuredCluster ROX_VIRTUAL_MACHINES + scraper ${POLL_INTERVAL} + collector hostNetwork
+  - Patch Central/SecuredCluster ROX_VIRTUAL_MACHINES + scraper ${POLL_INTERVAL}
   - Install/ensure OpenShift Virtualization (${CNV_NS}) with VSOCK + KVM_EMULATION
   - Create ${NS} with VMs: ${VM_NAMES[*]} (image ${CONTAINER_IMAGE})
   - Copy roxagent from Sensor image into each guest and start it (nohup serve, rescan ${RESCAN_INTERVAL})
