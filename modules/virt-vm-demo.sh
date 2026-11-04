@@ -376,10 +376,25 @@ PY
 }
 
 deploy_vms() {
-  local dry="$1" name
+  local dry="$1" name phase i
   if [[ "$dry" == "true" ]]; then
     echo "Would create project ${NS} and VMs: ${VM_NAMES[*]} image=${CONTAINER_IMAGE}"
     return 0
+  fi
+  # If a prior uninstall left the namespace Terminating, wait it out before create.
+  if oc get ns "${NS}" >/dev/null 2>&1; then
+    phase="$(oc get ns "${NS}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+    if [[ "$phase" == "Terminating" ]]; then
+      echo "${MODULE_ID}: ${NS} is Terminating; waiting before recreate..."
+      for i in $(seq 1 90); do
+        oc get ns "${NS}" >/dev/null 2>&1 || break
+        sleep 5
+      done
+      if oc get ns "${NS}" >/dev/null 2>&1; then
+        echo "${MODULE_ID}: ${NS} still Terminating; cannot deploy" >&2
+        return 1
+      fi
+    fi
   fi
   oc get ns "${NS}" >/dev/null 2>&1 || oc create ns "${NS}"
   export ASSET_DIR NS CONTAINER_IMAGE SSH_USER VM_PASSWORD
@@ -740,7 +755,10 @@ do_run() {
 do_uninstall() {
   ensure_oc
   echo "${MODULE_ID}: deleting project ${NS} (CNV and ACS flags retained)"
-  oc delete project "${NS}" --ignore-not-found --wait=false
+  # --wait=true: do not return until the namespace is fully gone. A follow-on
+  # --run while it is still Terminating can apply into a dying project and lose the VMs.
+  # Bound the wait so a stuck finalizer fails clearly instead of hanging forever.
+  oc delete project "${NS}" --ignore-not-found --wait=true --timeout=15m
 }
 
 do_uninstall_dry_run() {
