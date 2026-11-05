@@ -72,7 +72,7 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
 - `id` is the module key. It must match `modules/<id>.sh`, CLI `--module`, other modules’ `dependsOn`, and the **Module** column. Do not repeat the id inside `label`.
 - `statusComplexity` is an integer **1-10** hint for GUI status refresh order (lower = cheaper `--status`, refreshed first). Default to `5` if unsure; heavy OpenShift/Central probes (for example virt) belong near 8-10.
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
-- `impactPlanes` declares where the module does work (see [Planes and multi-SC](#planes-and-multi-sc)). Required for new modules.
+- `impactPlanes` declares where the module does work (GUI **Type** column; see [Planes and multi-SC](#planes-and-multi-sc)). Required for new modules.
 - Prefer `my-feature.sh` over `07-my-feature.sh`.
 
 ## Python helper (required for Central)
@@ -223,13 +223,15 @@ Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. 
 
 A module may touch **Central** (RHACS API), **OpenShift** (workloads / Operators via `oc`), or both. Multi-secured-cluster labs select which OpenShift clusters take impact; Central API work always uses Central credentials (no picker for that plane).
 
-### Catalog: `impactPlanes`
+### Catalog: `impactPlanes` (Type)
 
-| Value | Meaning |
-|-------|---------|
-| `["central"]` | ACS API / Central only |
-| `["openshift"]` | OpenShift only |
-| `["central","openshift"]` | Both; the orchestrator splits invocations |
+| Value | GUI Type column | Meaning |
+|-------|-----------------|---------|
+| `["central"]` | Central | ACS API / Central only |
+| `["openshift"]` | OpenShift | OpenShift only |
+| `["central","openshift"]` | Central + OpenShift | Both; the orchestrator splits invocations |
+
+Optional future key (not required today): `planeOrder` - `"openshift-then-central"` (default) or `"central-then-openshift"` when a module needs Central before OpenShift. Omit it unless you need the non-default order.
 
 ### Orchestrator call pattern
 
@@ -237,7 +239,7 @@ Modules stay **single OpenShift target** per OpenShift-plane process. The orches
 
 - `["central"]` - one invocation
 - `["openshift"]` - one invocation per selected secured-cluster id
-- `["central","openshift"]` - **OpenShift N times**, then **Central once** (install and uninstall). Central receives the full selection as repeated `--secured-cluster-id` flags when the module needs them (for example a shared scan schedule).
+- `["central","openshift"]` - by default **all OpenShift (SC) invokes first, then Central once** (install, uninstall, and status). Override later with catalog `planeOrder` if needed. Central receives the full selection as repeated `--secured-cluster-id` flags when the module needs them (for example a shared scan schedule).
 
 Flags the orchestrator may pass:
 
@@ -247,6 +249,10 @@ Flags the orchestrator may pass:
 | `--secured-cluster-id <id>` | OpenShift plane: exactly one. Central plane: zero or more (picker selection). |
 
 **Target cluster for Setup** (`activeSecuredClusterId`) is only a soft default for the pre-launch picker / default single id when none are passed. It is not a hidden “install everywhere” switch. `sameAsCentralCluster` on a secured cluster is a **credentials shortcut** only; that SC is still a normal target in the list.
+
+### Central membership (optional)
+
+When a Central-plane install or uninstall runs with a selection of secured-cluster ids, the module **may** compare that selection to what is already configured in Central (policies, scan schedules, access scopes, and so on) and merge or drop cluster membership. This is not enforced by the orchestrator - each module decides whether adjustment is appropriate. [`compliance-operator`](modules/compliance-operator.sh) merges/drops schedule `clusters[]` this way.
 
 ### Workload label (OpenShift plane)
 

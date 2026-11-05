@@ -631,26 +631,50 @@ function moduleDescriptionCellHtml(m) {
   return `<span title="${escapeHtml(text)}">${escapeHtml(text)}</span>`;
 }
 
-/** Size Module + State columns to content; Description keeps the leftover (ellipsis). */
+/** Human Type label from catalog ``impactPlanes``. */
+function moduleTypeLabel(m) {
+  const planes = Array.isArray(m?.impactPlanes)
+    ? m.impactPlanes.map((p) => String(p).toLowerCase())
+    : [];
+  const hasCentral = planes.includes("central");
+  const hasOpenShift = planes.includes("openshift");
+  if (hasCentral && hasOpenShift) return "Central + OpenShift";
+  if (hasCentral) return "Central";
+  if (hasOpenShift) return "OpenShift";
+  return "—";
+}
+
+function moduleTypeCellHtml(m) {
+  const text = moduleTypeLabel(m);
+  return `<span class="demo-mod__type" title="${escapeHtml(text)}">${escapeHtml(text)}</span>`;
+}
+
+/** Size Module + Type + State columns to content; Description keeps the leftover. */
 function syncModulesColumnWidths() {
   const table = document.getElementById("modulesTable");
   if (!table || !table.tBodies?.[0]?.rows?.length) return;
 
   table.classList.add("is-measuring");
   table.style.removeProperty("--demo-mod-col");
+  table.style.removeProperty("--demo-type-col");
   table.style.removeProperty("--demo-state-col");
 
   let mod = 0;
+  let typ = 0;
   let state = 0;
   table.querySelectorAll("thead th:nth-child(1), tbody td:nth-child(1)").forEach((el) => {
     mod = Math.max(mod, el.scrollWidth);
   });
-  table.querySelectorAll("thead th:nth-child(3), tbody td:nth-child(3)").forEach((el) => {
+  table.querySelectorAll("thead th:nth-child(2), tbody td:nth-child(2)").forEach((el) => {
+    typ = Math.max(typ, el.scrollWidth);
+  });
+  table.querySelectorAll("thead th:nth-child(4), tbody td:nth-child(4)").forEach((el) => {
     state = Math.max(state, el.scrollWidth);
   });
 
   table.classList.remove("is-measuring");
   table.style.setProperty("--demo-mod-col", `${Math.ceil(mod) + 4}px`);
+  table.style.setProperty("--demo-type-col", `${Math.ceil(typ) + 4}px`);
   table.style.setProperty("--demo-state-col", `${Math.ceil(state) + 4}px`);
 }
 
@@ -1073,7 +1097,7 @@ function applySelectAll(on) {
 
 function renderModuleRows() {
   if (!registryModules.length) {
-    modulesTbody.innerHTML = '<tr><td colspan="4">No modules.</td></tr>';
+    modulesTbody.innerHTML = '<tr><td colspan="5">No modules.</td></tr>';
     return;
   }
 
@@ -1091,6 +1115,7 @@ function renderModuleRows() {
             ${moduleCellHtml(m)}
           </div>
         </td>
+        <td class="demo-mod__type-cell">${moduleTypeCellHtml(m)}</td>
         <td class="demo-mod__desc-cell">${moduleDescriptionCellHtml(m)}</td>
         <td class="js-status-cell" data-module-id="${id}">
           ${moduleStatusCellHtml(m.id)}
@@ -2980,7 +3005,7 @@ async function init() {
   } catch (err) {
     log(`\n${err.message}\n`);
     modulesTbody.innerHTML =
-      '<tr><td colspan="4">Failed to load.</td></tr>';
+      '<tr><td colspan="5">Failed to load.</td></tr>';
   }
 }
 
