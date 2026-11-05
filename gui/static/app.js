@@ -1542,12 +1542,13 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
     const verb = uninstall ? "Uninstall" : "Install";
     if (title) title.textContent = `${verb} ${moduleId} - select clusters`;
 
-    const activeId = (lab.activeSecuredClusterId || "").trim();
+    const activeId =
+      (lab.activeSecuredClusterId || "").trim() || (clusters[0]?.id || "");
     list.innerHTML = clusters
       .map((sc) => {
         const id = sc.id || "";
         const name = sc.name || id;
-        const checked = !activeId || id === activeId ? "checked" : "";
+        const checked = id === activeId ? "checked" : "";
         const same = sc.sameAsCentralCluster
           ? `<small>same OpenShift as Central (cred shortcut)</small>`
           : "";
