@@ -67,7 +67,7 @@ DEMO_SCRIPT_SECTION: dict[str, Any] = {
         "console plugin demo.\n\n"
         "Before/after experience tables for adam, boaz, and chris:\n"
         "  modules/users-part1-ocp-demo.md\n"
-        "  GUI: /help?doc=users-part1-ocp-demo\n\n"
+        "  https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp-demo.md\n\n"
         "This module is required before OpenShift login works in that walkthrough."
     ),
     "bodyFormat": "prose",

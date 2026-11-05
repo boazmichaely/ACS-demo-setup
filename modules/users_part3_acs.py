@@ -247,7 +247,7 @@ DEMO_SCRIPT_BODY = (
     "Users Part 3 (ACS): map adam, boaz, and chris to ACS roles and scopes.\n\n"
     "Act 2 compares console (OCP RBAC) vs ACS Central (boaz aligned, chris misaligned):\n"
     "  modules/users-part1-ocp-demo.md\n"
-    "  GUI: /help?doc=users-part1-ocp-demo"
+    "  https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp-demo.md"
 )
 
 
