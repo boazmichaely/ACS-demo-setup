@@ -69,7 +69,7 @@ Today, `registries`, `signature-integration`, `slack-notifier`, `compliance-oper
 
 See [ADDING-A-MODULE.md](ADDING-A-MODULE.md) for the full walkthrough: catalog entry, `--status` contract, and the Status folds presentation language (tab-separated values summary line plus `ACS_SECTIONS_JSON`).
 
-In the running GUI, the masthead **?** menu opens this README, the module guide, and an interactive Status folds field map.
+In the running GUI, the masthead **?** menu opens this README, the module guide, and the users demo script on GitHub (rendered Markdown), plus the interactive Status folds field map locally.
 
 Each module should also explain itself when you run `./modules/<id>.sh --help` (what it does, what it needs, what it changes).
 
