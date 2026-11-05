@@ -1,0 +1,64 @@
+# Create a GitHub Release when a version tag is pushed (e.g. v0.1.0).
+# Body text comes from the matching ## [x.y.z] section in CHANGELOG.md.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check VERSION matches tag
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          ver="${tag#v}"
+          file_ver="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$file_ver" != "$ver" ]]; then
+            echo "VERSION file ($file_ver) does not match tag ($tag)."
+            echo "Bump VERSION and CHANGELOG before tagging."
+            exit 1
+          fi
+
+      - name: Extract changelog for this tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { flag=1; next }
+            /^## \[/ && flag { exit }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          if [[ ! -s release-notes.md ]]; then
+            echo "No CHANGELOG.md section for [${version}]." >&2
+            exit 1
+          fi
+          {
+            echo "## Upgrade"
+            echo
+            echo '```bash'
+            echo "cd ~/code/acs-demo-setup   # or your clone path"
+            echo "git pull origin main"
+            echo "./serve.sh"
+            echo '```'
+            echo
+            echo "See the [README](https://github.com/boazmichaely/ACS-demo-setup#run-the-gui) for details."
+            echo
+            echo "## Changes"
+            echo
+            cat release-notes.md
+          } > release-body.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release-body.md
+          generate_release_notes: false
