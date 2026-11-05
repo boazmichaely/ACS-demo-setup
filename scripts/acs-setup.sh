@@ -10,9 +10,9 @@ MODULE_LAST_CAPTURE_ROW=""
 usage() {
   cat <<'EOF'
 Usage: acs-setup.sh --help
-       acs-setup.sh --status [--module <id>] [--json]
-       acs-setup.sh --run [--module <id>] [--dry-run]
-       acs-setup.sh --uninstall --module <id> [--dry-run]
+       acs-setup.sh --status [--module <id>] [--json] [--secured-cluster-id ID]...
+       acs-setup.sh --run [--module <id>] [--dry-run] [--secured-cluster-id ID]...
+       acs-setup.sh --uninstall --module <id> [--dry-run] [--secured-cluster-id ID]...
        acs-setup.sh --oc-status
        acs-setup.sh --oc-login [--force]
 
@@ -24,6 +24,11 @@ Options:
   --module <id>   Limit to one module id from config/modules.json
   --json          With --status: emit JSON array (for GUI)
   --dry-run       With --run or --uninstall: planned actions only
+  --secured-cluster-id ID
+                  Repeatable. When set with --module, fan out OpenShift N then
+                  Central 1 (module must accept --plane / --secured-cluster-id).
+                  When omitted: one invoke, no new flags (legacy behavior).
+                  Do not pass for compliance-operator until it is migrated.
 
 OpenShift (active lab; lab-credentials.json is source of truth):
   --oc-status     Is oc ready for the active lab? (OK/PROBLEM + next step)
@@ -201,11 +206,107 @@ status_json() {
   printf '[%s]\n' "$joined"
 }
 
+# Plan invocations via lib.module_orchestrate. Prints JSON array.
+# Args: module_id action sc_id...
+plan_invocations_json() {
+  local module_id="$1" action="$2"
+  shift 2
+  local py args=( -m lib.module_orchestrate --module "$module_id" --action "$action" )
+  local sid
+  for sid in "$@"; do
+    [[ -n "$sid" ]] && args+=( --secured-cluster-id "$sid" )
+  done
+  py="$(acs_python)"
+  [[ -n "$py" ]] || die "python3 not found (set ACS_DEMO_PYTHON or use gui/.venv)"
+  (cd "$ROOT" && "$py" "${args[@]}")
+}
+
+# Run one module script once with optional env + argv extras from a plan step.
+# Args: script action dry_run env_json argv_json
+# env_json / argv_json are JSON objects/arrays from the planner.
+invoke_module_once() {
+  local script="$1" action_flag="$2" dry_run="$3" env_json="$4" argv_json="$5"
+  local args=("$action_flag")
+  [[ "$dry_run" == "true" ]] && args+=(--dry-run)
+
+  local extra
+  while IFS= read -r extra; do
+    [[ -n "$extra" ]] && args+=("$extra")
+  done < <(printf '%s' "$argv_json" | jq -r '.[]')
+
+  # Apply planner env for this process only.
+  local keys key val
+  keys="$(printf '%s' "$env_json" | jq -r 'keys[]' 2>/dev/null || true)"
+  if [[ -n "$keys" ]]; then
+    local -a export_pairs=()
+    while IFS= read -r key; do
+      [[ -n "$key" ]] || continue
+      val="$(printf '%s' "$env_json" | jq -r --arg k "$key" '.[$k]')"
+      export_pairs+=("$key=$val")
+    done <<<"$keys"
+    env "${export_pairs[@]}" "$script" "${args[@]}"
+  else
+    "$script" "${args[@]}"
+  fi
+}
+
+# Fan-out when SC_IDS non-empty; else single legacy invoke.
+# Args: action_flag ( --run | --uninstall | --status ) module_id dry_run sc_id...
+run_module_planned() {
+  local action_flag="$1" filter_id="$2" dry_run="$3"
+  shift 3
+  local sc_ids=("$@")
+  local script plan n i plane env_json argv_json
+  script="$(module_script_path "$filter_id")"
+  if [[ ! -x "$script" ]]; then
+    echo "acs-setup: module script not installed: $script" >&2
+    return 1
+  fi
+
+  if [[ ${#sc_ids[@]} -eq 0 ]]; then
+    local args=("$action_flag")
+    [[ "$dry_run" == "true" && "$action_flag" != "--status" ]] && args+=(--dry-run)
+    "$script" "${args[@]}"
+    return
+  fi
+
+  local orch_action=run
+  case "$action_flag" in
+    --uninstall) orch_action=uninstall ;;
+    --status) orch_action=status ;;
+    *) orch_action=run ;;
+  esac
+
+  plan="$(plan_invocations_json "$filter_id" "$orch_action" "${sc_ids[@]}")" || return 1
+  n="$(printf '%s' "$plan" | jq 'length')"
+  for ((i = 0; i < n; i++)); do
+    plane="$(printf '%s' "$plan" | jq -r --argjson i "$i" '.[$i].plane // empty')"
+    env_json="$(printf '%s' "$plan" | jq -c --argjson i "$i" '.[$i].env')"
+    argv_json="$(printf '%s' "$plan" | jq -c --argjson i "$i" '.[$i].argv_extra')"
+    echo "acs-setup: ${filter_id} ${action_flag} plane=${plane:-none} ($((i + 1))/${n})" >&2
+    if [[ "$action_flag" == "--status" ]]; then
+      # Status: capture output of each invoke; last TSV wins for summary unless we merge later.
+      invoke_module_once "$script" --status false "$env_json" "$argv_json" || true
+    else
+      invoke_module_once "$script" "$action_flag" "$dry_run" "$env_json" "$argv_json" || return 1
+    fi
+  done
+}
+
 run_modules() {
   local filter_id="${1:-}"
   local dry_run="${2:-false}"
+  shift 2 || true
+  local -a sc_ids=()
+  if [[ $# -gt 0 ]]; then
+    sc_ids=("$@")
+  fi
   local ids=()
   local failed=0
+
+  if [[ ${#sc_ids[@]} -gt 0 && -z "$filter_id" ]]; then
+    die "--secured-cluster-id requires --module <id>"
+  fi
 
   if [[ -n "$filter_id" ]]; then
     ids=("$filter_id")
@@ -216,18 +317,24 @@ run_modules() {
     done < <(module_ids_sorted)
   fi
 
-  local id script args=()
+  local id
   for id in "${ids[@]}"; do
-    script="$(module_script_path "$id")"
-    if [[ ! -x "$script" ]]; then
-      echo "acs-setup: module script not installed: $script" >&2
-      failed=1
-      continue
-    fi
-    args=(--run)
-    [[ "$dry_run" == "true" ]] && args+=(--dry-run)
-    if ! "$script" "${args[@]}"; then
-      failed=1
+    if [[ ${#sc_ids[@]} -gt 0 ]]; then
+      if ! run_module_planned --run "$id" "$dry_run" "${sc_ids[@]}"; then
+        failed=1
+      fi
+    else
+      local script args=(--run)
+      script="$(module_script_path "$id")"
+      if [[ ! -x "$script" ]]; then
+        echo "acs-setup: module script not installed: $script" >&2
+        failed=1
+        continue
+      fi
+      [[ "$dry_run" == "true" ]] && args+=(--dry-run)
+      if ! "$script" "${args[@]}"; then
+        failed=1
+      fi
     fi
   done
   return "$failed"
@@ -236,7 +343,17 @@ run_modules() {
 uninstall_module() {
   local filter_id="${1:-}"
   local dry_run="${2:-false}"
+  shift 2 || true
+  local -a sc_ids=()
+  if [[ $# -gt 0 ]]; then
+    sc_ids=("$@")
+  fi
   [[ -n "$filter_id" ]] || die "uninstall requires --module <id>"
+
+  if [[ ${#sc_ids[@]} -gt 0 ]]; then
+    run_module_planned --uninstall "$filter_id" "$dry_run" "${sc_ids[@]}"
+    return
+  fi
 
   local script args=(--uninstall)
   script="$(module_script_path "$filter_id")"
@@ -252,6 +369,7 @@ main() {
   [[ -f "$MODULES_JSON" ]] || die "missing $MODULES_JSON"
 
   local action="" module_id="" json=false dry_run=false force=false
+  local -a sc_ids=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -260,6 +378,11 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --module) shift; module_id="${1:-}"; [[ -n "$module_id" ]] || die "--module requires an id" ;;
+      --secured-cluster-id)
+        shift
+        [[ -n "${1:-}" ]] || die "--secured-cluster-id requires an id"
+        sc_ids+=("$1")
+        ;;
       --json) json=true ;;
       --dry-run) dry_run=true ;;
       --force) force=true ;;
@@ -279,22 +402,36 @@ main() {
       if [[ -n "$module_id" ]]; then
         module_meta "$module_id" id >/dev/null || die "unknown module id: $module_id"
       fi
+      if [[ ${#sc_ids[@]} -gt 0 && -z "$module_id" ]]; then
+        die "--secured-cluster-id requires --module <id>"
+      fi
       ;;
   esac
 
   case "$action" in
     status)
-      if [[ "$json" == true ]]; then
+      if [[ ${#sc_ids[@]} -gt 0 ]]; then
+        [[ -n "$module_id" ]] || die "--secured-cluster-id requires --module <id>"
+        run_module_planned --status "$module_id" false "${sc_ids[@]}"
+      elif [[ "$json" == true ]]; then
         status_json "$module_id"
       else
         status_tsv "$module_id"
       fi
       ;;
     run)
-      run_modules "$module_id" "$dry_run"
+      if [[ ${#sc_ids[@]} -gt 0 ]]; then
+        run_modules "$module_id" "$dry_run" "${sc_ids[@]}"
+      else
+        run_modules "$module_id" "$dry_run"
+      fi
       ;;
     uninstall)
-      uninstall_module "$module_id" "$dry_run"
+      if [[ ${#sc_ids[@]} -gt 0 ]]; then
+        uninstall_module "$module_id" "$dry_run" "${sc_ids[@]}"
+      else
+        uninstall_module "$module_id" "$dry_run"
+      fi
       ;;
     oc-status) run_openshift_cli status ;;
     oc-login)
