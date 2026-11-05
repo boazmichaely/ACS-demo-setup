@@ -4,43 +4,50 @@
       "id": "registries",
       "label": "Configure ACS image integrations",
       "dependsOn": [],
-      "statusComplexity": 3
+      "statusComplexity": 3,
+      "impactPlanes": ["central", "openshift"]
     },
     {
       "id": "signature-integration",
       "label": "ACS Cosign / signature integration (Red Hat Public)",
       "dependsOn": [],
-      "statusComplexity": 4
+      "statusComplexity": 4,
+      "impactPlanes": ["central"]
     },
     {
       "id": "compliance-operator",
-      "label": "Compliance Operator + scan schedule",
+      "label": "Installs Compliance Operator on ALL clusters + scan schedule",
       "dependsOn": [],
-      "statusComplexity": 7
+      "statusComplexity": 7,
+      "impactPlanes": ["central", "openshift"]
     },
     {
       "id": "virt-vm-demo",
       "label": "Deploy OCP Virt + RHEL VMs for ACS guest vulnerability demo",
       "dependsOn": [],
-      "statusComplexity": 9
+      "statusComplexity": 9,
+      "impactPlanes": ["central", "openshift"]
     },
     {
       "id": "ms-demo",
       "label": "Mostmark microservices (project ms-demo)",
       "dependsOn": [],
-      "statusComplexity": 4
+      "statusComplexity": 4,
+      "impactPlanes": ["openshift"]
     },
     {
       "id": "init-demo",
       "label": "Init-container Clean/Dirty/Blue/Red (acs-init-container-test)",
       "dependsOn": [],
-      "statusComplexity": 3
+      "statusComplexity": 3,
+      "impactPlanes": ["central", "openshift"]
     },
     {
       "id": "users-part1-ocp",
       "label": "Users Part 1 (OCP)",
       "dependsOn": [],
-      "statusComplexity": 2
+      "statusComplexity": 2,
+      "impactPlanes": ["openshift"]
     },
     {
       "id": "users-part2-oauth",
@@ -48,7 +55,8 @@
       "dependsOn": [
         "users-part1-ocp"
       ],
-      "statusComplexity": 2
+      "statusComplexity": 2,
+      "impactPlanes": ["central"]
     },
     {
       "id": "users-part3-acs",
@@ -56,55 +64,64 @@
       "dependsOn": [
         "users-part2-oauth"
       ],
-      "statusComplexity": 2
+      "statusComplexity": 2,
+      "impactPlanes": ["central"]
     },
     {
       "id": "slack-notifier",
       "label": "Central Slack integration",
       "dependsOn": [],
-      "statusComplexity": 3
+      "statusComplexity": 3,
+      "impactPlanes": ["central"]
     },
     {
       "id": "splunk-TA",
       "label": "Splunk Operator + RHACS Technology Add-on",
       "dependsOn": [],
-      "statusComplexity": 6
+      "statusComplexity": 6,
+      "impactPlanes": ["openshift"]
     },
     {
       "id": "openshift-mcp",
       "label": "Installs/updates an OpenShift MCP server on your cluster and wires it to your preferred AI agent",
       "dependsOn": [],
-      "statusComplexity": 5
+      "statusComplexity": 5,
+      "impactPlanes": ["openshift"]
     },
     {
       "id": "openshift-mcp-gateway",
       "label": "Launches an MCP gateway on the cluster you designate",
       "dependsOn": [],
-      "statusComplexity": 5
+      "statusComplexity": 5,
+      "impactPlanes": ["openshift"]
     },
     {
       "id": "acs-lightspeed",
       "label": "Configures OpenShift Lightspeed integration",
       "dependsOn": [],
-      "statusComplexity": 4
+      "statusComplexity": 4,
+      "impactPlanes": ["central", "openshift"]
     },
     {
       "id": "acs-mcp",
       "label": "Installs/updates an ACS MCP server on your cluster and wires it to your agent",
       "dependsOn": [],
-      "statusComplexity": 5
+      "statusComplexity": 5,
+      "impactPlanes": ["openshift"]
     },
     {
       "id": "prometheus",
       "label": "Install Prometheus on your cluster and wire ACS monitoring",
       "dependsOn": [],
-      "statusComplexity": 5
+      "statusComplexity": 5,
+      "impactPlanes": ["central", "openshift"]
     },
     {
       "id": "secrets-manager",
       "label": "Install Hashi on your cluster, enable External Secret Management Console plugin, External Secrets Operator (ESO) and a demo application",
       "dependsOn": [],
-      "statusComplexity": 6
+      "statusComplexity": 6,
+      "impactPlanes": ["openshift"]
     }
   ]
 }
