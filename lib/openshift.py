@@ -3,9 +3,13 @@
 **Source of truth:** ``lab-credentials.json`` (this tool). Module ``oc`` never
 treats the operator’s interactive ``~/.kube/config`` as authoritative.
 
-**Derived cache:** per-lab kubeconfigs under
-``<repo>/.cache/kubeconfigs/<lab-id>.kubeconfig``, created/refreshed from the
-active lab’s OpenShift fields. Safe to delete; ``ensure`` regenerates them.
+**Derived cache:** kubeconfigs under ``<repo>/.cache/kubeconfigs/``:
+
+- Default (Target cluster for Setup): ``<lab-id>.kubeconfig``
+- Per secured cluster (e.g. compliance-operator fan-out):
+  ``<lab-id>__<sc-id>.kubeconfig``
+
+Safe to delete; ``ensure`` regenerates them.
 
 Troubleshoot via the orchestrator (same CLI as ``--status`` / ``--run``)::
 
@@ -14,28 +18,44 @@ Troubleshoot via the orchestrator (same CLI as ``--status`` / ``--run``)::
 
 Bash modules call ``python -m lib.openshift login --print-kubeconfig`` internally and
 ``export KUBECONFIG`` so later ``oc`` in that shell uses the lab file.
+
+Compliance Operator (and similar fan-out) uses
+``login --secured-cluster-id ID --print-kubeconfig``.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from lib.central import load_lab_credentials, repo_root
+import yaml
+
+from lib.central import load_lab_credentials, load_lab_document, repo_root
 
 KUBECONFIG_DIRNAME = ".cache/kubeconfigs"
+# Synthetic id when the lab has no securedClusters (Central OpenShift only).
+CENTRAL_ONLY_SC_ID = "_central"
+# Mandatory workload stamp for OpenShift-plane module applies (lab SC name).
+DEMO_SC_LABEL = "acs-demo-setup/secured-cluster"
 
 
 def kubeconfig_dir(root: Path | None = None) -> Path:
     return (root or repo_root()) / KUBECONFIG_DIRNAME
+
+
+def _safe_id(text: str, fallback: str = "default") -> str:
+    safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", (text or "").strip()) or fallback
+    return safe[:64]
 
 
 def lab_id_from_creds(creds: dict[str, Any]) -> str:
@@ -49,13 +69,21 @@ def lab_id_from_creds(creds: dict[str, Any]) -> str:
     host = urlparse(
         central if "://" in central else f"https://{central}"
     ).hostname or "default"
-    safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", host).strip("-") or "default"
-    return safe[:64]
+    return _safe_id(host)
 
 
 def kubeconfig_path_for_lab(lab_id: str, root: Path | None = None) -> Path:
-    safe = re.sub(r"[^a-zA-Z0-9._-]+", "-", (lab_id or "default").strip()) or "default"
-    return kubeconfig_dir(root) / f"{safe}.kubeconfig"
+    return kubeconfig_dir(root) / f"{_safe_id(lab_id)}.kubeconfig"
+
+
+def kubeconfig_path_for_secured_cluster(
+    lab_id: str, sc_id: str, root: Path | None = None
+) -> Path:
+    """Per-lab + per-secured-cluster kubeconfig path."""
+    return (
+        kubeconfig_dir(root)
+        / f"{_safe_id(lab_id)}__{_safe_id(sc_id or CENTRAL_ONLY_SC_ID)}.kubeconfig"
+    )
 
 
 def _openshift_block(creds: dict[str, Any]) -> dict[str, Any]:
@@ -63,6 +91,72 @@ def _openshift_block(creds: dict[str, Any]) -> dict[str, Any]:
     if secured.get("sameAsCentralCluster", True):
         return (creds.get("centralCluster") or {}).get("openshift") or {}
     return secured.get("openshift") or {}
+
+
+def _flat_creds_for_sc(lab: dict[str, Any], sc: dict[str, Any]) -> dict[str, Any]:
+    """v1-shaped creds so _openshift_block / expected_api_url work for one SC."""
+    return {
+        "version": 1,
+        "insecureSkipTlsVerify": bool(lab.get("insecureSkipTlsVerify", False)),
+        "centralCluster": lab.get("centralCluster")
+        or {"openshift": {}, "central": {}},
+        "securedCluster": {
+            "sameAsCentralCluster": bool(sc.get("sameAsCentralCluster", True)),
+            "openshift": sc.get("openshift") or {},
+        },
+        "_activeLabId": lab.get("id") or "",
+        "_activeLabName": lab.get("name") or "",
+        "_activeSecuredClusterId": sc.get("id") or "",
+        "_activeSecuredClusterName": sc.get("name") or "",
+    }
+
+
+def list_secured_cluster_targets(
+    *,
+    name_filter: str | None = None,
+    root: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Secured clusters on the active lab for multi-SC modules (e.g. CO).
+
+    Empty ``securedClusters`` → one synthetic Central-OpenShift target.
+    Optional ``name_filter`` matches lab SC ``name`` (case-sensitive).
+    """
+    from lib.lab_doc import active_lab, empty_secured_cluster
+
+    doc = load_lab_document(root)
+    lab = active_lab(doc)
+    clusters = list(lab.get("securedClusters") or [])
+    if not clusters:
+        clusters = [
+            empty_secured_cluster(
+                sc_id=CENTRAL_ONLY_SC_ID, name="central", same_as_central=True
+            )
+        ]
+
+    want = (name_filter or "").strip()
+    out: list[dict[str, Any]] = []
+    for sc in clusters:
+        name = (sc.get("name") or "").strip() or (sc.get("id") or "")
+        if want and name != want and (sc.get("id") or "") != want:
+            continue
+        sid = (sc.get("id") or "").strip() or CENTRAL_ONLY_SC_ID
+        flat = _flat_creds_for_sc(lab, sc)
+        try:
+            api = expected_api_url(flat)
+            cred_err = None
+        except RuntimeError as exc:
+            api = None
+            cred_err = str(exc)
+        out.append(
+            {
+                "id": sid,
+                "name": name or sid,
+                "sameAsCentralCluster": bool(sc.get("sameAsCentralCluster", True)),
+                "apiUrl": api,
+                "credsError": cred_err,
+            }
+        )
+    return out
 
 
 def api_url_from_console(console_url: str) -> str:
@@ -139,6 +233,7 @@ def _run_oc(
     kubeconfig: Path | None = None,
     timeout: int = 60,
     env: dict[str, str] | None = None,
+    input_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     cmd = ["oc", *args]
     run_env = os.environ.copy()
@@ -153,6 +248,7 @@ def _run_oc(
         timeout=timeout,
         check=False,
         env=run_env,
+        input=input_text,
     )
 
 
@@ -224,17 +320,52 @@ def ensure_oc(
     creds: dict[str, Any] | None = None,
     *,
     force: bool = False,
+    secured_cluster_id: str | None = None,
 ) -> Path:
-    """Ensure oc talks to the **active lab** via a per-lab kubeconfig.
+    """Ensure oc talks to the active lab (or a specific secured cluster).
+
+    Default (no ``secured_cluster_id``): Target cluster for Setup → per-lab kubeconfig.
+    With ``secured_cluster_id``: that SC’s OpenShift → per-lab+SC kubeconfig.
 
     Returns the kubeconfig path and sets ``os.environ["KUBECONFIG"]`` for this process.
     """
     if not shutil.which("oc"):
         raise RuntimeError("oc not on PATH")
 
-    doc = creds if creds is not None else load_lab_credentials()
-    lab_id = lab_id_from_creds(doc)
-    kc = kubeconfig_path_for_lab(lab_id)
+    sc_id = (secured_cluster_id or "").strip()
+    if sc_id:
+        from lib.lab_doc import active_lab, empty_secured_cluster
+
+        v2 = load_lab_document()
+        lab = active_lab(v2)
+        lab_id = (lab.get("id") or "").strip() or lab_id_from_creds(
+            load_lab_credentials()
+        )
+        clusters = list(lab.get("securedClusters") or [])
+        sc: dict[str, Any] | None = None
+        if sc_id == CENTRAL_ONLY_SC_ID and not clusters:
+            sc = empty_secured_cluster(
+                sc_id=CENTRAL_ONLY_SC_ID, name="central", same_as_central=True
+            )
+        else:
+            for item in clusters:
+                if (item.get("id") or "").strip() == sc_id:
+                    sc = item
+                    break
+        if sc is None:
+            known = ", ".join(
+                f"{c.get('name') or '?'}({c.get('id') or '?'})" for c in clusters
+            ) or "(none)"
+            raise RuntimeError(
+                f"secured cluster id {sc_id!r} not in active lab securedClusters ({known})"
+            )
+        doc = _flat_creds_for_sc(lab, sc)
+        kc = kubeconfig_path_for_secured_cluster(lab_id, sc_id)
+    else:
+        doc = creds if creds is not None else load_lab_credentials()
+        lab_id = lab_id_from_creds(doc)
+        kc = kubeconfig_path_for_lab(lab_id)
+
     api = expected_api_url(doc)
 
     need_login = force or not kc.is_file() or not oc_whoami_ok(kc)
@@ -253,7 +384,7 @@ def ensure_oc(
         current = oc_show_server(kc)
         if current and not _servers_match(api, current):
             raise RuntimeError(
-                f"after login, oc server is {current!r} but active lab expects {api!r} "
+                f"after login, oc server is {current!r} but expected {api!r} "
                 f"(kubeconfig={kc})"
             )
 
@@ -262,11 +393,16 @@ def ensure_oc(
 
 
 def ensure_oc_message(
-    creds: dict[str, Any] | None = None, *, force: bool = False
+    creds: dict[str, Any] | None = None,
+    *,
+    force: bool = False,
+    secured_cluster_id: str | None = None,
 ) -> str | None:
     """Return None on success, or an error message string."""
     try:
-        ensure_oc(creds, force=force)
+        ensure_oc(
+            creds, force=force, secured_cluster_id=secured_cluster_id
+        )
         return None
     except RuntimeError as exc:
         return str(exc)
@@ -338,6 +474,210 @@ def show_active(root: Path | None = None) -> dict[str, Any]:
     return info
 
 
+@dataclass(frozen=True)
+class ModuleTarget:
+    """Resolved secured-cluster target for an OpenShift-plane module invoke."""
+
+    id: str
+    name: str
+    same_as_central: bool
+
+    @property
+    def labels(self) -> dict[str, str]:
+        return demo_sc_labels(self.name)
+
+
+def _env_sc_id() -> str:
+    return (os.environ.get("ACS_DEMO_SC_ID") or "").strip()
+
+
+def _env_sc_name() -> str:
+    return (os.environ.get("ACS_DEMO_SC_NAME") or "").strip()
+
+
+def demo_sc_labels(sc_name: str) -> dict[str, str]:
+    name = (sc_name or "").strip()
+    if not name:
+        raise RuntimeError(
+            f"cannot build {DEMO_SC_LABEL}: secured cluster name is empty"
+        )
+    return {DEMO_SC_LABEL: name}
+
+
+def resolve_module_target(
+    secured_cluster_id: str | None = None,
+    *,
+    root: Path | None = None,
+) -> ModuleTarget:
+    """Resolve a lab secured cluster for OpenShift-plane work and labels.
+
+    ``secured_cluster_id`` wins; else ``ACS_DEMO_SC_ID``; else Target cluster
+    for Setup / synthetic Central-only id when the lab has no SCs.
+    """
+    from lib.lab_doc import (
+        active_lab,
+        empty_secured_cluster,
+        preferred_secured_cluster,
+    )
+
+    doc = load_lab_document(root)
+    lab = active_lab(doc)
+    clusters = list(lab.get("securedClusters") or [])
+    sc_id = (secured_cluster_id or "").strip() or _env_sc_id()
+
+    sc: dict[str, Any] | None = None
+    if sc_id:
+        if sc_id == CENTRAL_ONLY_SC_ID and not clusters:
+            sc = empty_secured_cluster(
+                sc_id=CENTRAL_ONLY_SC_ID, name="central", same_as_central=True
+            )
+        else:
+            for item in clusters:
+                if (item.get("id") or "").strip() == sc_id:
+                    sc = item
+                    break
+        if sc is None:
+            known = ", ".join(
+                f"{c.get('name') or '?'}({c.get('id') or '?'})" for c in clusters
+            ) or "(none)"
+            raise RuntimeError(
+                f"secured cluster id {sc_id!r} not in active lab securedClusters ({known})"
+            )
+    elif not clusters:
+        sc = empty_secured_cluster(
+            sc_id=CENTRAL_ONLY_SC_ID, name="central", same_as_central=True
+        )
+    else:
+        sc = preferred_secured_cluster(lab)
+
+    tid = (sc.get("id") or "").strip()
+    tname = (sc.get("name") or "").strip() or _env_sc_name()
+    if not tname:
+        raise RuntimeError(
+            f"secured cluster {tid!r} has an empty name; set name in lab credentials"
+        )
+    return ModuleTarget(
+        id=tid or CENTRAL_ONLY_SC_ID,
+        name=tname,
+        same_as_central=bool(sc.get("sameAsCentralCluster", True)),
+    )
+
+
+def merge_demo_labels(obj: dict[str, Any], labels: dict[str, str]) -> dict[str, Any]:
+    """Merge ``labels`` into ``metadata.labels`` on one Kubernetes object dict."""
+    if not isinstance(obj, dict):
+        return obj
+    meta = obj.setdefault("metadata", {})
+    if not isinstance(meta, dict):
+        meta = {}
+        obj["metadata"] = meta
+    existing = meta.get("labels")
+    if not isinstance(existing, dict):
+        existing = {}
+    merged = dict(existing)
+    merged.update(labels)
+    meta["labels"] = merged
+    return obj
+
+
+def label_manifest_documents(raw: str | bytes, labels: dict[str, str]) -> str:
+    """Split multi-doc YAML, stamp labels on each object with metadata, re-serialize."""
+    text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
+    docs = list(yaml.safe_load_all(text))
+    out: list[Any] = []
+    for doc in docs:
+        if doc is None:
+            continue
+        if isinstance(doc, dict) and (
+            "metadata" in doc or "kind" in doc or "apiVersion" in doc
+        ):
+            out.append(merge_demo_labels(doc, labels))
+        else:
+            out.append(doc)
+    if not out:
+        raise RuntimeError("no Kubernetes documents found to label")
+    buf = io.StringIO()
+    yaml.safe_dump_all(
+        out,
+        buf,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    return buf.getvalue()
+
+
+def apply_labeled(
+    path_or_stdin: str | Path | None = None,
+    *,
+    secured_cluster_id: str | None = None,
+    dry_run: bool = False,
+    raw: str | bytes | None = None,
+) -> None:
+    """``oc apply`` manifests after stamping ``DEMO_SC_LABEL``.
+
+    Pass ``path_or_stdin`` as a file path, ``"-"`` for stdin, or supply ``raw``.
+    """
+    target = resolve_module_target(secured_cluster_id)
+    ensure_oc(secured_cluster_id=target.id)
+    labels = target.labels
+
+    if raw is not None:
+        body = raw
+    elif path_or_stdin is None or str(path_or_stdin) == "-":
+        body = sys.stdin.read()
+    else:
+        body = Path(path_or_stdin).read_text(encoding="utf-8")
+
+    labeled = label_manifest_documents(body, labels)
+    apply_args = ["apply", "-f", "-"]
+    if dry_run:
+        apply_args.extend(["--dry-run=client"])
+    result = _run_oc(
+        apply_args,
+        kubeconfig=Path(os.environ["KUBECONFIG"]),
+        timeout=180,
+        input_text=labeled,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip() or (
+            f"exit {result.returncode}"
+        )
+        raise RuntimeError(f"oc apply-labeled failed: {detail}")
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+
+
+def delete_by_demo_labels(
+    *,
+    secured_cluster_id: str | None = None,
+    namespace: str | None = None,
+    resource: str = "all",
+    dry_run: bool = False,
+) -> None:
+    """Delete resources selected by ``DEMO_SC_LABEL=<lab SC name>``."""
+    target = resolve_module_target(secured_cluster_id)
+    ensure_oc(secured_cluster_id=target.id)
+    selector = f"{DEMO_SC_LABEL}={target.name}"
+    args = ["delete", resource, "-l", selector]
+    if namespace:
+        args.extend(["-n", namespace])
+    else:
+        args.append("--all-namespaces")
+    if dry_run:
+        args.append("--dry-run=client")
+    result = _run_oc(
+        args, kubeconfig=Path(os.environ["KUBECONFIG"]), timeout=180
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip() or (
+            f"exit {result.returncode}"
+        )
+        raise RuntimeError(f"oc delete-by-demo-labels failed: {detail}")
+    if result.stdout:
+        print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
+
+
 def format_status_report(info: dict[str, Any]) -> str:
     """Human-readable verdict for --oc-status."""
     lines: list[str] = []
@@ -397,6 +737,68 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print kubeconfig path on stdout (for: export KUBECONFIG=$(…))",
     )
+    p_login.add_argument(
+        "--secured-cluster-id",
+        default="",
+        help="Login to this secured cluster (not Target cluster for Setup)",
+    )
+
+    p_list = sub.add_parser(
+        "list-secured-clusters",
+        help="JSON list of active-lab secured clusters (for multi-SC modules)",
+    )
+    p_list.add_argument(
+        "--name",
+        default="",
+        help="Filter to one secured cluster name or id",
+    )
+
+    p_apply = sub.add_parser(
+        "apply-labeled",
+        help=f"oc apply after stamping {DEMO_SC_LABEL}=<lab SC name>",
+    )
+    p_apply.add_argument(
+        "-f",
+        "--filename",
+        default="-",
+        help="Manifest file path, or - for stdin (default)",
+    )
+    p_apply.add_argument(
+        "--secured-cluster-id",
+        default="",
+        help="Lab secured cluster id (else ACS_DEMO_SC_ID / Target)",
+    )
+    p_apply.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Client-side dry-run only",
+    )
+
+    p_del = sub.add_parser(
+        "delete-by-demo-labels",
+        help=f"oc delete -l {DEMO_SC_LABEL}=<lab SC name>",
+    )
+    p_del.add_argument(
+        "--secured-cluster-id",
+        default="",
+        help="Lab secured cluster id (else ACS_DEMO_SC_ID / Target)",
+    )
+    p_del.add_argument(
+        "--namespace",
+        "-n",
+        default="",
+        help="Namespace (default: all namespaces)",
+    )
+    p_del.add_argument(
+        "--resource",
+        default="all",
+        help="Resource type for oc delete (default: all)",
+    )
+    p_del.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Client-side dry-run only",
+    )
 
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
@@ -412,27 +814,68 @@ def main(argv: list[str] | None = None) -> int:
             print(format_status_report(info))
         return 0 if info.get("ok") else 1
 
+    if args.cmd == "list-secured-clusters":
+        try:
+            rows = list_secured_cluster_targets(
+                name_filter=(getattr(args, "name", "") or "").strip() or None
+            )
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(json.dumps(rows))
+        return 0
+
     if args.cmd == "login":
         force = bool(getattr(args, "force", False))
+        sc_id = (getattr(args, "secured_cluster_id", "") or "").strip() or None
         try:
-            kc = ensure_oc(force=force)
+            kc = ensure_oc(force=force, secured_cluster_id=sc_id)
         except RuntimeError as exc:
-            try:
-                info = show_active()
-                info["ok"] = False
-                if str(exc) not in (info.get("problems") or []):
-                    info.setdefault("problems", []).insert(0, str(exc))
-                if not getattr(args, "print_kubeconfig", False):
-                    print(format_status_report(info), file=sys.stderr)
-                else:
-                    print(exc, file=sys.stderr)
-            except RuntimeError:
+            if sc_id or getattr(args, "print_kubeconfig", False):
                 print(exc, file=sys.stderr)
+            else:
+                try:
+                    info = show_active()
+                    info["ok"] = False
+                    if str(exc) not in (info.get("problems") or []):
+                        info.setdefault("problems", []).insert(0, str(exc))
+                    print(format_status_report(info), file=sys.stderr)
+                except RuntimeError:
+                    print(exc, file=sys.stderr)
             return 1
         if getattr(args, "print_kubeconfig", False):
             print(kc)
             return 0
-        print(f"OK - refreshed kubeconfig\n  kubeconfig : {kc}")
+        extra = f" sc={sc_id}" if sc_id else ""
+        print(f"OK - refreshed kubeconfig{extra}\n  kubeconfig : {kc}")
+        return 0
+
+    if args.cmd == "apply-labeled":
+        sc_id = (getattr(args, "secured_cluster_id", "") or "").strip() or None
+        try:
+            apply_labeled(
+                getattr(args, "filename", "-"),
+                secured_cluster_id=sc_id,
+                dry_run=bool(getattr(args, "dry_run", False)),
+            )
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        return 0
+
+    if args.cmd == "delete-by-demo-labels":
+        sc_id = (getattr(args, "secured_cluster_id", "") or "").strip() or None
+        ns = (getattr(args, "namespace", "") or "").strip() or None
+        try:
+            delete_by_demo_labels(
+                secured_cluster_id=sc_id,
+                namespace=ns,
+                resource=(getattr(args, "resource", "") or "all").strip() or "all",
+                dry_run=bool(getattr(args, "dry_run", False)),
+            )
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
         return 0
 
     parser.error(f"unknown command {args.cmd}")
