@@ -10,27 +10,46 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # When this file lives in modules/, ROOT is the repo root.
 # If you are still editing under templates/, adjust paths after you copy.
 
+# Set by orchestrator / CLI when impactPlanes includes openshift or both.
+PLANE=""
+# Lab secured-cluster id(s). OpenShift plane: at most one. Central: zero or more.
+SC_IDS=()
+
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# ${MODULE_ID}
 
-Purpose:
-  TODO: one short paragraph - what this module sets up in the demo lab.
+TODO: one short paragraph - what this module sets up in the demo lab.
 
-Depends on:
-  TODO: list other module ids, or "none".
-  TODO: Central credentials / oc / pull-secret / etc. as needed.
+Prefer flags and constants over module-specific environment variables.
+Do not dump tool-wide \`ACS_*\` credential paths in Usage.
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  TODO: list any module-specific env vars (or delete this line).
+## Usage
 
-Side effects:
-  --run TODO: what gets created or updated (Central API paths, namespaces, …).
-  --uninstall TODO: what gets removed, or say "not supported" if you leave it unimplemented.
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+\`\`\`
+
+## Flags
+
+- \`--plane central|openshift\` - which plane this invocation owns (orchestrator sets for \`both\` modules)
+- \`--secured-cluster-id ID\` - lab SC id (OpenShift: exactly one; Central: selection set)
+
+## Status Info
+
+TODO: what Status folds show after install (summary, or one bullet per fold).
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` TODO: what gets created or updated
+- \`--uninstall\` TODO: what gets removed, or say "not supported"
 EOF
 }
 
@@ -116,7 +135,14 @@ do_status() {
 # Exit 0 on success; non-zero on failure (message on stderr).
 do_run() {
   # TODO: create/update whatever this module owns, then preferably re-check.
-  echo "${MODULE_ID}: TODO: implement do_run" >&2
+  # OpenShift manifests MUST go through apply-labeled (see ADDING-A-MODULE Planes):
+  #   local sc_id="${SC_IDS[0]:-}"
+  #   local PYTHON="${ROOT}/gui/.venv/bin/python"
+  #   local kc
+  #   kc="$(cd "$ROOT" && "$PYTHON" -m lib.openshift login --print-kubeconfig ${sc_id:+--secured-cluster-id "$sc_id"})" || return 1
+  #   export KUBECONFIG="$kc"
+  #   "$PYTHON" -m lib.openshift apply-labeled ${sc_id:+--secured-cluster-id "$sc_id"} -f path/to.yaml
+  echo "${MODULE_ID}: TODO: implement do_run (plane=${PLANE:-implied} sc_ids=${SC_IDS[*]:-none})" >&2
   return 1
 }
 
@@ -125,6 +151,8 @@ do_dry_run() {
   # TODO: describe what do_run would change.
   cat <<EOF
 ${MODULE_ID}: dry-run
+  plane: ${PLANE:-implied}
+  secured-cluster-ids: ${SC_IDS[*]:-none}
   TODO: describe planned changes here (no mutations).
 EOF
 }
@@ -133,6 +161,7 @@ EOF
 # If uninstall is not supported, fail with a clear message (do not pretend success).
 do_uninstall() {
   # TODO: implement real uninstall, or keep this graceful refusal.
+  # Prefer: python -m lib.openshift delete-by-demo-labels --secured-cluster-id "$sc_id" -n <ns>
   echo "${MODULE_ID}: uninstall is not implemented for this module." >&2
   printf '%s\terror\tuninstall not implemented\n' "$MODULE_ID"
   return 1
@@ -200,6 +229,23 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        PLANE="$1"
+        case "$PLANE" in
+          central|openshift) ;;
+          *)
+            echo "$(basename "$0"): --plane must be central or openshift (got ${PLANE})" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        SC_IDS+=("$1")
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2
