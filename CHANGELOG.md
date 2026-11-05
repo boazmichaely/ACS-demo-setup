@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Update nudge: server-side GitHub compare via `/api/version` (no browser→GitHub fetch); dismiss is page-load only.
+- Help menu version is a link to that version’s GitHub Release notes.
+
 ## [0.1.1] - 2026-11-04
 
 ### Changed

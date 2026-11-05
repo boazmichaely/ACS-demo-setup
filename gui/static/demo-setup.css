@@ -853,16 +853,30 @@ a.demo-mod__slug-link:focus-visible {
 }
 
 .demo-help-menu__version {
+  list-style: none;
+  padding: 0;
+}
+
+.demo-help-menu__version a {
+  display: block;
   padding: 0.35rem 0.75rem 0.5rem;
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--xs);
   line-height: 1.3;
-  cursor: default;
-  user-select: text;
-  list-style: none;
+  text-decoration: none;
+}
+
+.demo-help-menu__version a:hover {
+  color: var(--pf-t--global--text--color--regular);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  background: var(--pf-t--global--background--color--secondary--default);
 }
 
 .demo-update-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
@@ -873,9 +887,10 @@ a.demo-mod__slug-link:focus-visible {
   border-radius: var(--pf-t--global--border--radius--sm, 4px);
   background: color-mix(
     in srgb,
-    var(--pf-t--global--color--status--info--default, #2b9af3) 8%,
+    var(--pf-t--global--color--status--info--default, #2b9af3) 12%,
     var(--pf-t--global--background--color--primary--default)
   );
+  box-shadow: var(--pf-t--global--box-shadow--sm);
 }
 
 .demo-update-banner[hidden] {
