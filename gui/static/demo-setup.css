@@ -688,21 +688,27 @@ body:has(#page) {
   font-weight: var(--pf-t--global--font--weight--body--bold);
 }
 
-/* Widths set from JS after render to hug Module/State content. */
+/* Widths set from JS after render to hug Module/Type/State content. */
 .demo-modules th:nth-child(1),
 .demo-modules td:nth-child(1) {
   width: var(--demo-mod-col, 12rem);
   white-space: nowrap;
 }
 
-.demo-modules th:nth-child(3),
-.demo-modules td:nth-child(3) {
-  width: var(--demo-state-col, 7rem);
+.demo-modules th:nth-child(2),
+.demo-modules td:nth-child(2) {
+  width: var(--demo-type-col, 8rem);
   white-space: nowrap;
 }
 
 .demo-modules th:nth-child(4),
 .demo-modules td:nth-child(4) {
+  width: var(--demo-state-col, 7rem);
+  white-space: nowrap;
+}
+
+.demo-modules th:nth-child(5),
+.demo-modules td:nth-child(5) {
   width: 2.75rem;
   padding-inline-end: var(--pf-t--global--spacer--sm);
 }
@@ -713,9 +719,17 @@ body:has(#page) {
 
 .demo-modules.is-measuring th:nth-child(1),
 .demo-modules.is-measuring td:nth-child(1),
-.demo-modules.is-measuring th:nth-child(3),
-.demo-modules.is-measuring td:nth-child(3) {
+.demo-modules.is-measuring th:nth-child(2),
+.demo-modules.is-measuring td:nth-child(2),
+.demo-modules.is-measuring th:nth-child(4),
+.demo-modules.is-measuring td:nth-child(4) {
   width: auto;
+}
+
+.demo-mod__type-cell {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+  white-space: nowrap;
 }
 
 .demo-mod__desc-cell {

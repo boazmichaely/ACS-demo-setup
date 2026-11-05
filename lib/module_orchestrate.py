@@ -50,6 +50,14 @@ def impact_planes(row: dict[str, Any]) -> list[str]:
     return out
 
 
+def plane_order(row: dict[str, Any]) -> str:
+    """Return ``openshift-then-central`` (default) or ``central-then-openshift``."""
+    raw = str(row.get("planeOrder") or "").strip().lower().replace("_", "-")
+    if raw in ("central-then-openshift", "central-first"):
+        return "central-then-openshift"
+    return "openshift-then-central"
+
+
 def _sc_name_by_id(sc_id: str, root: Path | None = None) -> str:
     doc = load_lab_document(root)
     lab = active_lab(doc)
@@ -115,8 +123,8 @@ def plan_module_invocations(
     Empty ``sc_ids`` → one bare invocation (no plane flags) so callers can
     preserve legacy single-process behavior.
 
-    Non-empty ``sc_ids`` → OpenShift once per id, then Central once with all
-    ids when the catalog lists both planes.
+    Non-empty ``sc_ids`` → fan out by ``impactPlanes``. Default order is all
+    OpenShift invokes, then Central once (``planeOrder`` may reverse that).
     """
     if isinstance(module_row_or_id, str):
         row = module_row(module_row_or_id, root)
@@ -154,16 +162,18 @@ def plan_module_invocations(
             )
         ]
 
-    out: list[ModuleInvocation] = []
-    # Install and uninstall: OpenShift N then Central 1.
-    # Status uses the same order so OpenShift facts are collected first.
-    _ = action  # reserved for future plane-order overrides
-    if "openshift" in planes:
-        for sid in uniq:
-            out.append(_openshift_invocation(sid, root))
-    if "central" in planes:
-        out.append(_central_invocation(uniq, root))
-    return out
+    _ = action  # reserved if install/uninstall ever diverge on order
+    openshift_steps = (
+        [_openshift_invocation(sid, root) for sid in uniq]
+        if "openshift" in planes
+        else []
+    )
+    central_steps = (
+        [_central_invocation(uniq, root)] if "central" in planes else []
+    )
+    if plane_order(row) == "central-then-openshift":
+        return central_steps + openshift_steps
+    return openshift_steps + central_steps
 
 
 def invocations_to_json(invocations: list[ModuleInvocation]) -> str:
