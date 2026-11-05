@@ -28,7 +28,6 @@ Options:
                   Repeatable. When set with --module, fan out OpenShift N then
                   Central 1 (module must accept --plane / --secured-cluster-id).
                   When omitted: one invoke, no new flags (legacy behavior).
-                  Do not pass for compliance-operator until it is migrated.
 
 OpenShift (active lab; lab-credentials.json is source of truth):
   --oc-status     Is oc ready for the active lab? (OK/PROBLEM + next step)

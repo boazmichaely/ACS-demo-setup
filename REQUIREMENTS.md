@@ -62,7 +62,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password, optional `apiToken` | If `apiToken` is set, modules use `oc login --token=` (SSO labs). Else username/password. |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** (GUI: Target cluster for Setup) soft-defaults which SC is pre-selected for OpenShift impact. Catalog `impactPlanes` + orchestrator fan-out (OpenShift N, then Central 1 for `both`) own multi-SC runs; modules must not loop SCs. **Transitional:** `compliance-operator` still fans out OLM to every `securedClusters` entry until migrated. Empty `securedClusters` → Central OpenShift |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** (GUI: Target cluster for Setup) soft-defaults which SC is pre-selected for OpenShift impact. Catalog `impactPlanes` + orchestrator fan-out (OpenShift N, then Central 1 for `both`) own multi-SC runs; modules must not loop SCs. Empty `securedClusters` → Central OpenShift |
 
 Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
@@ -221,21 +221,21 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ---
 
-### M2 — `compliance-operator` (Installs Compliance Operator on ALL clusters + scan schedule)
+### M2 — `compliance-operator` (Compliance Operator + Central CIS scan schedule)
 
-**Purpose:** Ensure the OpenShift Compliance Operator is installed on secured clusters in the active lab, and that ACS has **one** compliance scan schedule covering them (RHACS UI equivalent). **Transitional (pre-orchestrator migration):** the module still fans out OLM to **every** lab secured cluster and does **not** use Target-only semantics yet. Destination contract: `impactPlanes: ["central","openshift"]`, single-SC OpenShift per invoke, Central schedule from the selection set (see ADDING-A-MODULE Planes and multi-SC).
+**Purpose:** Install the OpenShift Compliance Operator on selected secured clusters and maintain one Central scan schedule (`ocp4-cis-scan-schedule`). Catalog: `impactPlanes: ["central","openshift"]`. Orchestrator fans out OpenShift N then Central 1 when `--secured-cluster-id` is passed; with no ids, default is Target cluster for Setup only.
 
 **ACS principle (required):** Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. Operator install is on-cluster (`oc` per SC); scan schedules go through **Central API** only.
 
 **Pre conditions:** none
 
-**Status must verify:** Per secured cluster, Compliance Operator healthy; shared Central schedule `ocp4-cis-scan-schedule` membership matches resolvable lab SCs. Multi-SC Status nests folds under each cluster name.
+**Status must verify:** For the selection (or Target), Compliance Operator healthy; Central schedule membership reflects the selection (merged installs).
 
-**Run must do:** For each lab SC with usable OpenShift creds, OLM install/verify in `openshift-compliance`; create/update one Central schedule with all resolved cluster ids. Missing creds: flag and continue. `--secured-cluster NAME` narrows OLM and schedule union/remove semantics.
+**Run must do:** OpenShift plane: OLM install/verify in `openshift-compliance` on one SC. Central plane: merge selected ACS cluster ids into the shared schedule.
 
-**Uninstall must do:** Default: delete shared Central schedule, then OLM uninstall on every reachable SC. With `--secured-cluster`: OLM on that SC only; drop that id from the schedule (delete schedule if empty).
+**Uninstall must do:** OpenShift: OLM uninstall on the selected SC. Central: drop selected ids from the schedule (delete schedule if empty).
 
-**Acceptance:** `--status` is `ok` when every reachable SC has a healthy operator and the Central schedule lists all resolvable cluster ids.
+**Acceptance:** Orchestrated multi-id install leaves each selected SC with a healthy operator and the schedule covering those clusters; re-run adding another id is idempotent.
 
 ---
 

@@ -9,45 +9,58 @@ LIB="${ROOT}/modules/compliance_operator_lib.sh"
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# compliance-operator
 
-Purpose:
-  Install OpenShift Compliance Operator via OLM on the secured cluster, then
-  create/update a compliance scan configuration in Central (RHACS UI equivalent).
-  Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
+Installs the OpenShift Compliance Operator (OLM) on selected secured
+cluster(s) and maintains one Central scan schedule
+(\`ocp4-cis-scan-schedule\`, profiles \`ocp4-cis\` + \`ocp4-cis-node\`, daily 02:00).
 
-Depends on:
-  - oc logged into the lab secured OpenShift cluster
-  - lab-credentials.json Central API token and console URL
+Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
 
-Environment:
-  COMPLIANCE_OPERATOR_NAMESPACE           Default openshift-compliance
-  COMPLIANCE_SUBSCRIPTION_NAME            Default compliance-operator-sub
-  COMPLIANCE_OPERATOR_CHANNEL             Default stable
-  COMPLIANCE_CSV_TIMEOUT_SECONDS          Default 600
-  COMPLIANCE_ROLLOUT_TIMEOUT_SECONDS      Default 240
-  ACS_COMPLIANCE_PATCH_NODE_SELECTOR
-      OpenShift clusters may apply a default project node selector to new
-      namespaces via the openshift.io/node-selector annotation. That limits
-      which nodes pods in openshift-compliance may use. The Compliance
-      Operator install does not need a special node pool on most labs, but
-      on clusters with a restrictive default the operator or profile-parser
-      pods can remain Pending while the CSV still reports Succeeded.
-      We leave the namespace alone by default so we do not override cluster
-      scheduling policy without intent. Set to 1 only when you want this
-      module to clear openshift.io/node-selector on openshift-compliance
-      during install (less restrictive scheduling for that namespace).
-  ACS_COMPLIANCE_SCAN_NAME                Default ocp4-cis-scan-schedule
-  ACS_COMPLIANCE_CLUSTER_NAME             Secured cluster name in Central (auto from SecuredCluster CR)
-  ACS_COMPLIANCE_PROFILE_SYNC_TIMEOUT_SECONDS  Default 600 (poll every 3s on --run)
+\`impactPlanes: ["central","openshift"]\`. Prefer the orchestrator:
 
-Side effects:
-  --run applies OLM resources on the secured cluster and scan configuration via Central API
-  --uninstall deletes this module's Central scan schedule (if present), then removes the
-    Subscription/CSV/OperatorGroup and the openshift-compliance namespace
+\`\`\`
+./scripts/acs-setup.sh --run --module compliance-operator \\
+  --secured-cluster-id <id1> --secured-cluster-id <id2>
+\`\`\`
+
+That runs OpenShift once per id, then Central once with the full selection.
+With no \`--secured-cluster-id\`, default is the lab **Target cluster for Setup**
+only (not every lab SC).
+
+## Usage
+
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]... [--patch-node-selector]
+$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+\`\`\`
+
+## Flags
+
+- \`--plane central|openshift\` - orchestrator plane split (omit to do both in one process)
+- \`--secured-cluster-id ID\` - repeatable lab SC id (OpenShift: one; Central: selection set)
+- \`--secured-cluster NAME\` - legacy name filter (prefer \`--secured-cluster-id\`)
+- \`--patch-node-selector\` - Clear \`openshift.io/node-selector\` on
+  \`openshift-compliance\` during OLM install
+- \`--dry-run\` - Print the plan; change nothing
+
+## Status Info
+
+Per selected secured cluster: Compliance Operator overview and Central schedule
+membership for the selection.
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` (OpenShift): install/verify OLM on the selected SC
+- \`--run\` (Central): merge selected clusters into the shared scan schedule
+- \`--uninstall\` (OpenShift): remove OLM on the selected SC
+- \`--uninstall\` (Central): drop selected clusters from the schedule (delete if empty)
 EOF
 }
 
@@ -113,6 +126,29 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --patch-node-selector) CO_PATCH_NODE_SELECTOR=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        CO_PLANE="$1"
+        case "$CO_PLANE" in
+          central|openshift) ;;
+          *)
+            echo "$(basename "$0"): --plane must be central or openshift" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        CO_SC_IDS+=("$1")
+        ;;
+      --secured-cluster)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster needs a name" >&2; exit 1; }
+        CO_SECURED_CLUSTER="$1"
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2

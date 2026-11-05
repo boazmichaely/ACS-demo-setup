@@ -17,10 +17,6 @@ from lib.central import load_lab_document, repo_root
 from lib.lab_doc import active_lab
 from lib.openshift import CENTRAL_ONLY_SC_ID
 
-# Still self-fan-out OLM; outer N-invoke would duplicate work until Phase 5.
-LEGACY_SELF_FANOUT_MODULES = frozenset({"compliance-operator"})
-
-
 @dataclass(frozen=True)
 class ModuleInvocation:
     plane: str | None
@@ -120,15 +116,13 @@ def plan_module_invocations(
     preserve legacy single-process behavior.
 
     Non-empty ``sc_ids`` → OpenShift once per id, then Central once with all
-    ids when the catalog lists both planes. Raises if the module still
-    self-fan-outs (compliance-operator until migrated).
+    ids when the catalog lists both planes.
     """
     if isinstance(module_row_or_id, str):
         row = module_row(module_row_or_id, root)
     else:
         row = module_row_or_id
 
-    mid = (row.get("id") or "").strip()
     ids = [s.strip() for s in (sc_ids or []) if (s or "").strip()]
     # Dedupe preserving order
     seen: set[str] = set()
@@ -140,13 +134,6 @@ def plan_module_invocations(
 
     if not uniq:
         return [ModuleInvocation(plane=None, sc_ids=(), env={}, argv_extra=())]
-
-    if mid in LEGACY_SELF_FANOUT_MODULES:
-        raise RuntimeError(
-            f"module {mid!r} still fans out secured clusters internally; "
-            "do not pass --secured-cluster-id until it is migrated to "
-            "orchestrator planes"
-        )
 
     planes = impact_planes(row)
     if not planes:
