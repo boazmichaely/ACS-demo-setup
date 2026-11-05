@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -128,14 +130,88 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _parse_semver(raw: str) -> tuple[int, int, int] | None:
+    s = (raw or "").strip()
+    if s.lower().startswith("v"):
+        s = s[1:]
+    parts = s.split(".")
+    if len(parts) < 3:
+        return None
+    try:
+        return int(parts[0]), int(parts[1]), int(parts[2].split("-", 1)[0])
+    except ValueError:
+        return None
+
+
+def _semver_greater(left: str, right: str) -> bool:
+    a = _parse_semver(left)
+    b = _parse_semver(right)
+    if not a or not b:
+        return False
+    return a > b
+
+
+def _fetch_latest_github_release() -> dict[str, str] | None:
+    """Return {tagName, htmlUrl} or None when unavailable."""
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "acs-demo-setup",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            raw = resp.read().decode("utf-8")
+        data = json.loads(raw)
+    except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    tag_name = str(data.get("tag_name") or "").strip()
+    if not tag_name:
+        return None
+    html_url = str(data.get("html_url") or "").strip() or (
+        f"https://github.com/{GITHUB_REPO}/releases/tag/{tag_name}"
+    )
+    return {"tagName": tag_name, "htmlUrl": html_url}
+
+
 @app.get("/api/version")
-def api_version() -> dict[str, str]:
-    """Installed app version from the repo VERSION file."""
+def api_version() -> dict[str, Any]:
+    """Installed version + whether a newer GitHub Release exists (server-side check)."""
     try:
         version = read_app_version()
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"version": version, "repo": GITHUB_REPO}
+    tag = version if version.startswith("v") else f"v{version}"
+    out: dict[str, Any] = {
+        "version": version,
+        "repo": GITHUB_REPO,
+        "releaseUrl": f"https://github.com/{GITHUB_REPO}/releases/tag/{tag}",
+        "updateAvailable": False,
+        "latestTag": "",
+        "latestReleaseUrl": "",
+    }
+    latest = _fetch_latest_github_release()
+    if not latest:
+        return out
+    out["latestTag"] = latest["tagName"]
+    out["latestReleaseUrl"] = latest["htmlUrl"]
+    if _semver_greater(latest["tagName"], version):
+        out["updateAvailable"] = True
+    return out
+
+
+@app.get("/api/version/latest")
+def api_version_latest() -> dict[str, str]:
+    """Latest GitHub Release (server-side fetch)."""
+    latest = _fetch_latest_github_release()
+    if not latest:
+        raise HTTPException(status_code=404, detail="no releases available")
+    return {**latest, "repo": GITHUB_REPO}
 
 
 def _catalog_module_ids() -> set[str]:
