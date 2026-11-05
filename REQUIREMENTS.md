@@ -48,7 +48,7 @@ Not in scope: unattended multi-tenant provisioning, production installs, or teac
 ### 3.2 What this project does *not* assume
 
 - A specific OpenShift version (modules may document minimums in their `--help`)
-- That every optional integration (Slack token, Splunk, external registries) is preconfigured; modules that need secrets document required env vars
+- That every optional integration (Slack token, Splunk, external registries) is preconfigured; modules that need secrets document flags or credential-file fields (prefer those over module-specific env vars)
 
 ### 3.3 User-provided inputs (secrets and overrides)
 
@@ -62,7 +62,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password, optional `apiToken` | If `apiToken` is set, modules use `oc login --token=` (SSO labs). Else username/password. |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true`; **`activeSecuredClusterId` is user-selected** (GUI: OpenShift for modules) and is the OpenShift target for module `oc` work. Empty `securedClusters` → Central OpenShift |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** (GUI: Target cluster for Setup) soft-defaults which SC is pre-selected for OpenShift impact. Catalog `impactPlanes` + orchestrator fan-out (OpenShift N, then Central 1 for `both`) own multi-SC runs; modules must not loop SCs. **Transitional:** `compliance-operator` still fans out OLM to every `securedClusters` entry until migrated. Empty `securedClusters` → Central OpenShift |
 
 Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
@@ -128,7 +128,7 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 | ID | Requirement |
 |----|-------------|
 | R-MOD-1 | Implements `--help`, `--status`, `--run`, and `--dry-run` |
-| R-MOD-2 | `--help` explains purpose, dependencies, required env vars, and side effects |
+| R-MOD-2 | `--help` is readable Markdown: purpose, optional Flags, Status Info, Pre Conditions (usually none), and Side effects. Prefer constants/CLI flags over module-specific env vars; do not dump tool-wide `ACS_*` credential paths or shared lab/`oc` fluff |
 | R-MOD-3 | `--status` prints exactly one TSV row: `id`, `state`, `message` where `state` ∈ `ok` \| `needs-run` \| `error` |
 | R-MOD-4 | `--run` is idempotent: second run with no drift leaves cluster in the same desired state |
 | R-MOD-5 | `--run` exit `0` on success; non-zero on failure with stderr message |
@@ -169,7 +169,7 @@ slack-notifier	needs-run	Slack integration not configured
 
 ## 6. Module requirements
 
-For each module: **purpose**, **depends on**, **status must verify**, **run must do**, **acceptance**.
+For each module: **purpose**, **pre conditions** (usually none; another installed tool or prior module only), **status must verify**, **run must do**, **acceptance**.
 
 ---
 
@@ -177,7 +177,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 **Purpose:** Configure RHACS image integrations needed for vulnerability scanning on the secured cluster. Reads Quay and `registry.redhat.io` credentials from the OpenShift cluster pull secret, and adds an anonymous public integration for Google Artifact Registry (`us-central1-docker.pkg.dev`) so `ms-demo` Online Boutique images can be scanned.
 
-**Depends on:** none (Central credentials via `lib/central`; OpenShift via `lib/openshift` / `oc`)
+**Pre conditions:** none
 
 **Status must verify:**
 
@@ -208,7 +208,7 @@ For each module: **purpose**, **depends on**, **status must verify**, **run must
 
 **Purpose:** Ensure Signature Integration **Red Hat Public** (Red Hat release key 3 Cosign public key), Inform Build+Deploy policy **Images must be signed by Red Hat Public**, and prime three signed images plus one unsigned contrast via `roxctl image scan` (no deploy).
 
-**Depends on:** none in catalog. Central API auth; Central must be able to pull the primed registries (Quay / `registry.access.redhat.com`).
+**Pre conditions:** none
 
 **Status / Run / Acceptance:**
 
@@ -221,32 +221,21 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ---
 
-### M2 — `compliance-operator` (Compliance Operator + scan schedule)
+### M2 — `compliance-operator` (Installs Compliance Operator on ALL clusters + scan schedule)
 
-**Purpose:** Ensure the OpenShift Compliance Operator is installed on the secured cluster and ACS compliance scan schedules are configured the same way a user would in the RHACS UI.
+**Purpose:** Ensure the OpenShift Compliance Operator is installed on secured clusters in the active lab, and that ACS has **one** compliance scan schedule covering them (RHACS UI equivalent). **Transitional (pre-orchestrator migration):** the module still fans out OLM to **every** lab secured cluster and does **not** use Target-only semantics yet. Destination contract: `impactPlanes: ["central","openshift"]`, single-SC OpenShift per invoke, Central schedule from the selection set (see ADDING-A-MODULE Planes and multi-SC).
 
-**ACS principle (required):** This toolkit targets **RHACS (ACS)** demos. Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. That bypasses Central and duplicates what the UI does via Central API. The operator install is on-cluster (`oc`); scan schedules must be created through **Central API** (equivalent to Compliance → scan configurations → Save in the UI), not raw CO YAML.
+**ACS principle (required):** Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. Operator install is on-cluster (`oc` per SC); scan schedules go through **Central API** only.
 
-**Phased delivery:**
+**Pre conditions:** none
 
-| Phase | Scope | Mechanism |
-|-------|--------|-----------|
-| **1 (shipped first)** | Install Compliance Operator via OLM on the secured cluster | `oc` — namespace, OperatorGroup, Subscription; wait for CSV/deployment |
-| **2 (follow-up)** | Scan schedule for the demo cluster | Central API (e.g. `POST /v2/compliance/scan/configurations`) — mimic UI wizard |
+**Status must verify:** Per secured cluster, Compliance Operator healthy; shared Central schedule `ocp4-cis-scan-schedule` membership matches resolvable lab SCs. Multi-SC Status nests folds under each cluster name.
 
-**Depends on:** none (secured cluster is a manual prerequisite per §3.1)
+**Run must do:** For each lab SC with usable OpenShift creds, OLM install/verify in `openshift-compliance`; create/update one Central schedule with all resolved cluster ids. Missing creds: flag and continue. `--secured-cluster NAME` narrows OLM and schedule union/remove semantics.
 
-**Status must verify (full module):** Compliance Operator healthy; scan schedule present in Central.
+**Uninstall must do:** Default: delete shared Central schedule, then OLM uninstall on every reachable SC. With `--secured-cluster`: OLM on that SC only; drop that id from the schedule (delete schedule if empty).
 
-**Status (phase 1 only):** Compliance Operator Subscription + CSV `Succeeded` + operator deployment ready. Message notes scan schedule not configured until phase 2.
-
-**Run must do (full module):** Install Compliance Operator if missing; create/update scan schedule via Central API.
-
-**Run (phase 1 only):** OLM install only; idempotent `oc apply`; no Central API calls; no `ScanSetting` / `ScanSettingBinding`.
-
-**Acceptance (full module):** Compliance scans visible in Central for demo cluster.
-
-**Acceptance (phase 1):** `--status` is `ok` when the operator is installed and healthy on the secured cluster.
+**Acceptance:** `--status` is `ok` when every reachable SC has a healthy operator and the Central schedule lists all resolvable cluster ids.
 
 ---
 
@@ -254,7 +243,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`.
 
-**Depends on:** none (ACS already installed on the lab)
+**Pre conditions:** none
 
 **Status must verify:** HyperConverged healthy; ACS flags on Central + SecuredCluster; both demo VMIs Running; Central reports CVE findings on both VMs in `acs-virt-demo`.
 
@@ -270,7 +259,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Deploy the Mostmark microservices demo app in OpenShift project `ms-demo` for network/policy/violation demos.
 
-**Depends on:** none
+**Pre conditions:** none
 
 **Status must verify:** Project exists; workloads ready per module definition
 
@@ -284,7 +273,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Install the [ACS-init-container-test](https://github.com/boazmichaely/ACS-init-container-test) demo: four Deployments (`clean-app`, `dirty-app`, `blue-app`, `red-app`) in OpenShift project `acs-init-container-test`, plus three namespace-scoped Central `DEMO-Init-Test` policies from upstream. Shows Central scanning and policy evaluation on init containers.
 
-**Depends on:** none
+**Pre conditions:** none
 
 **Status must verify:** Project exists; all four Deployments present; `clean-app`/`dirty-app` ready (`blue-app`/`red-app` may stay `0/1` without privileged SCC - expected); three `DEMO-Init-Test: …` policies present; Status folds list active namespace violations (informational).
 
@@ -300,7 +289,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Lead-in for the ACS console plugin visibility demo: HTPasswd users (adam/boaz/chris), IdP, and OpenShift project RBAC. Full walkthrough lives in `modules/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed.
 
-**Depends on:** none (demo walkthrough uses `ms-demo` / `init-demo` projects when those modules are installed; Part 1 itself does not require them)
+**Pre conditions:** ACS console plugin enabled; `htpasswd` and `openssl` on PATH
 
 **Status must verify:** IdP, users, and bindings match demo spec; Demo fold shows the walkthrough; Credentials fold lists fixed lab passwords
 
@@ -314,7 +303,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Configure Central to use OpenShift as an identity provider for UI login demos.
 
-**Depends on:** `users-part1-ocp` (catalog; end-to-end login needs M5 users)
+**Pre conditions:** `users-part1-ocp` installed
 
 **Status must verify:** Central auth provider configured for OpenShift OAuth
 
@@ -328,7 +317,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Map OpenShift logins adam, boaz, and chris to ACS roles and access scopes for Central. Adam becomes built-in Admin. Boaz and chris become Analysts (`boaz-in-acs`, `chris-in-acs`) with access scope limited to `ms-demo`. The OpenShift console Security plugin still follows OpenShift RBAC (Part 1); this module does not change that. Act 2 of the demo compares console vs ACS Central: boaz is aligned (both sides `ms-demo` only); chris is misaligned (OCP admin on `ms-demo` and `acs-init-container-test`, ACS only `ms-demo`). Full walkthrough lives in `modules/users-part1-ocp-demo.md`.
 
-**Depends on:** `users-part2-oauth`
+**Pre conditions:** `users-part2-oauth` installed
 
 **Status must verify:** Access scope `ms-demo` exists with the expected namespace rule; roles `boaz-in-acs` and `chris-in-acs` use Analyst with that scope; OpenShift auth group rules map adam to Admin, boaz to `boaz-in-acs`, and chris to `chris-in-acs`
 
@@ -342,7 +331,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Configure Central’s Slack notifier so demo alerts land in Slack, and attach that notifier to policies stamped with category `DEMO`. Default target is shared RH-internal `#acs-demo-notifier`; labs may override notifier name, webhook, and channel link.
 
-**Depends on:** none in catalog. Working Central API access via lab credentials. DEMO policies come from other modules (`init-demo`, `signature-integration`, …); re-run those first if policies lack category `DEMO`.
+**Pre conditions:** none
 
 **Webhook resolution:** module flags (`--webhook` / `--name` / `--channel-url`) → lab-credentials override → [`config/slack-notifier.defaults.json`](config/slack-notifier.defaults.json)
 
@@ -360,7 +349,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Purpose:** Deploy Splunk Operator and a Splunk Free Standalone lab, install the RHACS Splunkbase Technology Add-on (TA) from a user-supplied `.tgz`, so audit/violation events can flow to Splunk for SIEM demos. Splunk UI wiring (Central endpoint, token, modular inputs) is documented in demo notes, not automated.
 
-**Depends on:** none
+**Pre conditions:** `helm` on PATH; RHACS TA `.tgz` under `--ta-dir` unless `--skip-ta`
 
 **Status must verify:** Namespace, operator, Standalone pod Ready, Splunk Web Route, local `.tgz` presence, TA app present in pod (`TA-stackrox`)
 

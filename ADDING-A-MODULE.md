@@ -12,7 +12,7 @@ You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/bl
 
 | Flag | What the module must do (Module Contract) |
 |------|-------------------------------------------|
-| `--help` | Explain the purpose of the module, what it depends on, which environment variables it needs, and what `--run` and `--uninstall` change. |
+| `--help` | Markdown: purpose, optional **Flags**, **Status Info**, **Pre Conditions** (usually `none`; only call out another installed tool or prior module), and **Side effects**. Prefer **constants and CLI flags** over module-specific env vars. Do not dump tool-wide `ACS_*` credential paths or repeat shared lab/`oc` fluff. |
 | `--status` | Report whether this step is already done. Print both a short summary line and detailed Status folds (described later). Both outputs are required. |
 | `--run` | Apply the step. Running it again when nothing has drifted must still succeed. |
 | `--run --dry-run` | Describe what `--run` would change, without changing the cluster or Central. |
@@ -64,13 +64,15 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
   "id": "my-feature",
   "label": "Short description for the Description column",
   "dependsOn": [],
-  "statusComplexity": 5
+  "statusComplexity": 5,
+  "impactPlanes": ["openshift"]
 }
 ```
 
 - `id` is the module key. It must match `modules/<id>.sh`, CLI `--module`, other modules’ `dependsOn`, and the **Module** column. Do not repeat the id inside `label`.
 - `statusComplexity` is an integer **1-10** hint for GUI status refresh order (lower = cheaper `--status`, refreshed first). Default to `5` if unsure; heavy OpenShift/Central probes (for example virt) belong near 8-10.
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
+- `impactPlanes` declares where the module does work (see [Planes and multi-SC](#planes-and-multi-sc)). Required for new modules.
 - Prefer `my-feature.sh` over `07-my-feature.sh`.
 
 ## Python helper (required for Central)
@@ -217,6 +219,49 @@ Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. 
 - Orchestrator uninstall always needs `--module <id>` (no uninstall-everything CLI).
 - Hard failure: non-zero exit and a clear message on stderr.
 
+## Planes and multi-SC
+
+A module may touch **Central** (RHACS API), **OpenShift** (workloads / Operators via `oc`), or both. Multi-secured-cluster labs select which OpenShift clusters take impact; Central API work always uses Central credentials (no picker for that plane).
+
+### Catalog: `impactPlanes`
+
+| Value | Meaning |
+|-------|---------|
+| `["central"]` | ACS API / Central only |
+| `["openshift"]` | OpenShift only |
+| `["central","openshift"]` | Both; the orchestrator splits invocations |
+
+### Orchestrator call pattern
+
+Modules stay **single OpenShift target** per OpenShift-plane process. The orchestrator fans out:
+
+- `["central"]` - one invocation
+- `["openshift"]` - one invocation per selected secured-cluster id
+- `["central","openshift"]` - **OpenShift N times**, then **Central once** (install and uninstall). Central receives the full selection as repeated `--secured-cluster-id` flags when the module needs them (for example a shared scan schedule).
+
+Flags the orchestrator may pass:
+
+| Flag | Rule |
+|------|------|
+| `--plane central\|openshift` | Required when the catalog lists both planes. Single-plane modules may omit (implied). |
+| `--secured-cluster-id <id>` | OpenShift plane: exactly one. Central plane: zero or more (picker selection). |
+
+**Target cluster for Setup** (`activeSecuredClusterId`) is only a soft default for the pre-launch picker / default single id when none are passed. It is not a hidden “install everywhere” switch. `sameAsCentralCluster` on a secured cluster is a **credentials shortcut** only; that SC is still a normal target in the list.
+
+### Workload label (OpenShift plane)
+
+Every module-owned object applied as YAML must carry:
+
+`acs-demo-setup/secured-cluster=<lab secured-cluster name>`
+
+Use shared helpers in [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) (`apply-labeled`, `delete-by-demo-labels`). Do not raw-`oc apply` module manifests without that stamp. Central API objects do not get this label.
+
+### Idempotency and no SC loops
+
+Each single invocation (one plane; one SC on OpenShift) must be safe to re-run. Install on cluster A must not require uninstalling B. Modules must **not** loop `securedClusters` themselves; the orchestrator owns multi-select.
+
+**Transitional note:** until the compliance-operator migration lands, that module still fans out OLM to every lab secured cluster internally. New modules must not copy that pattern.
+
 ## Credentials and auth
 
 Do not invent your own login path. The lab stores credentials in gitignored `lab-credentials.json` (edit them in the GUI; shape in [`config/lab-credentials.example.json`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/config/lab-credentials.example.json)). Modules should read that file through the shared libraries so every module sees the **active lab** the same way.
@@ -226,15 +271,17 @@ There are two different “doors”:
 | Door | Library | What it is for |
 |------|---------|----------------|
 | **Central** (RHACS API) | [`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py) | HTTP calls to Central (integrations, policies, scan schedules, …). **Requires a Python helper** from your module. |
-| **OpenShift** (`oc`) | [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) | Cluster objects on the OpenShift the lab marked **OpenShift for modules**. Shell can call `python -m lib.openshift`, then use `oc`. |
+| **OpenShift** (`oc`) | [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) | Cluster objects on a secured cluster (or Central OpenShift when the lab has no SCs). Shell can call `python -m lib.openshift`, then use `oc`. Pass `--secured-cluster-id` when the orchestrator targets a specific SC. |
 
-OpenShift modules do **not** use your interactive `~/.kube/config`. Instead, [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) logs in with the lab’s OpenShift admin fields and writes a per-lab kubeconfig under `.cache/`. In the GUI, pick which secured cluster is **OpenShift for modules** when a lab has more than one. If the lab has no secured clusters, OpenShift helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
+OpenShift modules do **not** use your interactive `~/.kube/config`. Instead, [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) logs in with the lab’s OpenShift admin fields and writes kubeconfigs under `.cache/`. **Target cluster for Setup** soft-defaults which SC is pre-selected for OpenShift work. If the lab has no secured clusters, helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
+
+**Transitional:** [`compliance-operator`](modules/compliance-operator.sh) still installs OLM on **every** lab secured cluster until it is migrated to orchestrator fan-out. Other modules use the selected OpenShift target (Target / `--secured-cluster-id`).
 
 Env fallbacks (`ROX_API_TOKEN`, `ACS_CENTRAL_ENDPOINT`, and friends) only fill empty file fields. Prefer the credentials file.
 
 ### Minimal OpenShift example (shell)
 
-Ask Python for a kubeconfig path, export it, then run `oc`:
+Ask Python for a kubeconfig path, export it, then apply with labels:
 
 ```bash
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -243,14 +290,16 @@ PYTHON="${ROOT}/gui/.venv/bin/python"
 
 ensure_oc() {
   local kc
-  kc="$(cd "$ROOT" && "$PYTHON" -m lib.openshift login --print-kubeconfig)" || return 1
+  # Prefer --secured-cluster-id from the orchestrator when present.
+  kc="$(cd "$ROOT" && "$PYTHON" -m lib.openshift login --print-kubeconfig ${SC_ID:+--secured-cluster-id "$SC_ID"})" || return 1
   export KUBECONFIG="$kc"
 }
 
 do_run() {
   ensure_oc || return 1
   oc get project ms-demo >/dev/null 2>&1 || oc new-project ms-demo
-  # … oc apply …
+  # MUST stamp the demo SC label on module-owned manifests:
+  "$PYTHON" -m lib.openshift apply-labeled ${SC_ID:+--secured-cluster-id "$SC_ID"} -f path/to.yaml
 }
 ```
 
