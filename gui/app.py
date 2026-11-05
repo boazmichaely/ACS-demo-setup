@@ -343,6 +343,7 @@ def run_module(
     module_id: str,
     dry_run: bool = False,
     uninstall: bool = False,
+    secured_cluster_id: list[str] | None = Query(default=None),
 ) -> StreamingResponse:
     if uninstall:
         args = ["--uninstall", "--module", module_id]
@@ -350,6 +351,10 @@ def run_module(
         args = ["--run", "--module", module_id]
     if dry_run:
         args.append("--dry-run")
+    for sc_id in secured_cluster_id or []:
+        sid = (sc_id or "").strip()
+        if sid:
+            args.extend(["--secured-cluster-id", sid])
 
     def stream_output():
         begin_run(REPO_ROOT, module_id, dry_run=dry_run, uninstall=uninstall)

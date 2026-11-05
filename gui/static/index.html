@@ -17,7 +17,7 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=content_copy,done,lock,open_in_new"
     />
-    <link rel="stylesheet" href="/static/demo-setup.css?v=shell68" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell78" />
   </head>
   <body>
     <div class="pf-v6-c-page pf-m-no-sidebar" id="page">
@@ -358,6 +358,32 @@
                       </label>
                     </div>
 
+                    <div class="demo-setup-target" id="setupTargetBlock">
+                      <span class="demo-setup-target__label"
+                        >Target cluster for Setup:</span
+                      >
+                      <label class="pf-v6-c-check demo-setup-target__same">
+                        <input
+                          class="pf-v6-c-check__input"
+                          type="checkbox"
+                          id="setupTargetSameAsCentral"
+                        />
+                        <span class="pf-v6-c-check__label">Same as Central</span>
+                      </label>
+                      <select
+                        class="pf-v6-c-form-control demo-setup-target__select"
+                        id="setupTargetCluster"
+                        hidden
+                      ></select>
+                      <span
+                        class="demo-setup-target-warn"
+                        id="setupTargetWarn"
+                        hidden
+                        role="status"
+                        >Not Central's cluster</span
+                      >
+                    </div>
+
                     <div class="demo-cred-group" id="clustersGroup">
                       <div class="demo-cred-group__title">Clusters</div>
 
@@ -372,7 +398,7 @@
                           <div class="demo-sub">
                             <h3 class="demo-sub__title">OpenShift</h3>
                             <label class="demo-field">
-                              <span>Console URL</span>
+                              <span>OpenShift Console URL</span>
                               <input
                                 class="pf-v6-c-form-control"
                                 id="centralOcpConsole"
@@ -417,7 +443,7 @@
                           <div class="demo-sub">
                             <h3 class="demo-sub__title">RHACS Central</h3>
                             <label class="demo-field">
-                              <span>Console URL</span>
+                              <span>ACS Console URL</span>
                               <input
                                 class="pf-v6-c-form-control"
                                 id="centralConsole"
@@ -524,7 +550,7 @@
                     </div>
 
                     <div class="demo-cred-group" id="integrationsGroup">
-                      <div class="demo-cred-group__title">Integrations</div>
+                      <div class="demo-cred-group__title">Integration Secrets</div>
 
                     <details class="demo-fold" id="slackFold">
                       <summary class="demo-fold__summary">
@@ -770,6 +796,33 @@
         <div class="demo-mod-help__body" id="moduleHelpBody"></div>
       </dialog>
 
+      <dialog id="scPickerDialog" class="demo-sc-picker" aria-labelledby="scPickerTitle">
+        <form method="dialog" id="scPickerForm" class="demo-sc-picker__form">
+          <div class="demo-sc-picker__header">
+            <h2 class="demo-sc-picker__title" id="scPickerTitle">Select secured clusters</h2>
+            <button
+              type="button"
+              class="pf-v6-c-button pf-m-plain"
+              id="scPickerClose"
+              aria-label="Cancel"
+            >
+              ✕
+            </button>
+          </div>
+          <p class="demo-sc-picker__hint" id="scPickerHint">
+            OpenShift impact runs on the clusters you select. Central API work always uses
+            Central (no choice needed). Target cluster for Setup is pre-checked.
+          </p>
+          <div class="demo-sc-picker__list" id="scPickerList" role="group"></div>
+          <div class="demo-sc-picker__actions">
+            <button type="submit" value="cancel" class="pf-v6-c-button pf-m-link">Cancel</button>
+            <button type="submit" value="confirm" class="pf-v6-c-button pf-m-primary" id="scPickerConfirm">
+              Continue
+            </button>
+          </div>
+        </form>
+      </dialog>
+
       <div class="demo-log-drawer" id="logDrawer">
         <div
           class="demo-log-drawer__resize"
@@ -921,7 +974,7 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
-    <script src="/static/md-render.js?v=shell68"></script>
-    <script src="/static/app.js?v=shell68" type="module"></script>
+    <script src="/static/md-render.js?v=shell77"></script>
+    <script src="/static/app.js?v=shell78" type="module"></script>
   </body>
 </html>

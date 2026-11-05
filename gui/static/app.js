@@ -507,12 +507,14 @@ function bindGroupExpandButtons(root) {
   });
 }
 
-function renderSectionsHtml(sections, moduleId = "") {
-  if (!Array.isArray(sections) || !sections.length) return "";
+function renderSectionFoldsHtml(sections, moduleId, startIndex = 0) {
+  if (!Array.isArray(sections) || !sections.length) {
+    return { html: "", nextIndex: startIndex };
+  }
 
   let currentGroup = null;
   let html = "";
-  let index = 0;
+  let index = startIndex;
   let groupOpen = false;
 
   const closeGroup = () => {
@@ -566,6 +568,45 @@ function renderSectionsHtml(sections, moduleId = "") {
   }
 
   closeGroup();
+  return { html, nextIndex: index };
+}
+
+function renderSectionsHtml(sections, moduleId = "") {
+  if (!Array.isArray(sections) || !sections.length) return "";
+
+  const clusterNames = [
+    ...new Set(
+      sections
+        .map((s) => (s && s.cluster != null ? String(s.cluster).trim() : ""))
+        .filter(Boolean)
+    ),
+  ];
+  const multiCluster = clusterNames.length > 1;
+
+  if (!multiCluster) {
+    return renderSectionFoldsHtml(sections, moduleId, 0).html;
+  }
+
+  // Outer hierarchy: one block per secured cluster; reuse existing group folds inside.
+  let html = "";
+  let index = 0;
+  for (const cluster of clusterNames) {
+    const subset = sections.filter((s) => String(s.cluster || "").trim() == cluster);
+    const inner = renderSectionFoldsHtml(subset, moduleId, index);
+    index = inner.nextIndex;
+    html += `<div class="demo-sec-cluster-block" data-cluster="${escapeHtml(cluster)}">
+      <div class="demo-sec-cluster">
+        <span class="demo-sec-cluster__label">${escapeHtml(cluster)}</span>
+      </div>
+      ${inner.html}
+    </div>`;
+  }
+  // Sections without a cluster name (if any) after named clusters
+  const orphan = sections.filter((s) => !String(s.cluster || "").trim());
+  if (orphan.length) {
+    const inner = renderSectionFoldsHtml(orphan, moduleId, index);
+    html += inner.html;
+  }
   return html;
 }
 
@@ -1461,10 +1502,115 @@ async function refreshAllStatus() {
   }
 }
 
-async function executeModuleRun(moduleId, { dryRun = false, uninstall = false } = {}) {
+/** Modules that accept orchestrator --plane / --secured-cluster-id fan-out. */
+const ORCHESTRATOR_PLANE_MODULES = new Set(["compliance-operator"]);
+
+function moduleImpactPlanes(moduleId) {
+  const raw = moduleMetaById.get(moduleId)?.impactPlanes;
+  return Array.isArray(raw) ? raw.map((p) => String(p).toLowerCase()) : [];
+}
+
+function moduleNeedsScPicker(moduleId) {
+  if (!ORCHESTRATOR_PLANE_MODULES.has(moduleId)) return false;
+  return moduleImpactPlanes(moduleId).includes("openshift");
+}
+
+/**
+ * Pre-launch multi-select for OpenShift-impact modules.
+ * Resolves to selected secured-cluster ids, or null if the user cancels.
+ * Returns [] when the lab has no SCs (caller runs without fan-out flags).
+ */
+function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("scPickerDialog");
+    const list = document.getElementById("scPickerList");
+    const form = document.getElementById("scPickerForm");
+    const title = document.getElementById("scPickerTitle");
+    const closeBtn = document.getElementById("scPickerClose");
+    if (!dialog || !list || !form) {
+      resolve([]);
+      return;
+    }
+
+    const lab = activeLab();
+    const clusters = lab?.securedClusters || [];
+    if (!clusters.length) {
+      resolve([]);
+      return;
+    }
+
+    const verb = uninstall ? "Uninstall" : "Install";
+    if (title) title.textContent = `${verb} ${moduleId} - select clusters`;
+
+    const activeId = (lab.activeSecuredClusterId || "").trim();
+    list.innerHTML = clusters
+      .map((sc) => {
+        const id = sc.id || "";
+        const name = sc.name || id;
+        const checked = !activeId || id === activeId ? "checked" : "";
+        const same = sc.sameAsCentralCluster
+          ? `<small>same OpenShift as Central (cred shortcut)</small>`
+          : "";
+        return `<label class="demo-sc-picker__row">
+          <input type="checkbox" name="sc" value="${escapeHtml(id)}" ${checked} />
+          <span class="demo-sc-picker__row-meta">
+            <span>${escapeHtml(name)}</span>
+            ${same}
+          </span>
+        </label>`;
+      })
+      .join("");
+
+    const finish = (ids) => {
+      dialog.removeEventListener("close", onDialogClose);
+      form.removeEventListener("submit", onSubmit);
+      if (closeBtn) closeBtn.removeEventListener("click", onCancelClick);
+      if (dialog.open) dialog.close();
+      resolve(ids);
+    };
+
+    const onCancelClick = () => finish(null);
+
+    const onSubmit = (e) => {
+      e.preventDefault();
+      const submitter = e.submitter;
+      const value = submitter?.value || "confirm";
+      if (value === "cancel") {
+        finish(null);
+        return;
+      }
+      const selected = [...list.querySelectorAll('input[name="sc"]:checked')].map(
+        (el) => el.value
+      );
+      if (!selected.length) {
+        window.alert("Select at least one secured cluster.");
+        return;
+      }
+      finish(selected);
+    };
+
+    const onDialogClose = () => {
+      // Esc / backdrop without an explicit finish
+      if (dialog.returnValue === "cancel") finish(null);
+    };
+
+    form.addEventListener("submit", onSubmit);
+    if (closeBtn) closeBtn.addEventListener("click", onCancelClick);
+    dialog.addEventListener("close", onDialogClose);
+    dialog.showModal();
+  });
+}
+
+async function executeModuleRun(
+  moduleId,
+  { dryRun = false, uninstall = false, securedClusterIds = null } = {}
+) {
   const params = new URLSearchParams();
   if (dryRun) params.set("dry_run", "true");
   if (uninstall) params.set("uninstall", "true");
+  for (const id of securedClusterIds || []) {
+    if (id) params.append("secured_cluster_id", id);
+  }
   const qs = params.toString();
   const res = await fetch(
     `/api/run/${encodeURIComponent(moduleId)}${qs ? `?${qs}` : ""}`,
@@ -1515,13 +1661,22 @@ async function executeModuleRun(moduleId, { dryRun = false, uninstall = false } 
 
 async function runModule(moduleId, { dryRun = false, uninstall = false } = {}) {
   if (!moduleId) return;
+  let securedClusterIds = null;
+  if (moduleNeedsScPicker(moduleId)) {
+    securedClusterIds = await pickSecuredClusterIds(moduleId, { uninstall });
+    if (securedClusterIds === null) return;
+  }
   const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
   ensureLogDrawerOpen();
   logSection(`${label}: ${moduleId}`);
 
   try {
-    const result = await executeModuleRun(moduleId, { dryRun, uninstall });
+    const result = await executeModuleRun(moduleId, {
+      dryRun,
+      uninstall,
+      securedClusterIds,
+    });
     recordLastAction(moduleId, { verb: label, ok: result.ok });
     await fetchStatus([moduleId]);
     refreshStatusCells();
@@ -1547,6 +1702,17 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
     }
   }
   const order = uninstall ? [...ids] : topologicalRunOrder(ids);
+  /** @type {Map<string, string[]|null>} */
+  const scByModule = new Map();
+  for (const moduleId of order) {
+    if (!moduleNeedsScPicker(moduleId)) {
+      scByModule.set(moduleId, null);
+      continue;
+    }
+    const picked = await pickSecuredClusterIds(moduleId, { uninstall });
+    if (picked === null) return;
+    scByModule.set(moduleId, picked);
+  }
   const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
   ensureLogDrawerOpen();
@@ -1558,7 +1724,11 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
       if (order.length > 1) {
         log(`\n[${moduleId}]\n`);
       }
-      const result = await executeModuleRun(moduleId, { dryRun, uninstall });
+      const result = await executeModuleRun(moduleId, {
+        dryRun,
+        uninstall,
+        securedClusterIds: scByModule.get(moduleId),
+      });
       recordLastAction(moduleId, { verb: label, ok: result.ok });
     }
     await fetchStatus();
@@ -1717,19 +1887,96 @@ function firstScId(clusters) {
   return (clusters || [])[0]?.id || "";
 }
 
-/** User-selected OpenShift-for-modules id from the radio, else lab value if still valid, else first. */
+/** Prefer the SC marked same-as-Central (Central's cluster) for Setup target default. */
+function centralClusterScId(clusters) {
+  const hit = (clusters || []).find((sc) => sc.sameAsCentralCluster !== false);
+  return hit?.id || "";
+}
+
+function defaultSetupTargetId(clusters) {
+  return centralClusterScId(clusters) || firstScId(clusters);
+}
+
+function firstRemoteScId(clusters) {
+  const hit = (clusters || []).find((sc) => sc.sameAsCentralCluster === false);
+  return hit?.id || "";
+}
+
+/** User-selected Target cluster for Setup, else lab value, else Central's SC. */
 function readActiveScIdFromDom(clusters) {
   const list = clusters || [];
-  const checked = securedClusterList?.querySelector(".js-sc-active:checked");
-  if (checked) {
-    const row = checked.closest(".demo-sc-row");
-    const id = row?.dataset.scId || "";
-    if (id && list.some((c) => c.id === id)) return id;
+  const sameCb = document.getElementById("setupTargetSameAsCentral");
+  if (sameCb?.checked) {
+    return defaultSetupTargetId(list);
   }
+  const sel = document.getElementById("setupTargetCluster");
+  const fromSelect = (sel?.value || "").trim();
+  if (fromSelect && list.some((c) => c.id === fromSelect)) return fromSelect;
   const lab = editingLab();
   const prev = lab?.activeSecuredClusterId || "";
-  if (prev && list.some((c) => c.id === prev)) return prev;
-  return firstScId(list);
+  if (prev && list.some((c) => c.id === prev)) {
+    const prevSc = list.find((c) => c.id === prev);
+    if (prevSc && prevSc.sameAsCentralCluster === false) return prev;
+  }
+  return firstRemoteScId(list) || defaultSetupTargetId(list);
+}
+
+function setupTargetOptionLabel(sc) {
+  return (sc.name || sc.id || "secured").trim() || "secured";
+}
+
+function syncSetupTargetControl(lab) {
+  const block = document.getElementById("setupTargetBlock");
+  const sameCb = document.getElementById("setupTargetSameAsCentral");
+  const sel = document.getElementById("setupTargetCluster");
+  const warn = document.getElementById("setupTargetWarn");
+  if (!sameCb || !sel) return;
+
+  const clusters = lab?.securedClusters || [];
+  const centralId = centralClusterScId(clusters);
+  let activeId =
+    (lab?.activeSecuredClusterId &&
+      clusters.some((c) => c.id === lab.activeSecuredClusterId) &&
+      lab.activeSecuredClusterId) ||
+    defaultSetupTargetId(clusters);
+
+  const activeSc = clusters.find((c) => c.id === activeId);
+  const sameAsCentral = Boolean(
+    !clusters.length || !activeSc || activeSc.sameAsCentralCluster !== false
+  );
+  sameCb.checked = sameAsCentral;
+  sameCb.disabled = !clusters.length;
+  block?.classList.toggle("is-not-central", !sameAsCentral);
+
+  if (sameAsCentral) {
+    activeId = defaultSetupTargetId(clusters);
+    sel.hidden = true;
+    if (warn) warn.hidden = true;
+  } else {
+    sel.hidden = false;
+    if (warn) warn.hidden = false;
+    const remotes = clusters.filter((sc) => sc.sameAsCentralCluster === false);
+    const options = remotes.length ? remotes : clusters.filter((sc) => sc.id !== centralId);
+    sel.innerHTML = options
+      .map(
+        (sc) =>
+          `<option value="${escapeHtml(sc.id)}">${escapeHtml(setupTargetOptionLabel(sc))}</option>`
+      )
+      .join("");
+    if (!options.length) {
+      sel.innerHTML = `<option value="">No remote secured clusters</option>`;
+      sel.value = "";
+      activeId = defaultSetupTargetId(clusters);
+    } else if (activeId && options.some((c) => c.id === activeId)) {
+      sel.value = activeId;
+    } else {
+      activeId = options[0].id;
+      sel.value = activeId;
+    }
+  }
+
+  if (lab) lab.activeSecuredClusterId = activeId;
+  syncScModulesBadges(activeId);
 }
 
 function readSecuredClustersFromDom() {
@@ -1830,7 +2077,7 @@ function scRemoteBodyHtml(sc, ocp) {
       <span class="pf-v6-c-check__label">Same as Central</span>
     </label>
     <label class="demo-field">
-      <span>Console URL</span>
+      <span>OpenShift Console URL</span>
       <input class="pf-v6-c-form-control js-sc-console" type="url" value="${escapeHtml(ocp.consoleUrl || "")}" spellcheck="false" />
     </label>
     <div class="demo-field-row">
@@ -1857,14 +2104,6 @@ function scSameBodyHtml() {
     <p class="demo-sc-hint" style="margin:0">Uses Central OpenShift console / user / password / API token.</p>`;
 }
 
-function scActiveRadioHtml(scId, activeId) {
-  const checked = scId && scId === activeId ? " checked" : "";
-  return `<label class="pf-v6-c-radio demo-sc-active">
-      <input class="pf-v6-c-radio__input js-sc-active" type="radio" name="sc-active-for-modules" value="${escapeHtml(scId)}"${checked} />
-      <span class="pf-v6-c-radio__label">OpenShift for modules</span>
-    </label>`;
-}
-
 function renderSecuredClusters(lab) {
   if (!securedClusterList) return;
   const clusters = lab.securedClusters || [];
@@ -1872,7 +2111,9 @@ function renderSecuredClusters(lab) {
     (lab.activeSecuredClusterId &&
       clusters.some((c) => c.id === lab.activeSecuredClusterId) &&
       lab.activeSecuredClusterId) ||
-    firstScId(clusters);
+    defaultSetupTargetId(clusters);
+
+  syncSetupTargetControl({ ...lab, activeSecuredClusterId: activeId });
 
   if (!clusters.length) {
     securedClusterList.innerHTML =
@@ -1889,11 +2130,9 @@ function renderSecuredClusters(lab) {
       const badgeText = same ? "Same as Central" : "Remote OCP";
       const isActive = sc.id === activeId;
       const modulesBadge = isActive
-        ? `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge"><span class="pf-v6-c-label__content">OpenShift for modules</span></span>`
-        : `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge" hidden><span class="pf-v6-c-label__content">OpenShift for modules</span></span>`;
-      const body = `${scActiveRadioHtml(sc.id, activeId)}${
-        same ? scSameBodyHtml() : scRemoteBodyHtml(sc, ocp)
-      }`;
+        ? `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge"><span class="pf-v6-c-label__content">Setup target</span></span>`
+        : `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge" hidden><span class="pf-v6-c-label__content">Setup target</span></span>`;
+      const body = same ? scSameBodyHtml() : scRemoteBodyHtml(sc, ocp);
       return `<details class="demo-sc-row" data-sc-id="${escapeHtml(sc.id)}">
         <summary class="demo-sc-row__summary">
           <span class="demo-sc-row__name js-sc-title">${escapeHtml(sc.name || "secured")}</span>
@@ -1942,7 +2181,7 @@ function refreshScRowChrome(row) {
   if (lab) {
     lab.securedClusters = readSecuredClustersFromDom();
     lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
-    syncScModulesBadges(lab.activeSecuredClusterId);
+    syncSetupTargetControl(lab);
     updateFoldMetas(lab);
   }
 }
@@ -1960,18 +2199,6 @@ function wireScRowBodyControls(row) {
   sameCb?.addEventListener("change", () => applyScSameToggle(row));
   row.querySelector(".js-sc-name")?.addEventListener("input", () => refreshScRowChrome(row));
   row.querySelector(".js-sc-console")?.addEventListener("input", () => refreshScRowChrome(row));
-  row.querySelector(".js-sc-active")?.addEventListener("change", () => {
-    const clusters = readSecuredClustersFromDom();
-    const activeId = readActiveScIdFromDom(clusters);
-    const lab = editingLab();
-    if (lab) {
-      lab.securedClusters = clusters;
-      lab.activeSecuredClusterId = activeId;
-      updateFoldMetas(lab);
-    }
-    syncScModulesBadges(activeId);
-    syncCredChrome();
-  });
 }
 
 function applyScSameToggle(row) {
@@ -1990,15 +2217,18 @@ function applyScSameToggle(row) {
     apiToken: row.querySelector(".js-sc-token")?.value || "",
   };
 
-  const activeId = readActiveScIdFromDom(readSecuredClustersFromDom());
-  body.innerHTML = `${scActiveRadioHtml(row.dataset.scId || "", activeId)}${
-    same ? scSameBodyHtml() : scRemoteBodyHtml({ name }, ocp)
-  }`;
+  body.innerHTML = same ? scSameBodyHtml() : scRemoteBodyHtml({ name }, ocp);
 
   row.open = true;
   wireScRowBodyControls(row);
   refreshScRowChrome(row);
   setupCredentialCopyButtons();
+  const lab = editingLab();
+  if (lab) {
+    lab.securedClusters = readSecuredClustersFromDom();
+    lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
+    syncSetupTargetControl(lab);
+  }
 }
 
 function bindSecuredClusterRow(row) {
@@ -2012,15 +2242,20 @@ function bindSecuredClusterRow(row) {
     const lab = editingLab();
     let activeId = lab?.activeSecuredClusterId || "";
     if (!remaining.some((c) => c.id === activeId)) {
-      activeId = firstScId(remaining);
+      activeId = defaultSetupTargetId(remaining);
+    }
+    if (lab) {
+      lab.securedClusters = remaining;
+      lab.activeSecuredClusterId = activeId;
+      syncSetupTargetControl(lab);
+    } else {
+      syncScModulesBadges(activeId);
     }
     updateFoldMetas({
       ...(lab || {}),
       securedClusters: remaining,
       activeSecuredClusterId: activeId,
     });
-    if (lab) lab.activeSecuredClusterId = activeId;
-    syncScModulesBadges(activeId);
     if (!remaining.length && securedClusterList) {
       securedClusterList.innerHTML =
         '<p class="demo-sc-empty">No secured clusters. Add one when a module needs sensor-side OpenShift.</p>';
@@ -2525,10 +2760,10 @@ function addSecuredCluster() {
   const sc = emptySecuredCluster(`secured-${current.length + 1}`);
   sc.sameAsCentralCluster = false;
   const next = [...current, sc];
-  // Keep existing OpenShift-for-modules choice; only default when none yet.
+  // Keep existing Setup target; only default to Central's cluster when none yet.
   let activeId = lab.activeSecuredClusterId || "";
   if (!current.some((c) => c.id === activeId)) {
-    activeId = firstScId(next);
+    activeId = defaultSetupTargetId(next);
   }
   // Draft in DOM only; Save writes it. Avoid mutating credDoc so dirty tracking works.
   const draft = {
@@ -2612,6 +2847,46 @@ document.getElementById("btnMakeActive")?.addEventListener("click", () => {
   makeEditingLabActive().catch((e) => setCredFeedback(e.message, true));
 });
 document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSecuredCluster);
+
+function onSetupTargetControlChange() {
+  const lab = editingLab();
+  if (!lab) return;
+  lab.securedClusters = readSecuredClustersFromDom();
+  // If leaving "Same as Central" with an empty/stale select, seed first remote first.
+  const sameCb = document.getElementById("setupTargetSameAsCentral");
+  if (!sameCb?.checked) {
+    const sel = document.getElementById("setupTargetCluster");
+    const remotes = lab.securedClusters.filter((sc) => sc.sameAsCentralCluster === false);
+    const cur = (sel?.value || "").trim();
+    if (!cur || !remotes.some((c) => c.id === cur)) {
+      const seed =
+        (lab.activeSecuredClusterId &&
+          remotes.some((c) => c.id === lab.activeSecuredClusterId) &&
+          lab.activeSecuredClusterId) ||
+        firstRemoteScId(lab.securedClusters);
+      if (sel && seed) {
+        sel.innerHTML = remotes
+          .map(
+            (sc) =>
+              `<option value="${escapeHtml(sc.id)}">${escapeHtml(setupTargetOptionLabel(sc))}</option>`
+          )
+          .join("");
+        sel.value = seed;
+      }
+    }
+  }
+  lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
+  syncSetupTargetControl(lab);
+  updateFoldMetas(lab);
+  syncCredChrome();
+}
+
+document
+  .getElementById("setupTargetSameAsCentral")
+  ?.addEventListener("change", onSetupTargetControlChange);
+document
+  .getElementById("setupTargetCluster")
+  ?.addEventListener("change", onSetupTargetControlChange);
 document.getElementById("btnSlackRestoreDefaults")?.addEventListener("click", (e) => {
   e.preventDefault();
   restoreSlackNotifierDefaults();
