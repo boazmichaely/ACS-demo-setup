@@ -716,141 +716,83 @@ function bindModuleMenus() {
   document.addEventListener("click", () => closeAllModuleMenus());
 }
 
-/** Split module --help text into Usage / Purpose / … blocks (contract shape). */
-function parseModuleHelp(text) {
+/**
+ * Module --help is Markdown (preferred) or legacy "Header:" sections.
+ * HTML rendering is only via ACS.md.render (gui/static/md-render.js).
+ */
+function legacyHelpToMarkdown(text) {
   const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
-  const blocks = [];
-  let title = null;
+  const out = [];
+  let section = null; // null | "md" | "usage" | "environment" | "prose"
   let buf = [];
+
   const flush = () => {
+    if (section === null && !buf.length) return;
     const body = buf.join("\n").replace(/^\n+|\n+$/g, "");
-    if (title !== null || body) blocks.push({ title, body });
-    title = null;
     buf = [];
+    if (section === "usage" || section === "environment") {
+      const fence = body || " ";
+      const label = section === "usage" ? "Usage" : "Environment";
+      out.push(`## ${label}\n\n\`\`\`\n${fence}\n\`\`\`\n`);
+    } else if (section === "prose") {
+      /* title already emitted */
+      out.push(body ? `${body}\n` : "");
+    } else if (body) {
+      out.push(`${body}\n`);
+    }
+    section = null;
   };
+
   for (const line of lines) {
+    if (/^#{1,6}\s/.test(line)) {
+      flush();
+      section = "md";
+      buf.push(line);
+      continue;
+    }
     const usageInline = line.match(/^Usage:\s*(.*)$/);
-    if (usageInline && title === null && buf.length === 0) {
-      title = "Usage";
-      if (usageInline[1]) buf.push(usageInline[1]);
+    if (usageInline && section === null && buf.length === 0 && !out.length) {
+      flush();
+      section = "usage";
+      if (usageInline[1]) buf.push(`Usage: ${usageInline[1]}`);
+      else buf.push("Usage:");
       continue;
     }
     const header = line.match(/^([A-Za-z][A-Za-z0-9 /.+_-]{0,40}):\s*$/);
-    if (header) {
+    if (header && section !== "md") {
       flush();
-      title = header[1];
+      const title = header[1];
+      const key = title.toLowerCase();
+      if (key === "usage") {
+        section = "usage";
+        buf.push("Usage:");
+      } else if (key === "environment") {
+        section = "environment";
+      } else {
+        section = "prose";
+        out.push(`## ${title}\n`);
+      }
+      continue;
+    }
+    if (section === "usage" && buf.length === 1 && buf[0] === "Usage:" && line.trim()) {
+      buf[0] = line.match(/^Usage:/) ? line : `Usage: ${line.trim()}`;
       continue;
     }
     buf.push(line);
   }
   flush();
-  return blocks;
-}
-
-function dedentHelpBody(body) {
-  const lines = String(body || "").split("\n");
-  const indents = lines
-    .filter((l) => l.trim())
-    .map((l) => (l.match(/^ */) || [""])[0].length);
-  const n = indents.length ? Math.min(...indents) : 0;
-  return lines.map((l) => l.slice(n)).join("\n");
-}
-
-function helpProseHtml(body) {
-  const dedented = dedentHelpBody(body);
-  const paras = dedented
-    .split(/\n\s*\n/)
-    .map((p) => p.replace(/^\n+|\n+$/g, ""))
-    .filter(Boolean);
-  if (!paras.length) {
-    return `<p class="demo-mod-help__prose">${linkifyProseHtml(escapeHtml(dedented || ""))}</p>`;
-  }
-  return paras
-    .map((p) => {
-      const html = linkifyProseHtml(escapeHtml(p)).replace(/\n/g, " ");
-      return `<p class="demo-mod-help__prose">${html}</p>`;
-    })
-    .join("");
-}
-
-function helpListHtml(body) {
-  const lines = String(body || "").split("\n");
-  const nonempty = lines.filter((l) => l.trim());
-  const bulletish =
-    nonempty.length > 0 && nonempty.every((l) => /^\s*[-*]/.test(l));
-  if (!bulletish) return helpProseHtml(body);
-  const items = nonempty.map((l) => l.replace(/^\s*[-*]\s+/, "").trim());
-  const lis = items
-    .map((item) => `<li>${linkifyProseHtml(escapeHtml(item))}</li>`)
-    .join("");
-  return `<ul class="demo-mod-help__list">${lis}</ul>`;
-}
-
-function helpEnvHtml(body) {
-  // Terminal help often uses padded columns + wrapped continuation lines.
-  // Stack name + description; do not keep a 2-column grid (long names / wraps break it).
-  const rows = [];
-  for (const line of String(body || "").split("\n")) {
-    if (!line.trim()) continue;
-    const start = line.match(
-      /^\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s{2,}|\s+)?(.*)$/
-    );
-    const looksLikeVar = start && /^[A-Z][A-Z0-9_]*$/.test(start[1]);
-    if (looksLikeVar) {
-      rows.push({ key: start[1], val: (start[2] || "").trim() });
-      continue;
-    }
-    if (rows.length) {
-      const bit = line.trim();
-      rows[rows.length - 1].val = rows[rows.length - 1].val
-        ? `${rows[rows.length - 1].val} ${bit}`
-        : bit;
-    }
-  }
-  if (!rows.length) return helpProseHtml(body);
-  return `<div class="demo-mod-help__env">${rows
-    .map((r) => {
-      const desc = r.val
-        ? `<div class="demo-mod-help__env-desc">${linkifyProseHtml(escapeHtml(r.val))}</div>`
-        : "";
-      return `<div class="demo-mod-help__env-item"><div class="demo-mod-help__env-name">${escapeHtml(
-        r.key
-      )}</div>${desc}</div>`;
-    })
-    .join("")}</div>`;
+  return out.join("\n").trim() + "\n";
 }
 
 function renderModuleHelpHtml(text) {
   const raw = String(text || "").trim();
   if (!raw) return `<p class="demo-mod-help__prose">(empty help)</p>`;
-  const blocks = parseModuleHelp(raw);
-  const hasHeaders = blocks.some((b) => b.title);
-  if (!hasHeaders) {
+  const looksLikeMd = /^#{1,6}\s/m.test(raw);
+  const md = looksLikeMd ? raw : legacyHelpToMarkdown(raw);
+  if (!window.ACS || !ACS.md || typeof ACS.md.render !== "function") {
     return `<pre class="demo-mod-help__fallback">${escapeHtml(raw)}</pre>`;
   }
-  return blocks
-    .map((block) => {
-      const title = block.title || "Notes";
-      const key = title.toLowerCase();
-      let content;
-      if (key === "usage") {
-        const usageBody = block.body.startsWith("Usage:")
-          ? block.body
-          : `Usage: ${block.body}`;
-        content = `<pre class="demo-mod-help__usage">${escapeHtml(usageBody)}</pre>`;
-      } else if (key === "environment") {
-        content = helpEnvHtml(block.body);
-      } else if (key === "depends on") {
-        content = helpListHtml(block.body);
-      } else {
-        content = helpProseHtml(block.body);
-      }
-      return `<section class="demo-mod-help__section">
-        <h3 class="demo-mod-help__section-title">${escapeHtml(title)}</h3>
-        ${content}
-      </section>`;
-    })
-    .join("");
+  return ACS.md.render(md);
 }
 
 async function showModuleHelp(moduleId) {

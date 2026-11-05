@@ -13,7 +13,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@patternfly/patternfly@6.6.0/patternfly-addons.min.css"
     />
-    <link rel="stylesheet" href="/static/demo-setup.css?v=shell34" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell68" />
     <style>
       html,
       body {
@@ -44,13 +44,8 @@
         font-size: var(--pf-t--global--font--size--md);
         line-height: 1.55;
       }
-      .help-page__body h1,
-      .help-page__body h2,
-      .help-page__body h3 {
-        margin-top: 1.4em;
-        margin-bottom: 0.5em;
-      }
-      .help-page__body h1:first-child {
+      /* Heading sizes come from .acs-md in demo-setup.css - do not flatten here. */
+      .help-page__body .acs-md > h1:first-child {
         display: none; /* title already shown above */
       }
       .help-page__body pre {
@@ -97,6 +92,7 @@
         <a href="https://github.com/boazmichaely/ACS-demo-setup/blob/main/README.md" target="_blank" rel="noopener">README</a>
         <a href="https://github.com/boazmichaely/ACS-demo-setup/blob/main/ADDING-A-MODULE.md" target="_blank" rel="noopener">How to add a module</a>
         <a href="https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp-demo.md" target="_blank" rel="noopener">Users demo script</a>
+        <a href="https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA-demo.md" target="_blank" rel="noopener">Splunk TA demo script</a>
         <a href="/static/status-sections-map.html">Status folds field map</a>
       </nav>
       <h1 id="helpTitle">Help</h1>
@@ -104,7 +100,9 @@
         <p>Loading…</p>
       </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+    <script src="/static/md-render.js?v=shell68"></script>
     <script>
       (function () {
         var params = new URLSearchParams(window.location.search);
@@ -120,7 +118,7 @@
           .then(function (data) {
             document.title = data.title + " · ACS demo setup";
             titleEl.textContent = data.title;
-            bodyEl.innerHTML = marked.parse(data.markdown || "");
+            bodyEl.innerHTML = ACS.md.render(data.markdown || "");
           })
           .catch(function (err) {
             titleEl.textContent = "Help unavailable";

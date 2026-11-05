@@ -65,8 +65,8 @@
       "statusComplexity": 3
     },
     {
-      "id": "splunk",
-      "label": "Splunk Operator + RHACS TA",
+      "id": "splunk-TA",
+      "label": "Splunk Operator + RHACS Technology Add-on",
       "dependsOn": [],
       "statusComplexity": 6
     },
