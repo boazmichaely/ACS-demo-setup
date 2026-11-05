@@ -1270,6 +1270,11 @@ function setupExpandAll() {
   });
 }
 
+const GITHUB_REPO = "boazmichaely/ACS-demo-setup";
+const UPDATE_CACHE_KEY = "acs-demo-setup:latest-release-cache";
+const UPDATE_DISMISS_KEY = "acs-demo-setup:dismissed-release";
+const UPDATE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
 function setupHelpMenu() {
   const toggle = document.getElementById("btnHelpMenu");
   const menu = document.getElementById("helpMenu");
@@ -1294,6 +1299,186 @@ function setupHelpMenu() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") setOpen(false);
   });
+}
+
+function normalizeSemver(raw) {
+  const s = String(raw || "")
+    .trim()
+    .replace(/^v/i, "");
+  const m = s.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+function semverGreater(a, b) {
+  const left = normalizeSemver(a);
+  const right = normalizeSemver(b);
+  if (!left || !right) return false;
+  for (let i = 0; i < 3; i++) {
+    if (left[i] > right[i]) return true;
+    if (left[i] < right[i]) return false;
+  }
+  return false;
+}
+
+function setHelpMenuVersion(version) {
+  const el = document.getElementById("helpMenuVersion");
+  if (!el) return;
+  const v = String(version || "").trim();
+  el.textContent = v ? `Version ${v}` : "Version unknown";
+}
+
+function hideUpdateBanner() {
+  const banner = document.getElementById("updateBanner");
+  if (banner) banner.hidden = true;
+}
+
+function showUpdateBanner({ tag, htmlUrl }) {
+  const banner = document.getElementById("updateBanner");
+  if (!banner) return;
+  const verEl = document.getElementById("updateBannerVersion");
+  const link = document.getElementById("updateBannerReleaseLink");
+  const label = String(tag || "").trim() || "newer";
+  if (verEl) verEl.textContent = label.startsWith("v") ? label : `v${label}`;
+  if (link) {
+    link.href =
+      htmlUrl ||
+      `https://github.com/${GITHUB_REPO}/releases`;
+  }
+  banner.hidden = false;
+}
+
+function readUpdateCache() {
+  try {
+    const raw = localStorage.getItem(UPDATE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed.fetchedAt || !parsed.tagName) return null;
+    if (Date.now() - Number(parsed.fetchedAt) > UPDATE_CACHE_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateCache(payload) {
+  try {
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function isReleaseDismissed(tagName) {
+  try {
+    return localStorage.getItem(UPDATE_DISMISS_KEY) === String(tagName || "");
+  } catch {
+    return false;
+  }
+}
+
+function dismissRelease(tagName) {
+  try {
+    localStorage.setItem(UPDATE_DISMISS_KEY, String(tagName || ""));
+  } catch {
+    /* ignore */
+  }
+  hideUpdateBanner();
+}
+
+function setupUpdateBannerDismiss() {
+  const btn = document.getElementById("updateBannerDismiss");
+  if (!btn || btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+  btn.addEventListener("click", () => {
+    const verEl = document.getElementById("updateBannerVersion");
+    const tag = (verEl?.textContent || "").trim();
+    dismissRelease(tag);
+  });
+}
+
+function wantsUpdatePreview() {
+  try {
+    return new URLSearchParams(window.location.search).get("updatePreview") === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchLatestGithubRelease() {
+  const cached = readUpdateCache();
+  if (cached) {
+    return {
+      tagName: cached.tagName,
+      htmlUrl: cached.htmlUrl || "",
+      fromCache: true,
+    };
+  }
+
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const resp = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+      {
+        headers: { Accept: "application/vnd.github+json" },
+        signal: ctrl.signal,
+      }
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const tagName = String(data?.tag_name || "").trim();
+    if (!tagName) return null;
+    const htmlUrl = String(data?.html_url || "").trim();
+    writeUpdateCache({
+      tagName,
+      htmlUrl,
+      fetchedAt: Date.now(),
+    });
+    return { tagName, htmlUrl, fromCache: false };
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function checkForUpdates(installedVersion) {
+  setupUpdateBannerDismiss();
+
+  if (wantsUpdatePreview()) {
+    showUpdateBanner({
+      tag: "v0.2.0",
+      htmlUrl: `https://github.com/${GITHUB_REPO}/releases`,
+    });
+    return;
+  }
+
+  const latest = await fetchLatestGithubRelease();
+  if (!latest?.tagName) return;
+  if (!semverGreater(latest.tagName, installedVersion)) return;
+  if (isReleaseDismissed(latest.tagName)) return;
+  showUpdateBanner({ tag: latest.tagName, htmlUrl: latest.htmlUrl });
+}
+
+async function loadInstalledVersionAndMaybeNudge() {
+  try {
+    const resp = await fetch("/api/version");
+    if (!resp.ok) {
+      setHelpMenuVersion("");
+      return;
+    }
+    const data = await resp.json();
+    const version = String(data?.version || "").trim();
+    setHelpMenuVersion(version || "");
+    if (version) {
+      // Fire-and-forget: do not block module status refresh.
+      void checkForUpdates(version);
+    }
+  } catch {
+    setHelpMenuVersion("");
+  }
 }
 
 function selectedModuleIds() {
@@ -2656,6 +2841,8 @@ async function init() {
     if (logEl) logEl.textContent = "";
     await markPageLoadInDiskLog();
     setupCredentialCopyButtons();
+    // Version + soft update nudge (non-blocking vs status refresh).
+    void loadInstalledVersionAndMaybeNudge();
     await loadRegistry();
     await loadCredentials();
     logLabEvent("page-load");

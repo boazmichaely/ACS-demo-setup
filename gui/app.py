@@ -25,11 +25,28 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GUI_DIR = Path(__file__).resolve().parent
 MODULES_JSON = REPO_ROOT / "config" / "modules.json"
 ACS_SETUP = REPO_ROOT / "scripts" / "acs-setup.sh"
+VERSION_FILE = REPO_ROOT / "VERSION"
+GITHUB_REPO = "boazmichaely/ACS-demo-setup"
 
 HOST = "127.0.0.1"
 PORT = 8765
 
-app = FastAPI(title="ACS Demo Setup", version="0.1.0")
+
+def read_app_version() -> str:
+    if not VERSION_FILE.is_file():
+        raise RuntimeError(f"missing VERSION file: {VERSION_FILE}")
+    ver = VERSION_FILE.read_text(encoding="utf-8").strip()
+    if not ver:
+        raise RuntimeError(f"VERSION file is empty: {VERSION_FILE}")
+    return ver
+
+
+try:
+    _APP_VERSION = read_app_version()
+except RuntimeError:
+    _APP_VERSION = "0.0.0"
+
+app = FastAPI(title="ACS Demo Setup", version=_APP_VERSION)
 
 
 class OpenshiftAccessIn(BaseModel):
@@ -109,6 +126,16 @@ def run_acs_setup(*args: str) -> subprocess.CompletedProcess[str]:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/version")
+def api_version() -> dict[str, str]:
+    """Installed app version from the repo VERSION file."""
+    try:
+        version = read_app_version()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"version": version, "repo": GITHUB_REPO}
 
 
 def _catalog_module_ids() -> set[str]:

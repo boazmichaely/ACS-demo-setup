@@ -844,6 +844,85 @@ a.demo-mod__slug-link:focus-visible {
   background: var(--pf-t--global--background--color--secondary--default);
 }
 
+.demo-help-menu__sep {
+  height: 1px;
+  margin: 0.35rem 0;
+  background: var(--pf-t--global--border--color--default);
+  list-style: none;
+  pointer-events: none;
+}
+
+.demo-help-menu__version {
+  padding: 0.35rem 0.75rem 0.5rem;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 1.3;
+  cursor: default;
+  user-select: text;
+  list-style: none;
+}
+
+.demo-update-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-left: 3px solid var(--pf-t--global--border--color--status--info--default, #2b9af3);
+  border-radius: var(--pf-t--global--border--radius--sm, 4px);
+  background: color-mix(
+    in srgb,
+    var(--pf-t--global--color--status--info--default, #2b9af3) 8%,
+    var(--pf-t--global--background--color--primary--default)
+  );
+}
+
+.demo-update-banner[hidden] {
+  display: none;
+}
+
+.demo-update-banner__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.demo-update-banner__title {
+  margin: 0 0 0.25rem;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.demo-update-banner__text {
+  margin: 0 0 0.35rem;
+  font-size: var(--pf-t--global--font--size--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.demo-update-banner__text code {
+  font-size: 0.92em;
+}
+
+.demo-update-banner__actions {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.demo-update-banner__dismiss {
+  flex: 0 0 auto;
+  min-width: 2rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.demo-update-banner__dismiss:hover {
+  opacity: 1;
+}
+
 .demo-mod__menu-wrap {
   position: relative;
   display: inline-block;

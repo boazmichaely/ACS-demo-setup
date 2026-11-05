@@ -15,6 +15,18 @@ cd ~/code/acs-demo-setup
 
 By default the UI is at http://127.0.0.1:8765. If that port is already in use, the script picks the next free port. Use the URL printed in the terminal.
 
+## Upgrade
+
+```bash
+cd ~/code/acs-demo-setup   # or your clone path
+git pull origin main
+./serve.sh
+```
+
+Versioned releases are published on
+[GitHub Releases](https://github.com/boazmichaely/ACS-demo-setup/releases).
+The Help (`?`) menu shows the installed version; when a newer release exists, the GUI shows a soft, dismissible reminder. Maintainers: see [RELEASING.md](RELEASING.md).
+
 ## Lab credentials
 
 Put secrets in `lab-credentials.json` at the repo root. That file is gitignored. You can edit it in the GUI (**Lab credentials** panel) or by hand. For the JSON shape, see [config/lab-credentials.example.json](config/lab-credentials.example.json).
