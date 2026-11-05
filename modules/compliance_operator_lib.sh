@@ -4,24 +4,37 @@ set -euo pipefail
 
 MODULE_ID="compliance-operator"
 
+# Lab constants (override only via flags on compliance-operator.sh, not env).
+CO_NAMESPACE="openshift-compliance"
+CO_SUBSCRIPTION_NAME="compliance-operator-sub"
+CO_CHANNEL="stable"
+CO_CSV_TIMEOUT_SECONDS=600
+CO_ROLLOUT_TIMEOUT_SECONDS=240
+CO_PATCH_NODE_SELECTOR=false
+CO_SECURED_CLUSTER=""
+# Orchestrator plane: "" | central | openshift (empty = both in one process).
+CO_PLANE=""
+# Lab secured-cluster ids for this invoke (OpenShift: 0-1; Central: 0-N).
+CO_SC_IDS=()
+
 co_namespace() {
-  printf '%s' "${COMPLIANCE_OPERATOR_NAMESPACE:-openshift-compliance}"
+  printf '%s' "$CO_NAMESPACE"
 }
 
 co_subscription_name() {
-  printf '%s' "${COMPLIANCE_SUBSCRIPTION_NAME:-compliance-operator-sub}"
+  printf '%s' "$CO_SUBSCRIPTION_NAME"
 }
 
 co_channel() {
-  printf '%s' "${COMPLIANCE_OPERATOR_CHANNEL:-stable}"
+  printf '%s' "$CO_CHANNEL"
 }
 
 co_csv_timeout() {
-  printf '%s' "${COMPLIANCE_CSV_TIMEOUT_SECONDS:-600}"
+  printf '%s' "$CO_CSV_TIMEOUT_SECONDS"
 }
 
 co_rollout_timeout() {
-  printf '%s' "${COMPLIANCE_ROLLOUT_TIMEOUT_SECONDS:-240}"
+  printf '%s' "$CO_ROLLOUT_TIMEOUT_SECONDS"
 }
 
 co_python() {
@@ -35,11 +48,58 @@ co_python() {
   fi
 }
 
-# Ensure oc talks to the **active lab** via a per-lab kubeconfig.
-# Source of truth: lab-credentials.json (tool). ~/.kube/config is ignored for modules.
-# Exports KUBECONFIG for subsequent oc calls in this shell.
-# On failure prints a message to stdout (callers use it in status lines).
-co_ensure_oc() {
+# List secured clusters for this invoke as id<TAB>name.
+# Preference: CO_SC_IDS → CO_SECURED_CLUSTER name filter → Target cluster only.
+co_list_sc_targets() {
+  local py
+  py="$(co_python)"
+  if [[ ${#CO_SC_IDS[@]} -gt 0 ]]; then
+    (
+      cd "${COMPLIANCE_MODULE_ROOT}" || exit 1
+      "$py" -m lib.openshift list-secured-clusters
+    ) | "$py" -c '
+import json, sys
+want = set(sys.argv[1:])
+rows = json.load(sys.stdin)
+for r in rows:
+    rid = (r.get("id") or "").strip()
+    if rid in want:
+        print("%s\t%s" % (rid, (r.get("name") or rid).strip()))
+' "${CO_SC_IDS[@]}"
+    return
+  fi
+  (
+    cd "${COMPLIANCE_MODULE_ROOT}" || exit 1
+    if [[ -n "$CO_SECURED_CLUSTER" ]]; then
+      "$py" -m lib.openshift list-secured-clusters --name "$CO_SECURED_CLUSTER"
+    else
+      # Target cluster for Setup only (not every lab SC).
+      "$py" - <<'PY'
+from lib.lab_doc import active_lab, preferred_secured_cluster
+from lib.central import load_lab_document
+import json
+lab = active_lab(load_lab_document())
+sc = preferred_secured_cluster(lab)
+print(json.dumps([{
+  "id": (sc.get("id") or "").strip(),
+  "name": (sc.get("name") or sc.get("id") or "").strip(),
+}]))
+PY
+    fi
+  ) | "$py" -c '
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    rid = (r.get("id") or "").strip()
+    if not rid:
+        continue
+    print("%s\t%s" % (rid, (r.get("name") or rid).strip()))
+'
+}
+
+# Login to one secured cluster; export KUBECONFIG. Args: sc_id.
+co_ensure_oc_sc() {
+  local sc_id="$1"
   local py kc err errf
   if ! command -v oc >/dev/null 2>&1; then
     printf 'oc not on PATH\n' >&2
@@ -49,17 +109,18 @@ co_ensure_oc() {
     printf 'COMPLIANCE_MODULE_ROOT unset\n' >&2
     return 1
   fi
+  if [[ -z "$sc_id" ]]; then
+    printf 'secured cluster id required\n' >&2
+    return 1
+  fi
   py="$(co_python)"
   errf="$(mktemp)"
-  # stdout: kubeconfig path only; stderr: diagnostics
   if ! kc="$(
     cd "${COMPLIANCE_MODULE_ROOT}" || exit 1
-    "$py" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    "$py" -m lib.openshift login --secured-cluster-id "$sc_id" --print-kubeconfig 2>"${errf}"
   )"; then
     err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
     rm -f "${errf}"
-    # stderr: callers must invoke co_ensure_oc in the current shell (not $()),
-    # so export KUBECONFIG sticks for later oc commands.
     printf '%s\n' "${err:-OpenShift access failed}" >&2
     return 1
   fi
@@ -70,6 +131,17 @@ co_ensure_oc() {
   fi
   export KUBECONFIG="${kc}"
   return 0
+}
+
+# Backward-compatible: first listed SC (or filtered). Prefer co_ensure_oc_sc in loops.
+co_ensure_oc() {
+  local sc_id sc_name
+  IFS=$'\t' read -r sc_id sc_name < <(co_list_sc_targets | head -n 1) || true
+  if [[ -z "$sc_id" ]]; then
+    printf 'no secured clusters listed for this lab\n' >&2
+    return 1
+  fi
+  co_ensure_oc_sc "$sc_id"
 }
 
 co_scan_helper() {
@@ -116,13 +188,15 @@ co_operator_status_line() {
 
 co_scan_status_line() {
   local helper py output parsed scan_st scan_msg
+  local -a args=(status --cli)
   helper="$(co_scan_helper)"
   py="$(co_python)"
   if [[ ! -f "$helper" ]]; then
     printf 'error\tmissing helper %s\n' "$helper"
     return 1
   fi
-  if ! output="$("$py" "$helper" status --cli 2>&1)"; then
+  [[ -n "$CO_SECURED_CLUSTER" ]] && args+=(--secured-cluster "$CO_SECURED_CLUSTER")
+  if ! output="$("$py" "$helper" "${args[@]}" 2>&1)"; then
     parsed="$(co_parse_scan_status "$output")"
     if [[ -n "$parsed" ]]; then
       printf '%s\n' "$parsed"
@@ -163,8 +237,52 @@ co_combine_status() {
   printf '%s\t%s\t%s\n' "$MODULE_ID" "$combined_st" "$combined_msg"
 }
 
+co_emit_access_error_section() {
+  local cluster_name="$1" body="$2" py
+  py="$(co_python)"
+  "$py" -c '
+import json, sys
+name, body = sys.argv[1], sys.argv[2]
+payload = {
+    "sections": [
+        {
+            "cluster": name,
+            "group": "Access",
+            "title": "OpenShift",
+            "summary": "failed",
+            "tag": "error",
+            "tagLabel": "error",
+            "body": body,
+            "bodyFormat": "prose",
+        }
+    ]
+}
+print("ACS_SECTIONS_JSON=" + json.dumps(payload, separators=(",", ":")))
+' "$cluster_name" "$body"
+}
+
+co_merge_sections_json_lines() {
+  local py
+  py="$(co_python)"
+  "$py" -c '
+import json, sys
+sections = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line.startswith("ACS_SECTIONS_JSON="):
+        continue
+    try:
+        payload = json.loads(line.split("=", 1)[1])
+    except Exception:
+        continue
+    sections.extend(payload.get("sections") or [])
+if sections:
+    print("ACS_SECTIONS_JSON=" + json.dumps({"sections": sections}, separators=(",", ":")))
+'
+}
+
 compliance_operator_emit_overview_sections() {
-  local overview py
+  local overview py sc_id sc_name line errf err merged
   overview="${COMPLIANCE_MODULE_ROOT}/scripts/compliance_co_overview.py"
   py="$(co_python)"
   if [[ ! -f "$overview" ]]; then
@@ -173,16 +291,69 @@ compliance_operator_emit_overview_sections() {
   if ! command -v oc >/dev/null 2>&1; then
     return 0
   fi
-  if ! co_ensure_oc >/dev/null; then
-    return 0
+
+  merged="$(mktemp)"
+  while IFS=$'\t' read -r sc_id sc_name; do
+    [[ -n "$sc_id" ]] || continue
+    errf="$(mktemp)"
+    if ! co_ensure_oc_sc "$sc_id" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      co_emit_access_error_section "${sc_name:-$sc_id}" "${err:-OpenShift access failed}" >>"$merged"
+      continue
+    fi
+    rm -f "${errf}"
+    line="$("$py" "$overview" --sections-json --cluster "${sc_name:-$sc_id}" 2>/dev/null || true)"
+    if [[ -n "$line" ]]; then
+      printf '%s\n' "$line" >>"$merged"
+    fi
+  done < <(co_list_sc_targets)
+
+  if [[ -s "$merged" ]]; then
+    co_merge_sections_json_lines <"$merged"
   fi
-  "$py" "$overview" --sections-json 2>/dev/null || true
+  rm -f "$merged"
+}
+
+# Worst OLM status across all target SCs: st<TAB>msg
+co_operator_status_all() {
+  local sc_id sc_name line st msg parts=() worst=ok
+  local errf err
+  while IFS=$'\t' read -r sc_id sc_name; do
+    [[ -n "$sc_id" ]] || continue
+    errf="$(mktemp)"
+    if ! co_ensure_oc_sc "$sc_id" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      worst=error
+      parts+=("${sc_name}: ${err:-OpenShift access failed}")
+      continue
+    fi
+    rm -f "${errf}"
+    line="$(co_operator_status_line)" || true
+    st="${line%%$'\t'*}"
+    msg="${line#*$'\t'}"
+    parts+=("${sc_name}: ${msg}")
+    if [[ "$st" == "error" ]]; then
+      worst=error
+    elif [[ "$st" == "needs-run" && "$worst" != "error" ]]; then
+      worst=needs-run
+    fi
+  done < <(co_list_sc_targets)
+
+  if [[ ${#parts[@]} -eq 0 ]]; then
+    printf 'error\tno secured clusters listed for this lab\n'
+    return 1
+  fi
+  local joined
+  joined="$(IFS='; '; printf '%s' "${parts[*]}")"
+  printf '%s\t%s\n' "$worst" "$joined"
 }
 
 compliance_operator_emit_status() {
   local op_line scan_line op_st
   compliance_operator_emit_overview_sections
-  if ! op_line="$(co_operator_status_line)"; then
+  if ! op_line="$(co_operator_status_all)"; then
     :
   fi
   op_st="${op_line%%$'\t'*}"
@@ -282,6 +453,17 @@ Planned changes (phase 1 — OLM install):
 EOF
 }
 
+co_apply_labeled_yaml() {
+  # Stdin YAML → apply-labeled for current CO_SC_IDS[0] / Target.
+  local py sc_id="${CO_SC_IDS[0]:-}"
+  py="$(co_python)"
+  if [[ -n "$sc_id" ]]; then
+    (cd "${COMPLIANCE_MODULE_ROOT}" && "$py" -m lib.openshift apply-labeled --secured-cluster-id "$sc_id" -f -)
+  else
+    (cd "${COMPLIANCE_MODULE_ROOT}" && "$py" -m lib.openshift apply-labeled -f -)
+  fi
+}
+
 compliance_operator_apply_manifests() {
   local ns sub channel
   ns="$(co_namespace)"
@@ -289,7 +471,7 @@ compliance_operator_apply_manifests() {
   channel="$(co_channel)"
 
   echo "Create namespace ${ns}"
-  oc apply -f - <<EOF
+  co_apply_labeled_yaml <<EOF
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -302,17 +484,16 @@ EOF
   # cluster defines a default project node selector. Compliance Operator pods
   # do not require a dedicated node pool; on restrictive clusters the operator
   # or profile-parser workloads can sit Pending even after CSV Succeeded.
-  # Default: do not touch namespace scheduling (respect cluster policy).
-  # ACS_COMPLIANCE_PATCH_NODE_SELECTOR=1: clear the annotation so CO workloads
-  # are not pinned by that inherited selector (broader scheduling in this NS).
-  if [[ "${ACS_COMPLIANCE_PATCH_NODE_SELECTOR:-}" == "1" ]]; then
+  # Default: leave scheduling alone. Pass --patch-node-selector to clear the
+  # annotation for broader scheduling in this namespace.
+  if [[ "$CO_PATCH_NODE_SELECTOR" == "true" ]]; then
     echo "Annotate namespace ${ns} (clear openshift.io/node-selector for broader scheduling)"
     oc annotate namespace "${ns}" openshift.io/node-selector="" --overwrite 2>/dev/null \
       || echo "  (annotate openshift.io/node-selector skipped)"
   fi
 
   echo "Apply OperatorGroup + Subscription ${sub} (channel ${channel})"
-  oc apply -f - <<EOF
+  co_apply_labeled_yaml <<EOF
 apiVersion: operators.coreos.com/v1
 kind: OperatorGroup
 metadata:
@@ -375,15 +556,34 @@ compliance_operator_wait_ready() {
   oc rollout status "deploy/${main_deploy}" -n "${ns}" --timeout="${rollout_timeout}s"
 }
 
+co_scan_common_args() {
+  # Emit argv tokens (one per line) for the Central scan helper.
+  local sid
+  if [[ -n "$CO_SECURED_CLUSTER" ]]; then
+    printf '%s\n' --secured-cluster
+    printf '%s\n' "$CO_SECURED_CLUSTER"
+  fi
+  for sid in "${CO_SC_IDS[@]+"${CO_SC_IDS[@]}"}"; do
+    if [[ -n "$sid" ]]; then
+      printf '%s\n' --secured-cluster-id
+      printf '%s\n' "$sid"
+    fi
+  done
+}
+
 compliance_operator_run_scan() {
   local dry_run="${1:-false}"
-  local helper py args=()
+  local helper py
+  local -a args=(run --cli)
+  local flag
   helper="$(co_scan_helper)"
   py="$(co_python)"
-  args=(run --cli)
   [[ "$dry_run" == "true" ]] && args+=(--dry-run)
+  while IFS= read -r flag; do
+    [[ -n "$flag" ]] && args+=("$flag")
+  done < <(co_scan_common_args)
 
-  echo "Configure compliance scan schedule in Central (phase 2)"
+  echo "Configure compliance scan schedule in Central"
   if [[ ! -f "$helper" ]]; then
     echo "missing helper: $helper" >&2
     return 1
@@ -393,30 +593,27 @@ compliance_operator_run_scan() {
   fi
 }
 
-compliance_operator_run() {
+compliance_operator_run_olm_one() {
+  # Current KUBECONFIG must already target one SC. dry_run true|false
   local dry_run="${1:-false}"
+  local sc_label="${2:-}"
   local rc=0
 
-  if ! command -v oc >/dev/null 2>&1; then
-    echo "oc not on PATH" >&2
-    compliance_operator_emit_status
-    return 1
-  fi
-  if ! co_ensure_oc; then
-    echo "OpenShift access failed" >&2
-    compliance_operator_emit_status
-    return 1
+  if [[ -n "$sc_label" ]]; then
+    echo "=== Compliance Operator OLM on secured cluster: ${sc_label} ==="
   fi
 
   if [[ "$dry_run" == "true" ]]; then
     compliance_operator_plan
-    compliance_operator_run_scan true || rc=1
-  elif co_csv_succeeded_name "$(co_namespace)" >/dev/null 2>&1 \
+    return 0
+  fi
+
+  if co_csv_succeeded_name "$(co_namespace)" >/dev/null 2>&1 \
     && [[ -n "$(co_main_deployment "$(co_namespace)" 2>/dev/null || true)" ]]; then
     echo "Compliance Operator already installed; verifying rollout"
     compliance_operator_wait_ready || rc=1
     if [[ "$rc" -eq 0 ]]; then
-      echo "No operator changes required."
+      echo "No operator changes required on ${sc_label:-this cluster}."
     fi
   else
     compliance_operator_apply_manifests || rc=1
@@ -424,16 +621,57 @@ compliance_operator_run() {
       compliance_operator_wait_ready || rc=1
     fi
     if [[ "$rc" -eq 0 ]]; then
-      echo "Compliance Operator installed in $(co_namespace)"
+      echo "Compliance Operator installed in $(co_namespace) on ${sc_label:-cluster}"
+    fi
+  fi
+  return "$rc"
+}
+
+compliance_operator_run() {
+  local dry_run="${1:-false}"
+  local rc=0 sc_id sc_name errf err any=false
+  local do_oc=true do_central=true
+
+  case "${CO_PLANE}" in
+    openshift) do_central=false ;;
+    central) do_oc=false ;;
+  esac
+
+  if [[ "$do_oc" == "true" ]]; then
+    if ! command -v oc >/dev/null 2>&1; then
+      echo "oc not on PATH" >&2
+      compliance_operator_emit_status
+      return 1
+    fi
+
+    while IFS=$'\t' read -r sc_id sc_name; do
+      [[ -n "$sc_id" ]] || continue
+      any=true
+      CO_SC_IDS=("$sc_id")
+      errf="$(mktemp)"
+      if ! co_ensure_oc_sc "$sc_id" 2>"${errf}"; then
+        err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+        rm -f "${errf}"
+        echo "Skip OLM on ${sc_name}: ${err:-OpenShift access failed}" >&2
+        rc=1
+        continue
+      fi
+      rm -f "${errf}"
+      compliance_operator_run_olm_one "$dry_run" "$sc_name" || rc=1
+    done < <(co_list_sc_targets)
+
+    if [[ "$any" != "true" ]]; then
+      echo "no secured clusters listed for this lab" >&2
+      compliance_operator_emit_status
+      return 1
     fi
   fi
 
-  if [[ "$rc" -eq 0 ]]; then
+  if [[ "$do_central" == "true" ]]; then
     compliance_operator_run_scan "$dry_run" || rc=1
   fi
 
   local status_out module_row state
-  # emit_status also prints ACS_SECTIONS_JSON=... for the GUI; only the module row is authoritative.
   status_out="$(compliance_operator_emit_status || true)"
   printf '%s\n' "$status_out"
   module_row="$(printf '%s\n' "$status_out" | awk -F'\t' -v id="$MODULE_ID" '$1 == id { print; exit }')"
@@ -444,6 +682,15 @@ compliance_operator_run() {
     return
   fi
 
+  # Plane-scoped runs: OLM-only may be needs-run for schedule; treat operator ok as success.
+  if [[ "$do_central" != "true" ]]; then
+    [[ "$rc" -eq 0 ]]
+    return
+  fi
+  if [[ "$do_oc" != "true" ]]; then
+    [[ "$rc" -eq 0 ]]
+    return
+  fi
   [[ "$state" == "ok" ]] && [[ "$rc" -eq 0 ]]
 }
 
@@ -463,10 +710,14 @@ EOF
 
 compliance_operator_uninstall_scan() {
   local dry_run="${1:-false}"
-  local helper py args=(uninstall --cli)
+  local helper py flag
+  local -a args=(uninstall --cli)
   helper="$(co_scan_helper)"
   py="$(co_python)"
   [[ "$dry_run" == "true" ]] && args+=(--dry-run)
+  while IFS= read -r flag; do
+    [[ -n "$flag" ]] && args+=("$flag")
+  done < <(co_scan_common_args)
 
   echo "Remove compliance scan schedule from Central (if present)"
   if [[ ! -f "$helper" ]]; then
@@ -541,29 +792,63 @@ compliance_operator_uninstall_olm() {
 
 compliance_operator_uninstall() {
   local dry_run="${1:-false}"
-  local rc=0
+  local rc=0 sc_id sc_name errf err any=false
+  local do_oc=true do_central=true
 
-  if ! command -v oc >/dev/null 2>&1; then
-    echo "oc not on PATH" >&2
-    return 1
+  case "${CO_PLANE}" in
+    openshift) do_central=false ;;
+    central) do_oc=false ;;
+  esac
+
+  # Orchestrator order for both: OpenShift N then Central. Single-process
+  # (no --plane): OpenShift then Central as well.
+  if [[ "$do_oc" == "true" ]]; then
+    if ! command -v oc >/dev/null 2>&1; then
+      echo "oc not on PATH" >&2
+      return 1
+    fi
+
+    if [[ "$dry_run" == "true" ]]; then
+      while IFS=$'\t' read -r sc_id sc_name; do
+        [[ -n "$sc_id" ]] || continue
+        any=true
+        echo "=== dry-run uninstall OLM on ${sc_name} ==="
+        if co_ensure_oc_sc "$sc_id" 2>/dev/null; then
+          compliance_operator_uninstall_plan
+        else
+          echo "  (would skip ${sc_name}: OpenShift access unavailable)"
+        fi
+      done < <(co_list_sc_targets)
+    else
+      while IFS=$'\t' read -r sc_id sc_name; do
+        [[ -n "$sc_id" ]] || continue
+        any=true
+        errf="$(mktemp)"
+        if ! co_ensure_oc_sc "$sc_id" 2>"${errf}"; then
+          err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+          rm -f "${errf}"
+          echo "Skip OLM uninstall on ${sc_name}: ${err:-OpenShift access failed}" >&2
+          rc=1
+          continue
+        fi
+        rm -f "${errf}"
+        echo "=== Uninstall Compliance Operator OLM on ${sc_name} ==="
+        compliance_operator_uninstall_olm false || rc=1
+      done < <(co_list_sc_targets)
+    fi
+
+    if [[ "$any" != "true" ]]; then
+      echo "no secured clusters listed for this lab" >&2
+      return 1
+    fi
   fi
-  if ! co_ensure_oc; then
-    echo "OpenShift access failed" >&2
-    return 1
+
+  if [[ "$do_central" == "true" ]]; then
+    compliance_operator_uninstall_scan "$dry_run" || rc=1
   fi
 
-  if [[ "$dry_run" == "true" ]]; then
-    compliance_operator_uninstall_plan
-    compliance_operator_uninstall_scan true || rc=1
-    return "$rc"
-  fi
-
-  # Central first so we do not leave a schedule pointing at a removed operator.
-  compliance_operator_uninstall_scan false || rc=1
-  compliance_operator_uninstall_olm false || rc=1
-
-  if [[ "$rc" -eq 0 ]]; then
-    echo "Compliance Operator module uninstall finished."
+  if [[ "$rc" -eq 0 && "$dry_run" != "true" ]]; then
+    echo "Compliance Operator module uninstall finished (plane=${CO_PLANE:-both})."
   fi
   return "$rc"
 }

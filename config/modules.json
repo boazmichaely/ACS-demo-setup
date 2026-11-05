@@ -16,7 +16,7 @@
     },
     {
       "id": "compliance-operator",
-      "label": "Installs Compliance Operator on ALL clusters + scan schedule",
+      "label": "Compliance Operator (OLM) + Central CIS scan schedule",
       "dependsOn": [],
       "statusComplexity": 7,
       "impactPlanes": ["central", "openshift"]

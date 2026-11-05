@@ -260,7 +260,7 @@ Use shared helpers in [`lib/openshift.py`](https://github.com/boazmichaely/ACS-d
 
 Each single invocation (one plane; one SC on OpenShift) must be safe to re-run. Install on cluster A must not require uninstalling B. Modules must **not** loop `securedClusters` themselves; the orchestrator owns multi-select.
 
-**Transitional note:** until the compliance-operator migration lands, that module still fans out OLM to every lab secured cluster internally. New modules must not copy that pattern.
+Reference `both` module: [`compliance-operator`](modules/compliance-operator.sh) (orchestrator fans out; module stays single-SC per OpenShift invoke).
 
 ## Credentials and auth
 
@@ -274,8 +274,6 @@ There are two different “doors”:
 | **OpenShift** (`oc`) | [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) | Cluster objects on a secured cluster (or Central OpenShift when the lab has no SCs). Shell can call `python -m lib.openshift`, then use `oc`. Pass `--secured-cluster-id` when the orchestrator targets a specific SC. |
 
 OpenShift modules do **not** use your interactive `~/.kube/config`. Instead, [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) logs in with the lab’s OpenShift admin fields and writes kubeconfigs under `.cache/`. **Target cluster for Setup** soft-defaults which SC is pre-selected for OpenShift work. If the lab has no secured clusters, helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
-
-**Transitional:** [`compliance-operator`](modules/compliance-operator.sh) still installs OLM on **every** lab secured cluster until it is migrated to orchestrator fan-out. Other modules use the selected OpenShift target (Target / `--secured-cluster-id`).
 
 Env fallbacks (`ROX_API_TOKEN`, `ACS_CENTRAL_ENDPOINT`, and friends) only fill empty file fields. Prefer the credentials file.
 
