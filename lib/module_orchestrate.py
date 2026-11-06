@@ -116,15 +116,18 @@ def plan_module_invocations(
     action: str,
     sc_ids: list[str] | None = None,
     *,
+    include_central: bool | None = None,
     root: Path | None = None,
 ) -> list[ModuleInvocation]:
     """Return ordered invocations for run/uninstall/status.
 
-    Empty ``sc_ids`` → one bare invocation (no plane flags) so callers can
-    preserve legacy single-process behavior.
+    Empty ``sc_ids`` and ``include_central`` is None → one bare invocation
+    (legacy: no new flags).
 
-    Non-empty ``sc_ids`` → fan out by ``impactPlanes``. Default order is all
-    OpenShift invokes, then Central once (``planeOrder`` may reverse that).
+    ``include_central`` True with empty ``sc_ids`` → Central plane only.
+    Non-empty ``sc_ids`` → OpenShift once per id; Central once if
+    ``include_central`` is not False and the catalog lists central.
+    Default order: all OpenShift, then Central (``planeOrder`` may reverse).
     """
     if isinstance(module_row_or_id, str):
         row = module_row(module_row_or_id, root)
@@ -140,12 +143,37 @@ def plan_module_invocations(
             seen.add(sid)
             uniq.append(sid)
 
-    if not uniq:
+    planes = impact_planes(row)
+    want_central = False
+    if include_central is True:
+        want_central = "central" in planes or not planes
+    elif include_central is False:
+        want_central = False
+    else:
+        # Unspecified: Central when catalog has it and we are fanning out.
+        want_central = "central" in planes and bool(uniq)
+
+    want_openshift = bool(uniq) and ("openshift" in planes or not planes)
+
+    if not uniq and include_central is None:
         return [ModuleInvocation(plane=None, sc_ids=(), env={}, argv_extra=())]
 
-    planes = impact_planes(row)
+    if not want_central and not want_openshift:
+        raise RuntimeError(
+            "nothing to run: select Central and/or at least one secured cluster"
+        )
+
     if not planes:
         # Catalog missing planes: pass ids through on a single invoke without --plane
+        if not uniq:
+            return [
+                ModuleInvocation(
+                    plane="central" if want_central else None,
+                    sc_ids=(),
+                    env={"ACS_DEMO_PLANE": "central"} if want_central else {},
+                    argv_extra=("--plane", "central") if want_central else (),
+                )
+            ]
         argv: list[str] = []
         for sid in uniq:
             argv.extend(["--secured-cluster-id", sid])
@@ -164,12 +192,10 @@ def plan_module_invocations(
 
     _ = action  # reserved if install/uninstall ever diverge on order
     openshift_steps = (
-        [_openshift_invocation(sid, root) for sid in uniq]
-        if "openshift" in planes
-        else []
+        [_openshift_invocation(sid, root) for sid in uniq] if want_openshift else []
     )
     central_steps = (
-        [_central_invocation(uniq, root)] if "central" in planes else []
+        [_central_invocation(uniq, root)] if want_central else []
     )
     if plane_order(row) == "central-then-openshift":
         return central_steps + openshift_steps
@@ -211,9 +237,32 @@ def main(argv: list[str] | None = None) -> int:
         dest="sc_ids",
         help="Repeatable lab secured-cluster id",
     )
+    g = parser.add_mutually_exclusive_group()
+    g.add_argument(
+        "--include-central",
+        action="store_true",
+        help="Run Central plane (alone or after OpenShift)",
+    )
+    g.add_argument(
+        "--skip-central",
+        action="store_true",
+        help="Do not run Central plane even if the catalog lists it",
+    )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+    include_central: bool | None
+    if args.include_central:
+        include_central = True
+    elif args.skip_central:
+        include_central = False
+    else:
+        include_central = None
     try:
-        plan = plan_module_invocations(args.module, args.action, list(args.sc_ids))
+        plan = plan_module_invocations(
+            args.module,
+            args.action,
+            list(args.sc_ids),
+            include_central=include_central,
+        )
     except (KeyError, RuntimeError) as exc:
         print(exc, file=sys.stderr)
         return 1
