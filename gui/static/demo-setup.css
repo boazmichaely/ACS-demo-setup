@@ -1877,7 +1877,7 @@ body.demo-log-resizing iframe {
 }
 .demo-sc-picker__row--debug,
 .demo-sc-picker__row--disabled {
-  opacity: 0.55;
+  opacity: 0.28;
 }
 .demo-sc-picker__row--disabled {
   cursor: not-allowed;
