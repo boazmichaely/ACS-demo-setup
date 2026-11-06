@@ -14,6 +14,8 @@ CONTAINER_IMAGE="quay.io/rhacs-eng/vm-images:rhel9-dnf-primed-latest"
 CENTRAL_NAME="stackrox-central-services"
 SECURED_NAME="stackrox-secured-cluster-services"
 STACKROX_NS="stackrox"
+# Central CR namespace may differ (e.g. rhacs-operator). Discovered on Central OCP.
+CENTRAL_NS=""
 POLL_INTERVAL="1m"
 RESCAN_INTERVAL="30m"
 
@@ -36,38 +38,68 @@ fi
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# virt-vm-demo
 
-Purpose:
-  Prepare an ACS guest-vulnerability demo on OpenShift Virtualization:
-    1) Enable ROX_VIRTUAL_MACHINES (Central + SecuredCluster) and a short
-       scraper poll interval for demos
-    2) Install OpenShift Virtualization with VSOCK + KVM_EMULATION
-       (works on infra / nested clusters without bare metal)
-    3) Deploy 2 RHEL 9 VMs (${VM_NAMES[*]}) in project ${NS} using the
-       dnf-primed eng guest image (Scanner V4 matching without a live DNF txn)
-    4) Install roxagent (from Sensor image) in each guest and start it
-    5) Wait until Central shows CVE findings on both VMs
+Prepare an ACS guest-vulnerability demo on OpenShift Virtualization:
 
-  Talk track: modules/virt-vm-demo.md
+1. Enable \`ROX_VIRTUAL_MACHINES\` (Central CR on Central's OpenShift +
+   SecuredCluster on the soft-default SC) and a short scraper poll interval for demos
+2. Install OpenShift Virtualization with VSOCK + KVM_EMULATION
+   (works on infra / nested clusters without bare metal)
+3. Deploy 2 RHEL 9 VMs (\`${VM_NAMES[*]}\`) in project \`${NS}\` using the
+   dnf-primed eng guest image (Scanner V4 matching without a live DNF txn)
+4. Install \`roxagent\` (from Sensor image) in each guest and start it
+5. Wait until Central shows CVE findings on both VMs
 
-Depends on:
-  ACS Central + Secured Cluster already installed
-  oc on PATH; virtctl (auto-downloaded to .cache/bin if missing)
-  Cluster pull access to ${CONTAINER_IMAGE} (via openshift-config/pull-secret)
+Talk track: \`modules/virt-vm-demo.md\`
 
-Side effects:
-  --run mutates Central/SecuredCluster CRs, may install CNV, creates
-    ${NS} and VMs, installs guest agent. Idempotent where practical.
-  --uninstall deletes project ${NS}. Leaves CNV and ACS flags in place.
+Catalog: \`impactPlanes: ["central","openshift"]\`.
 
+## Usage
+
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+\`\`\`
+
+## Flags
+
+- \`--plane central|openshift\` - orchestrator split (omit = both in one process)
+- \`--secured-cluster-id ID\` - OpenShift: at most one (CNV/VMs/SC CR). Soft-default when omitted.
+
+## Status Info
+
+- OpenShift Virtualization (CNV) install state
+- \`ROX_VIRTUAL_MACHINES\` on Central CR (Central OCP) + SecuredCluster (SC)
+- Demo VMs in \`${NS}\` and Central Virtual Machine inventory (CVE findings)
+- Link to the talk track
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` OpenShift: SecuredCluster flags, CNV, \`${NS}\` VMs + agent
+- \`--run\` Central: Central CR flag on Central OCP; wait for CVE findings
+- \`--uninstall\` deletes project \`${NS}\` (OpenShift plane); leaves CNV and ACS flags
 EOF
 }
 
+# Orchestrator: --plane central|openshift; OpenShift plane ≤1 SC id.
+VIRT_PLANE=""
+VIRT_SC_IDS=()
+VIRT_SC_ID=""
+
+want_openshift() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "openshift" ]]; }
+want_central() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "central" ]]; }
+
+# Soft-default / selected SC (CNV, VMs, SecuredCluster CR).
+# Pass an explicit id (e.g. _central) to override VIRT_SC_ID.
 ensure_oc() {
+  local sc_id="${1:-${VIRT_SC_ID:-}}"
   local kc errf
   if ! command -v oc >/dev/null 2>&1; then
     printf 'oc not on PATH\n' >&2
@@ -76,7 +108,11 @@ ensure_oc() {
   errf="$(mktemp)"
   if ! kc="$(
     cd "${ROOT}" || exit 1
-    "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    if [[ -n "$sc_id" ]]; then
+      "$PYTHON" -m lib.openshift login --secured-cluster-id "$sc_id" --print-kubeconfig 2>"${errf}"
+    else
+      "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    fi
   )"; then
     cat "${errf}" >&2
     rm -f "${errf}"
@@ -84,6 +120,24 @@ ensure_oc() {
   fi
   rm -f "${errf}"
   export KUBECONFIG="$kc"
+}
+
+# Central CR lives on Central's OpenShift, not on a remote secured cluster.
+ensure_oc_central() {
+  ensure_oc "_central"
+}
+
+# After ensure_oc_central: set CENTRAL_NS / CENTRAL_NAME from the live Central CR.
+resolve_central_cr() {
+  local ns name
+  ns="$(oc get centrals.platform.stackrox.io -A -o jsonpath='{.items[0].metadata.namespace}' 2>/dev/null || true)"
+  name="$(oc get centrals.platform.stackrox.io -A -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -z "$ns" || -z "$name" ]]; then
+    printf '%s: no Central CR found on Central OpenShift (need operator-installed Central)\n' "$MODULE_ID" >&2
+    return 1
+  fi
+  CENTRAL_NS="$ns"
+  CENTRAL_NAME="$name"
 }
 
 ensure_virtctl() {
@@ -143,24 +197,40 @@ vm_names() {
 # --- ACS feature flags / scraper -------------------------------------------------
 
 acs_flags_applied() {
-  local central_env secured_env poll
-  central_env="$(oc -n "${STACKROX_NS}" get central "${CENTRAL_NAME}" -o jsonpath='{.spec.customize.envVars[?(@.name=="ROX_VIRTUAL_MACHINES")].value}' 2>/dev/null || true)"
-  secured_env="$(oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.customize.envVars[?(@.name=="ROX_VIRTUAL_MACHINES")].value}' 2>/dev/null || true)"
-  poll="$(oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.virtualMachines.scraper.pollInterval}' 2>/dev/null || true)"
-  [[ "$central_env" == "true" && "$secured_env" == "true" && -n "$poll" ]]
+  local central_env="" secured_env="" poll=""
+  if want_central; then
+    ensure_oc_central || return 1
+    resolve_central_cr || return 1
+    central_env="$(oc -n "${CENTRAL_NS}" get central "${CENTRAL_NAME}" -o jsonpath='{.spec.customize.envVars[?(@.name=="ROX_VIRTUAL_MACHINES")].value}' 2>/dev/null || true)"
+    [[ "$central_env" == "true" ]] || return 1
+  fi
+  if want_openshift; then
+    ensure_oc || return 1
+    secured_env="$(oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.customize.envVars[?(@.name=="ROX_VIRTUAL_MACHINES")].value}' 2>/dev/null || true)"
+    poll="$(oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.virtualMachines.scraper.pollInterval}' 2>/dev/null || true)"
+    [[ "$secured_env" == "true" && -n "$poll" ]] || return 1
+  fi
+  return 0
 }
 
 apply_acs_flags() {
   local dry="$1"
   if [[ "$dry" == "true" ]]; then
-    echo "Would patch Central/SecuredCluster: ROX_VIRTUAL_MACHINES=true, scraper.pollInterval=${POLL_INTERVAL}"
+    echo "Would patch ACS flags (plane=${VIRT_PLANE:-both}): ROX_VIRTUAL_MACHINES / scraper ${POLL_INTERVAL}"
     return 0
   fi
-  oc -n "${STACKROX_NS}" patch central "${CENTRAL_NAME}" --type merge -p \
-    "{\"spec\":{\"customize\":{\"envVars\":[{\"name\":\"ROX_VIRTUAL_MACHINES\",\"value\":\"true\"}]}}}"
-
-  oc -n "${STACKROX_NS}" patch securedcluster "${SECURED_NAME}" --type merge -p "$(
-    cat <<EOF
+  if want_central; then
+    ensure_oc_central || return 1
+    resolve_central_cr || return 1
+    echo "${MODULE_ID}: patching Central ${CENTRAL_NS}/${CENTRAL_NAME} on Central OpenShift"
+    oc -n "${CENTRAL_NS}" patch central "${CENTRAL_NAME}" --type merge -p \
+      "{\"spec\":{\"customize\":{\"envVars\":[{\"name\":\"ROX_VIRTUAL_MACHINES\",\"value\":\"true\"}]}}}"
+  fi
+  if want_openshift; then
+    ensure_oc || return 1
+    echo "${MODULE_ID}: patching SecuredCluster ${STACKROX_NS}/${SECURED_NAME} on SC ${VIRT_SC_ID:-soft-default}"
+    oc -n "${STACKROX_NS}" patch securedcluster "${SECURED_NAME}" --type merge -p "$(
+      cat <<EOF
 {
   "spec": {
     "customize": {
@@ -177,13 +247,13 @@ apply_acs_flags() {
   }
 }
 EOF
-  )"
-  # Collector must stay on the pod network: hostNetwork makes traffic look like
-  # the node IP, and the stock Sensor NetworkPolicy then drops Collector→Sensor.
-  # Clear any leftover overlay from older module runs.
-  if oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.overlays}' 2>/dev/null | grep -q .; then
-    echo "${MODULE_ID}: removing SecuredCluster collector hostNetwork overlay (breaks Sensor NetworkPolicy)"
-    oc -n "${STACKROX_NS}" patch securedcluster "${SECURED_NAME}" --type json -p '[{"op":"remove","path":"/spec/overlays"}]'
+    )"
+    # Collector must stay on the pod network: hostNetwork makes traffic look like
+    # the node IP, and the stock Sensor NetworkPolicy then drops Collector→Sensor.
+    if oc -n "${STACKROX_NS}" get securedcluster "${SECURED_NAME}" -o jsonpath='{.spec.overlays}' 2>/dev/null | grep -q .; then
+      echo "${MODULE_ID}: removing SecuredCluster collector hostNetwork overlay (breaks Sensor NetworkPolicy)"
+      oc -n "${STACKROX_NS}" patch securedcluster "${SECURED_NAME}" --type json -p '[{"op":"remove","path":"/spec/overlays"}]'
+    fi
   fi
 }
 
@@ -645,7 +715,7 @@ emit_status_sections() {
             title: "Feature flags / scraper",
             summary: $flags,
             tag: (if $flags == "applied" then "ok" else "error" end),
-            body: ("ROX_VIRTUAL_MACHINES on Central+SecuredCluster; scraper poll short for demos. State: " + $flags),
+            body: ("ROX_VIRTUAL_MACHINES on Central CR (Central OCP) + SecuredCluster (SC); scraper poll short for demos. State: " + $flags),
             bodyFormat: "prose"
           },
           {
@@ -676,93 +746,145 @@ emit_status_sections() {
 }
 
 do_status() {
-  ensure_oc || {
-    printf '%s\terror\tcannot login to OpenShift via lab credentials\n' "$MODULE_ID"
-    return 0
-  }
+  if want_openshift; then
+    ensure_oc || {
+      printf '%s\terror\tcannot login to OpenShift via lab credentials\n' "$MODULE_ID"
+      return 0
+    }
+  fi
   emit_status_sections
   local cnv_ok=false flags_ok=false vms_ok=false
-  cnv_healthy && cnv_ok=true
-  acs_flags_applied && flags_ok=true
-  local ready scanned findings count
-  ready="$(count_running_vmis || echo 0)"
-  [[ "$ready" -ge "$VM_EXPECTED" ]] && vms_ok=true
-  count="$(central_vm_count)"
-  scanned="$(central_scanned_count)"
-  findings="$(central_findings_count)"
-
-  if $cnv_ok && $flags_ok && $vms_ok && [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
-    printf '%s\tok\t%s/%s VMs Running; CVE findings on %s/%s VMs in Central\n' \
-      "$MODULE_ID" "$ready" "$VM_EXPECTED" "$findings" "$VM_EXPECTED"
-  elif $cnv_ok && $flags_ok && $vms_ok && [[ "${findings}" -ge 1 ]]; then
-    printf '%s\tneeds-run\tCVE findings on %s/%s VMs (need both)\n' \
-      "$MODULE_ID" "$findings" "$VM_EXPECTED"
-  elif $cnv_ok && $flags_ok && $vms_ok && [[ "${scanned}" -ge 1 ]]; then
-    printf '%s\tneeds-run\tVMs inventoried but no CVE results yet (packages NOT_SCANNED / OS_UNKNOWN)\n' \
-      "$MODULE_ID"
-  elif $cnv_ok && $flags_ok && $vms_ok; then
-    printf '%s\tneeds-run\tVMs up but Central package scan still pending (emulation is slow)\n' \
-      "$MODULE_ID"
-  elif $cnv_ok && $flags_ok; then
-    printf '%s\tneeds-run\tCNV+flags ok but only %s/%s VMs Running\n' \
-      "$MODULE_ID" "$ready" "$VM_EXPECTED"
+  if want_openshift; then
+    cnv_healthy && cnv_ok=true
   else
-    printf '%s\tneeds-run\tCNV=%s flags=%s VMs=%s/%s\n' \
-      "$MODULE_ID" "$cnv_ok" "$flags_ok" "$ready" "$VM_EXPECTED"
+    cnv_ok=true
+  fi
+  acs_flags_applied && flags_ok=true
+  local ready=0 scanned=0 findings=0 count=0
+  if want_openshift; then
+    ready="$(count_running_vmis || echo 0)"
+    [[ "$ready" -ge "$VM_EXPECTED" ]] && vms_ok=true
+  else
+    vms_ok=true
+  fi
+  if want_central; then
+    count="$(central_vm_count)"
+    scanned="$(central_scanned_count)"
+    findings="$(central_findings_count)"
+  fi
+
+  if want_openshift && want_central; then
+    if $cnv_ok && $flags_ok && $vms_ok && [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
+      printf '%s\tok\t%s/%s VMs Running; CVE findings on %s/%s VMs in Central\n' \
+        "$MODULE_ID" "$ready" "$VM_EXPECTED" "$findings" "$VM_EXPECTED"
+    elif $cnv_ok && $flags_ok && $vms_ok && [[ "${findings}" -ge 1 ]]; then
+      printf '%s\tneeds-run\tCVE findings on %s/%s VMs (need both)\n' \
+        "$MODULE_ID" "$findings" "$VM_EXPECTED"
+    elif $cnv_ok && $flags_ok && $vms_ok && [[ "${scanned}" -ge 1 ]]; then
+      printf '%s\tneeds-run\tVMs inventoried but no CVE results yet (packages NOT_SCANNED / OS_UNKNOWN)\n' \
+        "$MODULE_ID"
+    elif $cnv_ok && $flags_ok && $vms_ok; then
+      printf '%s\tneeds-run\tVMs up but Central package scan still pending (emulation is slow)\n' \
+        "$MODULE_ID"
+    elif $cnv_ok && $flags_ok; then
+      printf '%s\tneeds-run\tCNV+flags ok but only %s/%s VMs Running\n' \
+        "$MODULE_ID" "$ready" "$VM_EXPECTED"
+    else
+      printf '%s\tneeds-run\tCNV=%s flags=%s VMs=%s/%s\n' \
+        "$MODULE_ID" "$cnv_ok" "$flags_ok" "$ready" "$VM_EXPECTED"
+    fi
+  elif want_openshift; then
+    if $cnv_ok && $flags_ok && $vms_ok; then
+      printf '%s\tok\t%s/%s VMs Running (openshift plane)\n' "$MODULE_ID" "$ready" "$VM_EXPECTED"
+    else
+      printf '%s\tneeds-run\tCNV=%s flags=%s VMs=%s/%s\n' \
+        "$MODULE_ID" "$cnv_ok" "$flags_ok" "$ready" "$VM_EXPECTED"
+    fi
+  else
+    if $flags_ok && [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
+      printf '%s\tok\tCVE findings on %s/%s VMs (central plane)\n' \
+        "$MODULE_ID" "$findings" "$VM_EXPECTED"
+    elif $flags_ok; then
+      printf '%s\tneeds-run\tCentral flag ok; findings %s/%s\n' \
+        "$MODULE_ID" "$findings" "$VM_EXPECTED"
+    else
+      printf '%s\tneeds-run\tCentral CR flag missing\n' "$MODULE_ID"
+    fi
   fi
 }
 
 demo_ready() {
   local ready findings count
-  cnv_healthy || return 1
+  if want_openshift; then
+    cnv_healthy || return 1
+  fi
   acs_flags_applied || return 1
-  ready="$(count_running_vmis || echo 0)"
-  [[ "$ready" -ge "$VM_EXPECTED" ]] || return 1
-  count="$(central_vm_count)"
-  findings="$(central_findings_count)"
-  [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]
+  if want_openshift; then
+    ready="$(count_running_vmis || echo 0)"
+    [[ "$ready" -ge "$VM_EXPECTED" ]] || return 1
+  fi
+  if want_central; then
+    count="$(central_vm_count)"
+    findings="$(central_findings_count)"
+    [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]] || return 1
+  fi
+  return 0
 }
 
 do_dry_run() {
-  ensure_oc
-  cat <<EOF
-${MODULE_ID}: dry-run
-  - Patch Central/SecuredCluster ROX_VIRTUAL_MACHINES + scraper ${POLL_INTERVAL}
-  - Install/ensure OpenShift Virtualization (${CNV_NS}) with VSOCK + KVM_EMULATION
-  - Create ${NS} with VMs: ${VM_NAMES[*]} (image ${CONTAINER_IMAGE})
-  - Copy roxagent from Sensor image into each guest and start it (nohup serve, rescan ${RESCAN_INTERVAL})
-  - Wait for Central CVE findings on both VMs
-EOF
+  echo "${MODULE_ID}: dry-run (plane=${VIRT_PLANE:-both})"
+  if want_central; then
+    echo "  - Patch Central CR on Central OpenShift (ROX_VIRTUAL_MACHINES)"
+    echo "  - Wait for Central CVE findings on both VMs"
+  fi
+  if want_openshift; then
+    echo "  - Patch SecuredCluster on ${VIRT_SC_ID:-soft-default SC} (ROX_VIRTUAL_MACHINES + scraper ${POLL_INTERVAL})"
+    echo "  - Install/ensure OpenShift Virtualization (${CNV_NS}) with VSOCK + KVM_EMULATION"
+    echo "  - Create ${NS} with VMs: ${VM_NAMES[*]} (image ${CONTAINER_IMAGE})"
+    echo "  - Copy roxagent from Sensor into each guest (rescan ${RESCAN_INTERVAL})"
+  fi
 }
 
 do_run() {
-  ensure_oc
   ensure_ssh_key
   apply_acs_flags false
-  install_cnv false
-  deploy_vms false
-  wait_vms_running false
-  install_agents false
-  wait_central_vms false
+  if want_openshift; then
+    ensure_oc
+    install_cnv false
+    deploy_vms false
+    wait_vms_running false
+    install_agents false
+  fi
+  if want_central; then
+    wait_central_vms false
+  fi
   echo "${MODULE_ID}: done. Talk track: ${ROOT}/modules/virt-vm-demo.md"
   do_status || true
   if ! demo_ready; then
-    echo "${MODULE_ID}: not demo-ready (need ${VM_EXPECTED} Running VMIs with CVE findings)" >&2
+    echo "${MODULE_ID}: not demo-ready for plane=${VIRT_PLANE:-both}" >&2
     return 1
   fi
 }
 
 do_uninstall() {
+  if ! want_openshift; then
+    echo "${MODULE_ID}: central plane uninstall keeps CNV/VMs/flags (no-op)"
+    printf '%s\tok\tnothing to uninstall on central plane\n' "$MODULE_ID"
+    return 0
+  fi
   ensure_oc
   echo "${MODULE_ID}: deleting project ${NS} (CNV and ACS flags retained)"
   # --wait=true: do not return until the namespace is fully gone. A follow-on
   # --run while it is still Terminating can apply into a dying project and lose the VMs.
-  # Bound the wait so a stuck finalizer fails clearly instead of hanging forever.
   oc delete project "${NS}" --ignore-not-found --wait=true --timeout=15m
 }
 
 do_uninstall_dry_run() {
-  echo "${MODULE_ID}: would delete project ${NS}; CNV and ACS flags kept"
+  if want_openshift; then
+    echo "${MODULE_ID}: would delete project ${NS}; CNV and ACS flags kept"
+  else
+    echo "${MODULE_ID}: central plane uninstall dry-run (no-op)"
+  fi
 }
 
 emit_status() {
@@ -782,6 +904,23 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        VIRT_PLANE="$1"
+        case "$VIRT_PLANE" in
+          central|openshift) ;;
+          *)
+            echo "$(basename "$0"): --plane must be central or openshift" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        VIRT_SC_IDS+=("$1")
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2
@@ -790,6 +929,12 @@ main() {
     esac
     shift
   done
+
+  if [[ "${VIRT_PLANE}" == "openshift" ]] && ((${#VIRT_SC_IDS[@]} > 1)); then
+    echo "$(basename "$0"): OpenShift plane expects at most one --secured-cluster-id" >&2
+    exit 1
+  fi
+  VIRT_SC_ID="${VIRT_SC_IDS[0]:-${ACS_DEMO_SC_ID:-}}"
   [[ -n "$action" ]] || { usage; exit 0; }
   case "$action" in
     status) emit_status ;;

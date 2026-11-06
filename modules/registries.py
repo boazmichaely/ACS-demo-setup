@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure ACS image registry integrations from the secured-cluster pull secret."""
+"""Configure ACS image registry integrations from Central's OpenShift pull secret."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from lib.central import (  # noqa: E402
     check_central_auth,
     load_lab_credentials,
 )
-from lib.openshift import ensure_oc  # noqa: E402
+from lib.openshift import CENTRAL_ONLY_SC_ID, ensure_oc  # noqa: E402
 
 MODULE_ID = "registries"
 QUAY_INTEGRATION_NAME = "Public Quay.io"
@@ -235,7 +235,8 @@ def evaluate() -> dict[str, Any]:
         }
 
     try:
-        ensure_oc(creds)
+        # Central-global integrations: always read pull-secret from Central's OCP.
+        ensure_oc(creds, secured_cluster_id=CENTRAL_ONLY_SC_ID)
     except RuntimeError as exc:
         return {
             "state": "error",
@@ -346,7 +347,7 @@ def _ready_fields(ok: bool) -> dict[str, str]:
 def _pull_secret_lines(host: str, host_meta: dict[str, Any] | None) -> list[str]:
     """Presence-only pull-secret facts; never usernames or passwords."""
     lines = [
-        "Pull-secret source: openshift-config/pull-secret",
+        "Pull-secret source: Central OpenShift openshift-config/pull-secret",
         f"Host entry ({host}): present" if (host_meta or {}).get("authPresent") else f"Host entry ({host}): absent",
     ]
     if not host_meta:

@@ -1528,7 +1528,14 @@ async function refreshAllStatus() {
 }
 
 /** Modules that accept orchestrator --plane / --secured-cluster-id fan-out. */
-const ORCHESTRATOR_PLANE_MODULES = new Set(["compliance-operator"]);
+const ORCHESTRATOR_PLANE_MODULES = new Set([
+  "compliance-operator",
+  "ms-demo",
+  "users-part1-ocp",
+  "splunk-TA",
+  "init-demo",
+  "virt-vm-demo",
+]);
 
 /** Debug: ``?debugScPicker=1`` or ``localStorage.acsDemoDebugScPicker=1``. */
 function debugScPickerEnabled() {

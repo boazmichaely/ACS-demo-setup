@@ -343,7 +343,8 @@ def ensure_oc(
         )
         clusters = list(lab.get("securedClusters") or [])
         sc: dict[str, Any] | None = None
-        if sc_id == CENTRAL_ONLY_SC_ID and not clusters:
+        # ``_central`` always means Central's OpenShift block (not a lab SC row).
+        if sc_id == CENTRAL_ONLY_SC_ID:
             sc = empty_secured_cluster(
                 sc_id=CENTRAL_ONLY_SC_ID, name="central", same_as_central=True
             )
@@ -527,7 +528,7 @@ def resolve_module_target(
 
     sc: dict[str, Any] | None = None
     if sc_id:
-        if sc_id == CENTRAL_ONLY_SC_ID and not clusters:
+        if sc_id == CENTRAL_ONLY_SC_ID:
             sc = empty_secured_cluster(
                 sc_id=CENTRAL_ONLY_SC_ID, name="central", same_as_central=True
             )

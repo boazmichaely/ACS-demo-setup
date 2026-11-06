@@ -12,7 +12,10 @@ usage() {
 
 Deploy Splunk Operator and a Splunk Free Standalone on the lab OpenShift
 cluster, expose Splunk Web, and install the RHACS Splunkbase Technology
-Add-on (TA) from a local \`.tgz\`.
+Add-on (TA) from a local \`.tgz\`. Catalog: \`impactPlanes: ["openshift"]\`.
+
+With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
+soft-default SC.
 
 Central endpoint, API token, and modular inputs are configured in the
 Splunk UI after install - see
@@ -22,16 +25,25 @@ Splunk UI after install - see
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status
-$(basename "$0") --run [--dry-run] [--ta-dir DIR] [--skip-ta]
-$(basename "$0") --uninstall [--dry-run]
+$(basename "$0") --status [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--secured-cluster-id ID] [--ta-dir DIR] [--skip-ta]
+$(basename "$0") --uninstall [--dry-run] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
+- \`--secured-cluster-id ID\` - lab secured-cluster id (at most one)
+- \`--plane openshift\` - accepted (implied); other planes rejected
 - \`--ta-dir DIR\` - Directory with the Splunkbase \`.tgz\` (default \`~/code/Splunk\`)
 - \`--skip-ta\` - Install Operator + Standalone + Route only (no TA package)
 - \`--dry-run\` - Print the plan; change nothing
+
+## Status Info
+
+- Namespace and Splunk Operator controller
+- Standalone pod readiness
+- Splunk Web Route URL
+- Local TA \`.tgz\` found vs TA installed inside Splunk
 
 ## Installation (TA package)
 
@@ -46,9 +58,8 @@ The \`.tgz\` is **not** in this repo (Splunkbase license). Do not commit it.
    Product doc:
    [RHACS 4.10 - Integrating with Splunk](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/4.10/html/integrating/integrate-with-splunk)
 
-## Depends on
+## Pre Conditions
 
-- \`oc\` via lab-credentials.json (per-lab kubeconfig)
 - \`helm\` on PATH
 - RHACS TA \`.tgz\` under \`--ta-dir\` (unless \`--skip-ta\`)
 
@@ -94,6 +105,7 @@ uninstall_module() {
 
 main() {
   local action="" dry_run=false
+  local sc_ids=() plane=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -103,6 +115,23 @@ main() {
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
       --skip-ta) STA_SKIP_TA=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs openshift" >&2; exit 1; }
+        plane="$1"
+        case "$plane" in
+          openshift) ;;
+          *)
+            echo "$(basename "$0"): OpenShift-only module; --plane must be openshift (got ${plane})" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        sc_ids+=("$1")
+        ;;
       --ta-dir)
         shift
         [[ -n "${1:-}" ]] || {
@@ -119,6 +148,12 @@ main() {
     esac
     shift
   done
+
+  if ((${#sc_ids[@]} > 1)); then
+    echo "$(basename "$0"): OpenShift-only module expects at most one --secured-cluster-id" >&2
+    exit 1
+  fi
+  STA_SC_ID="${sc_ids[0]:-${ACS_DEMO_SC_ID:-}}"
 
   [[ -n "$action" ]] || { usage; exit 0; }
 

@@ -67,7 +67,7 @@ visibility.
 | Module | `./modules/virt-vm-demo.sh --run` |
 | Namespace | `acs-virt-demo` |
 | Guests | `rhel9-1`, `rhel9-2` (dnf-primed eng image + pull secret) |
-| Scraper | SecuredCluster `virtualMachines.scraper.pollInterval` = `1m` |
+| Scraper | SecuredCluster `virtualMachines.scraper.pollInterval` = `1m` (SC); `ROX_VIRTUAL_MACHINES` also on Central CR (Central OCP) |
 | Agent | `roxagent serve --rescan-interval 30m` (infrequent; initial scan matters) |
 | Central API | `/v2/virtualmachines/vms` (UI Virtual Machines page) |
 | Demo-ready | `--status ok` only when both VMIs are Running and both have CVE findings |

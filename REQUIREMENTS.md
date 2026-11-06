@@ -175,21 +175,21 @@ For each module: **purpose**, **pre conditions** (usually none; another installe
 
 ### M1 — `registries` (ACS image integrations)
 
-**Purpose:** Configure RHACS image integrations needed for vulnerability scanning on the secured cluster. Reads Quay and `registry.redhat.io` credentials from the OpenShift cluster pull secret, and adds an anonymous public integration for Google Artifact Registry (`us-central1-docker.pkg.dev`) so `ms-demo` Online Boutique images can be scanned.
+**Purpose:** Configure RHACS image integrations needed for vulnerability scanning. Catalog: `impactPlanes: ["central"]`. Reads Quay and `registry.redhat.io` credentials from **Central's OpenShift** `openshift-config/pull-secret` (not from a secured cluster), and adds an anonymous public integration for Google Artifact Registry (`us-central1-docker.pkg.dev`) so `ms-demo` Online Boutique images can be scanned.
 
 **Pre conditions:** none
 
 **Status must verify:**
 
 1. Central credentials authenticate (API token and/or admin password per `lib/central`)
-2. `pull-secret` in `openshift-config` is readable via `oc`
+2. `pull-secret` in `openshift-config` on Central's OpenShift is readable via `oc`
 3. `Public Quay.io` integration has robot credentials matching pull-secret `quay.io`
 4. `registry.redhat.io` docker registry integration exists and matches pull-secret
 5. Public docker integration for `us-central1-docker.pkg.dev` exists (anonymous; no pull-secret)
 
 **Run must do:**
 
-1. Read `quay.io` and `registry.redhat.io` credentials from the secured-cluster pull secret
+1. Read `quay.io` and `registry.redhat.io` credentials from Central OpenShift pull-secret
 2. Update `Public Quay.io` with `registryRobotCredentials` (replaces OAuth-only auth)
 3. Create or update `registry.redhat.io` integration idempotently
 4. Create or update `Public Google Artifact Registry (us-central1)` for `us-central1-docker.pkg.dev`
@@ -241,13 +241,13 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M2b — `virt-vm-demo` (ACS guest vulnerabilities on OCP Virt)
 
-**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`.
+**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`. Catalog: `impactPlanes: ["central","openshift"]`. Central CR patches use Central's OpenShift (`_central`); CNV / VMs / SecuredCluster use the soft-default SC.
 
 **Pre conditions:** none
 
-**Status must verify:** HyperConverged healthy; ACS flags on Central + SecuredCluster; both demo VMIs Running; Central reports CVE findings on both VMs in `acs-virt-demo`.
+**Status must verify:** HyperConverged healthy; ACS flags on Central CR (Central OCP) + SecuredCluster (SC); both demo VMIs Running; Central reports CVE findings on both VMs in `acs-virt-demo`.
 
-**Run must do:** Patch ACS CRs; install/ensure CNV; create pull secret + two VMs; install agent from Sensor image `/stackrox/bin/roxagent`; wait until both VMs have CVE findings (fail if timeout).
+**Run must do:** Patch Central CR on Central OCP and SecuredCluster on SC; install/ensure CNV; create pull secret + two VMs; install agent from Sensor image `/stackrox/bin/roxagent`; wait until both VMs have CVE findings (fail if timeout).
 
 **Uninstall must do:** Delete project `acs-virt-demo` (CNV and ACS flags retained).
 

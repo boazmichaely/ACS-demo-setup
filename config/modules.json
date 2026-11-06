@@ -5,7 +5,7 @@
       "label": "Configure ACS image integrations",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central", "openshift"]
+      "impactPlanes": ["central"]
     },
     {
       "id": "signature-integration",
