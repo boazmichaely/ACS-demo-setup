@@ -1875,6 +1875,9 @@ body.demo-log-resizing iframe {
   gap: 0.5rem;
   padding: 0.35rem 0.25rem;
 }
+.demo-sc-picker__row--debug {
+  opacity: 0.65;
+}
 .demo-sc-picker__row-meta {
   display: flex;
   flex-direction: column;

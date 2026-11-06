@@ -1530,14 +1530,31 @@ async function refreshAllStatus() {
 /** Modules that accept orchestrator --plane / --secured-cluster-id fan-out. */
 const ORCHESTRATOR_PLANE_MODULES = new Set(["compliance-operator"]);
 
+/** Debug: ``?debugScPicker=1`` or ``localStorage.acsDemoDebugScPicker=1``. */
+function debugScPickerEnabled() {
+  try {
+    if (new URLSearchParams(location.search).get("debugScPicker") === "1") {
+      return true;
+    }
+    if (localStorage.getItem("acsDemoDebugScPicker") === "1") {
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 function moduleImpactPlanes(moduleId) {
   const raw = moduleMetaById.get(moduleId)?.impactPlanes;
   return Array.isArray(raw) ? raw.map((p) => String(p).toLowerCase()) : [];
 }
 
 function moduleNeedsScPicker(moduleId) {
-  if (!ORCHESTRATOR_PLANE_MODULES.has(moduleId)) return false;
-  return moduleImpactPlanes(moduleId).includes("openshift");
+  if (!moduleImpactPlanes(moduleId).includes("openshift")) return false;
+  // Debug: show picker for every OpenShift-impact module, not only the allowlist.
+  if (debugScPickerEnabled()) return true;
+  return ORCHESTRATOR_PLANE_MODULES.has(moduleId);
 }
 
 /**
@@ -1551,6 +1568,7 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
     const list = document.getElementById("scPickerList");
     const form = document.getElementById("scPickerForm");
     const title = document.getElementById("scPickerTitle");
+    const hint = document.getElementById("scPickerHint");
     const closeBtn = document.getElementById("scPickerClose");
     if (!dialog || !list || !form) {
       resolve([]);
@@ -1558,34 +1576,64 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
     }
 
     const lab = activeLab();
-    const clusters = lab?.securedClusters || [];
-    if (!clusters.length) {
+    const clusters = [...(lab?.securedClusters || [])];
+    const debug = debugScPickerEnabled();
+    if (!clusters.length && !debug) {
       resolve([]);
       return;
     }
 
     const verb = uninstall ? "Uninstall" : "Install";
-    if (title) title.textContent = `${verb} ${moduleId} - select clusters`;
+    if (title) {
+      title.textContent = `${verb} ${moduleId} - select clusters${
+        debug ? " (debug)" : ""
+      }`;
+    }
+    if (hint) {
+      hint.textContent = debug
+        ? "Debug multi-select is on (?debugScPicker=1). Placeholder rows are not sent on Continue. Add real secured clusters in Lab credentials for a real multi-SC run."
+        : "OpenShift impact runs on the clusters you select. Central API work always uses Central (no choice needed). Target cluster for Setup is pre-checked.";
+    }
 
     const activeId =
-      (lab.activeSecuredClusterId || "").trim() || (clusters[0]?.id || "");
-    list.innerHTML = clusters
-      .map((sc) => {
-        const id = sc.id || "";
-        const name = sc.name || id;
-        const checked = id === activeId ? "checked" : "";
-        const same = sc.sameAsCentralCluster
-          ? `<small>same OpenShift as Central (cred shortcut)</small>`
-          : "";
-        return `<label class="demo-sc-picker__row">
+      (lab?.activeSecuredClusterId || "").trim() || (clusters[0]?.id || "");
+
+    const realRows = clusters.map((sc) => {
+      const id = sc.id || "";
+      const name = sc.name || id;
+      const checked = id && id === activeId ? "checked" : "";
+      const same = sc.sameAsCentralCluster
+        ? `<small>same OpenShift as Central (cred shortcut)</small>`
+        : "";
+      return `<label class="demo-sc-picker__row">
           <input type="checkbox" name="sc" value="${escapeHtml(id)}" ${checked} />
           <span class="demo-sc-picker__row-meta">
             <span>${escapeHtml(name)}</span>
             ${same}
           </span>
         </label>`;
-      })
-      .join("");
+    });
+
+    // With 0–1 real SCs, pad with disabled placeholders so the multi-select UI is visible.
+    const placeholders = [];
+    if (debug && clusters.length < 2) {
+      for (let i = clusters.length; i < 2; i++) {
+        placeholders.push(`<label class="demo-sc-picker__row demo-sc-picker__row--debug">
+          <input type="checkbox" disabled />
+          <span class="demo-sc-picker__row-meta">
+            <span>(debug) secured-cluster-${i + 1}</span>
+            <small>placeholder only - not submitted</small>
+          </span>
+        </label>`);
+      }
+    }
+
+    if (!realRows.length && debug) {
+      // No real SCs: still open the dialog with placeholders; Continue yields [].
+      list.innerHTML = placeholders.join("");
+    } else {
+      list.innerHTML = realRows.concat(placeholders).join("");
+    }
 
     const finish = (ids) => {
       dialog.removeEventListener("close", onDialogClose);
@@ -1605,10 +1653,15 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
         finish(null);
         return;
       }
-      const selected = [...list.querySelectorAll('input[name="sc"]:checked')].map(
-        (el) => el.value
-      );
+      const selected = [...list.querySelectorAll('input[name="sc"]:checked')]
+        .map((el) => el.value)
+        .filter(Boolean);
       if (!selected.length) {
+        if (debug && !clusters.length) {
+          // Debug UI only - no real SCs to send.
+          finish([]);
+          return;
+        }
         window.alert("Select at least one secured cluster.");
         return;
       }
