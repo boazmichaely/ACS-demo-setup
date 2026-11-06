@@ -1598,8 +1598,7 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
         "Same checklist every time. Gray rows are not used by this module’s Type. Check Central and/or secured clusters that should take impact.";
     }
 
-    const activeId =
-      (lab?.activeSecuredClusterId || "").trim() || (clusters[0]?.id || "");
+    const activeId = softDefaultScId(clusters, lab?.activeSecuredClusterId);
 
     const centralDisabled = centralOk ? "" : "disabled";
     const centralChecked = centralOk ? "checked" : "";
@@ -2006,97 +2005,28 @@ function firstScId(clusters) {
   return (clusters || [])[0]?.id || "";
 }
 
-/** Prefer the SC marked same-as-Central (Central's cluster) for Setup target default. */
+/** Prefer the SC marked same-as-Central (Central's cluster). */
 function centralClusterScId(clusters) {
   const hit = (clusters || []).find((sc) => sc.sameAsCentralCluster !== false);
   return hit?.id || "";
 }
 
+/** Quiet default SC: same-as-Central, else first. Used for picker pre-check / bare CLI. */
 function defaultSetupTargetId(clusters) {
   return centralClusterScId(clusters) || firstScId(clusters);
 }
 
-function firstRemoteScId(clusters) {
-  const hit = (clusters || []).find((sc) => sc.sameAsCentralCluster === false);
-  return hit?.id || "";
-}
-
-/** User-selected Target cluster for Setup, else lab value, else Central's SC. */
-function readActiveScIdFromDom(clusters) {
+/**
+ * Soft default secured-cluster id for the lab (no Setup-target UI).
+ * Keeps a still-valid stored id; otherwise same-as-Central / first SC.
+ */
+function softDefaultScId(clusters, preferredId) {
   const list = clusters || [];
-  const sameCb = document.getElementById("setupTargetSameAsCentral");
-  if (sameCb?.checked) {
-    return defaultSetupTargetId(list);
-  }
-  const sel = document.getElementById("setupTargetCluster");
-  const fromSelect = (sel?.value || "").trim();
-  if (fromSelect && list.some((c) => c.id === fromSelect)) return fromSelect;
-  const lab = editingLab();
-  const prev = lab?.activeSecuredClusterId || "";
-  if (prev && list.some((c) => c.id === prev)) {
-    const prevSc = list.find((c) => c.id === prev);
-    if (prevSc && prevSc.sameAsCentralCluster === false) return prev;
-  }
-  return firstRemoteScId(list) || defaultSetupTargetId(list);
+  const pref = (preferredId || "").trim();
+  if (pref && list.some((c) => c.id === pref)) return pref;
+  return defaultSetupTargetId(list);
 }
 
-function setupTargetOptionLabel(sc) {
-  return (sc.name || sc.id || "secured").trim() || "secured";
-}
-
-function syncSetupTargetControl(lab) {
-  const block = document.getElementById("setupTargetBlock");
-  const sameCb = document.getElementById("setupTargetSameAsCentral");
-  const sel = document.getElementById("setupTargetCluster");
-  const warn = document.getElementById("setupTargetWarn");
-  if (!sameCb || !sel) return;
-
-  const clusters = lab?.securedClusters || [];
-  const centralId = centralClusterScId(clusters);
-  let activeId =
-    (lab?.activeSecuredClusterId &&
-      clusters.some((c) => c.id === lab.activeSecuredClusterId) &&
-      lab.activeSecuredClusterId) ||
-    defaultSetupTargetId(clusters);
-
-  const activeSc = clusters.find((c) => c.id === activeId);
-  const sameAsCentral = Boolean(
-    !clusters.length || !activeSc || activeSc.sameAsCentralCluster !== false
-  );
-  sameCb.checked = sameAsCentral;
-  sameCb.disabled = !clusters.length;
-  block?.classList.toggle("is-not-central", !sameAsCentral);
-
-  if (sameAsCentral) {
-    activeId = defaultSetupTargetId(clusters);
-    sel.hidden = true;
-    if (warn) warn.hidden = true;
-  } else {
-    sel.hidden = false;
-    if (warn) warn.hidden = false;
-    const remotes = clusters.filter((sc) => sc.sameAsCentralCluster === false);
-    const options = remotes.length ? remotes : clusters.filter((sc) => sc.id !== centralId);
-    sel.innerHTML = options
-      .map(
-        (sc) =>
-          `<option value="${escapeHtml(sc.id)}">${escapeHtml(setupTargetOptionLabel(sc))}</option>`
-      )
-      .join("");
-    if (!options.length) {
-      sel.innerHTML = `<option value="">No remote secured clusters</option>`;
-      sel.value = "";
-      activeId = defaultSetupTargetId(clusters);
-    } else if (activeId && options.some((c) => c.id === activeId)) {
-      sel.value = activeId;
-    } else {
-      activeId = options[0].id;
-      sel.value = activeId;
-    }
-  }
-
-  if (lab) lab.activeSecuredClusterId = activeId;
-  syncScModulesBadges(activeId);
-}
 
 function readSecuredClustersFromDom() {
   if (!securedClusterList) return [];
@@ -2226,13 +2156,8 @@ function scSameBodyHtml() {
 function renderSecuredClusters(lab) {
   if (!securedClusterList) return;
   const clusters = lab.securedClusters || [];
-  const activeId =
-    (lab.activeSecuredClusterId &&
-      clusters.some((c) => c.id === lab.activeSecuredClusterId) &&
-      lab.activeSecuredClusterId) ||
-    defaultSetupTargetId(clusters);
-
-  syncSetupTargetControl({ ...lab, activeSecuredClusterId: activeId });
+  const activeId = softDefaultScId(clusters, lab.activeSecuredClusterId);
+  if (lab) lab.activeSecuredClusterId = activeId;
 
   if (!clusters.length) {
     securedClusterList.innerHTML =
@@ -2247,16 +2172,11 @@ function renderSecuredClusters(lab) {
       const ocp = sc.openshift || emptyOpenshift();
       const badgeClass = same ? "pf-m-blue" : "pf-m-grey";
       const badgeText = same ? "Same as Central" : "Remote OCP";
-      const isActive = sc.id === activeId;
-      const modulesBadge = isActive
-        ? `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge"><span class="pf-v6-c-label__content">Setup target</span></span>`
-        : `<span class="pf-v6-c-label pf-m-compact pf-m-green js-sc-modules-badge" hidden><span class="pf-v6-c-label__content">Setup target</span></span>`;
       const body = same ? scSameBodyHtml() : scRemoteBodyHtml(sc, ocp);
       return `<details class="demo-sc-row" data-sc-id="${escapeHtml(sc.id)}">
         <summary class="demo-sc-row__summary">
           <span class="demo-sc-row__name js-sc-title">${escapeHtml(sc.name || "secured")}</span>
           <span class="pf-v6-c-label pf-m-compact ${badgeClass} js-sc-badge"><span class="pf-v6-c-label__content">${badgeText}</span></span>
-          ${modulesBadge}
           <span class="demo-sc-row__hint js-sc-sub">${escapeHtml(scSubLabel(sc))}</span>
           <button type="button" class="pf-v6-c-button pf-m-link pf-m-danger pf-m-inline js-sc-remove"
             title="Remove secured cluster">Remove</button>
@@ -2299,18 +2219,12 @@ function refreshScRowChrome(row) {
   const lab = editingLab();
   if (lab) {
     lab.securedClusters = readSecuredClustersFromDom();
-    lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
-    syncSetupTargetControl(lab);
+    lab.activeSecuredClusterId = softDefaultScId(
+      lab.securedClusters,
+      lab.activeSecuredClusterId
+    );
     updateFoldMetas(lab);
   }
-}
-
-function syncScModulesBadges(activeId) {
-  securedClusterList?.querySelectorAll(".demo-sc-row").forEach((row) => {
-    const badge = row.querySelector(".js-sc-modules-badge");
-    if (!badge) return;
-    badge.hidden = row.dataset.scId !== activeId;
-  });
 }
 
 function wireScRowBodyControls(row) {
@@ -2345,8 +2259,10 @@ function applyScSameToggle(row) {
   const lab = editingLab();
   if (lab) {
     lab.securedClusters = readSecuredClustersFromDom();
-    lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
-    syncSetupTargetControl(lab);
+    lab.activeSecuredClusterId = softDefaultScId(
+      lab.securedClusters,
+      lab.activeSecuredClusterId
+    );
   }
 }
 
@@ -2359,16 +2275,10 @@ function bindSecuredClusterRow(row) {
     row.remove();
     const remaining = readSecuredClustersFromDom();
     const lab = editingLab();
-    let activeId = lab?.activeSecuredClusterId || "";
-    if (!remaining.some((c) => c.id === activeId)) {
-      activeId = defaultSetupTargetId(remaining);
-    }
+    const activeId = softDefaultScId(remaining, lab?.activeSecuredClusterId);
     if (lab) {
       lab.securedClusters = remaining;
       lab.activeSecuredClusterId = activeId;
-      syncSetupTargetControl(lab);
-    } else {
-      syncScModulesBadges(activeId);
     }
     updateFoldMetas({
       ...(lab || {}),
@@ -2514,7 +2424,7 @@ function fillEditingLabForm() {
 function buildCredentialsPayload() {
   const lab = editingLab() || emptyLab();
   const scRows = readSecuredClustersFromDom();
-  const activeSc = readActiveScIdFromDom(scRows);
+  const activeSc = softDefaultScId(scRows, lab.activeSecuredClusterId);
 
   const updatedLab = {
     id: lab.id,
@@ -2879,11 +2789,7 @@ function addSecuredCluster() {
   const sc = emptySecuredCluster(`secured-${current.length + 1}`);
   sc.sameAsCentralCluster = false;
   const next = [...current, sc];
-  // Keep existing Setup target; only default to Central's cluster when none yet.
-  let activeId = lab.activeSecuredClusterId || "";
-  if (!current.some((c) => c.id === activeId)) {
-    activeId = defaultSetupTargetId(next);
-  }
+  const activeId = softDefaultScId(next, lab.activeSecuredClusterId);
   // Draft in DOM only; Save writes it. Avoid mutating credDoc so dirty tracking works.
   const draft = {
     ...lab,
@@ -2924,7 +2830,10 @@ function refreshFoldMetasFromForm() {
     },
   };
   lab.securedClusters = readSecuredClustersFromDom();
-  lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
+  lab.activeSecuredClusterId = softDefaultScId(
+    lab.securedClusters,
+    lab.activeSecuredClusterId
+  );
   updateFoldMetas(lab);
 }
 
@@ -2967,45 +2876,6 @@ document.getElementById("btnMakeActive")?.addEventListener("click", () => {
 });
 document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSecuredCluster);
 
-function onSetupTargetControlChange() {
-  const lab = editingLab();
-  if (!lab) return;
-  lab.securedClusters = readSecuredClustersFromDom();
-  // If leaving "Same as Central" with an empty/stale select, seed first remote first.
-  const sameCb = document.getElementById("setupTargetSameAsCentral");
-  if (!sameCb?.checked) {
-    const sel = document.getElementById("setupTargetCluster");
-    const remotes = lab.securedClusters.filter((sc) => sc.sameAsCentralCluster === false);
-    const cur = (sel?.value || "").trim();
-    if (!cur || !remotes.some((c) => c.id === cur)) {
-      const seed =
-        (lab.activeSecuredClusterId &&
-          remotes.some((c) => c.id === lab.activeSecuredClusterId) &&
-          lab.activeSecuredClusterId) ||
-        firstRemoteScId(lab.securedClusters);
-      if (sel && seed) {
-        sel.innerHTML = remotes
-          .map(
-            (sc) =>
-              `<option value="${escapeHtml(sc.id)}">${escapeHtml(setupTargetOptionLabel(sc))}</option>`
-          )
-          .join("");
-        sel.value = seed;
-      }
-    }
-  }
-  lab.activeSecuredClusterId = readActiveScIdFromDom(lab.securedClusters);
-  syncSetupTargetControl(lab);
-  updateFoldMetas(lab);
-  syncCredChrome();
-}
-
-document
-  .getElementById("setupTargetSameAsCentral")
-  ?.addEventListener("change", onSetupTargetControlChange);
-document
-  .getElementById("setupTargetCluster")
-  ?.addEventListener("change", onSetupTargetControlChange);
 document.getElementById("btnSlackRestoreDefaults")?.addEventListener("click", (e) => {
   e.preventDefault();
   restoreSlackNotifierDefaults();

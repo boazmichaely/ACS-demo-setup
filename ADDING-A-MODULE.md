@@ -248,7 +248,7 @@ Flags the orchestrator may pass:
 | `--plane central\|openshift` | Required when the catalog lists both planes. Single-plane modules may omit (implied). |
 | `--secured-cluster-id <id>` | OpenShift plane: exactly one. Central plane: zero or more (picker selection). |
 
-**Target cluster for Setup** (`activeSecuredClusterId`) is only a soft default for the pre-launch picker / default single id when none are passed. It is not a hidden “install everywhere” switch. `sameAsCentralCluster` on a secured cluster is a **credentials shortcut** only; that SC is still a normal target in the list.
+`activeSecuredClusterId` is a quiet soft default (same-as-Central, else first SC) for the pre-launch picker / bare CLI when no `--secured-cluster-id` is passed. It is not a hidden “install everywhere” switch. `sameAsCentralCluster` on a secured cluster is a **credentials shortcut** only; that SC is still a normal target in the list.
 
 ### Central membership (optional)
 
@@ -279,7 +279,7 @@ There are two different “doors”:
 | **Central** (RHACS API) | [`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py) | HTTP calls to Central (integrations, policies, scan schedules, …). **Requires a Python helper** from your module. |
 | **OpenShift** (`oc`) | [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) | Cluster objects on a secured cluster (or Central OpenShift when the lab has no SCs). Shell can call `python -m lib.openshift`, then use `oc`. Pass `--secured-cluster-id` when the orchestrator targets a specific SC. |
 
-OpenShift modules do **not** use your interactive `~/.kube/config`. Instead, [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) logs in with the lab’s OpenShift admin fields and writes kubeconfigs under `.cache/`. **Target cluster for Setup** soft-defaults which SC is pre-selected for OpenShift work. If the lab has no secured clusters, helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
+OpenShift modules do **not** use your interactive `~/.kube/config`. Instead, [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py) logs in with the lab’s OpenShift admin fields and writes kubeconfigs under `.cache/`. `activeSecuredClusterId` soft-defaults which SC is used when no id is passed. If the lab has no secured clusters, helpers fall back to Central’s OpenShift block (Central-on-OCP labs).
 
 Env fallbacks (`ROX_API_TOKEN`, `ACS_CENTRAL_ENDPOINT`, and friends) only fill empty file fields. Prefer the credentials file.
 

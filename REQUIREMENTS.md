@@ -62,7 +62,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password, optional `apiToken` | If `apiToken` is set, modules use `oc login --token=` (SSO labs). Else username/password. |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** (GUI: Target cluster for Setup) soft-defaults which SC is pre-selected for OpenShift impact. Catalog `impactPlanes` (GUI Type) + orchestrator fan-out (default: all OpenShift, then Central for `both`; optional `planeOrder`) own multi-SC runs; modules must not loop SCs. Central-plane modules may adjust Central membership when the selection changes (not enforced). Empty `securedClusters` → Central OpenShift |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** quietly soft-defaults which SC is pre-selected for OpenShift impact (same-as-Central, else first). Catalog `impactPlanes` (GUI Type) + orchestrator fan-out (default: all OpenShift, then Central for `both`; optional `planeOrder`) own multi-SC runs; modules must not loop SCs. Central-plane modules may adjust Central membership when the selection changes (not enforced). Empty `securedClusters` → Central OpenShift |
 
 Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
@@ -223,13 +223,13 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M2 — `compliance-operator` (Compliance Operator + Central CIS scan schedule)
 
-**Purpose:** Install the OpenShift Compliance Operator on selected secured clusters and maintain one Central scan schedule (`ocp4-cis-scan-schedule`). Catalog: `impactPlanes: ["central","openshift"]`. Orchestrator fans out OpenShift N then Central 1 when `--secured-cluster-id` is passed; with no ids, default is Target cluster for Setup only.
+**Purpose:** Install the OpenShift Compliance Operator on selected secured clusters and maintain one Central scan schedule (`ocp4-cis-scan-schedule`). Catalog: `impactPlanes: ["central","openshift"]`. Orchestrator fans out OpenShift N then Central 1 when `--secured-cluster-id` is passed; with no ids, default is the soft-default SC (`activeSecuredClusterId`) only.
 
 **ACS principle (required):** Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. Operator install is on-cluster (`oc` per SC); scan schedules go through **Central API** only.
 
 **Pre conditions:** none
 
-**Status must verify:** For the selection (or Target), Compliance Operator healthy; Central schedule membership reflects the selection (merged installs).
+**Status must verify:** For the selection (or soft-default SC), Compliance Operator healthy; Central schedule membership reflects the selection (merged installs).
 
 **Run must do:** OpenShift plane: OLM install/verify in `openshift-compliance` on one SC. Central plane: merge selected ACS cluster ids into the shared schedule.
 
