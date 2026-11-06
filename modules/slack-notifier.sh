@@ -18,41 +18,48 @@ EXTRA_ARGS=()
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status [--webhook URL] [--name NAME] [--channel-url URL]
-       $(basename "$0") --run [--dry-run] [--webhook URL] [--name NAME] [--channel-url URL]
-       $(basename "$0") --uninstall [--dry-run] [--webhook URL] [--name NAME] [--channel-url URL]
+# slack-notifier
 
-Purpose:
-  Ensure a Slack notifier in Central (default channel #acs-demo-notifier).
-  Defaults ship in config/slack-notifier.defaults.json; Lab credentials may
-  override notifier name, webhook, and channel URL.
-  --run sends Central's Test notifier message, then a second lab-context
-  ping (lab name, Central host, secured cluster) via the Incoming Webhook,
-  then attaches this notifier to every Central policy with category DEMO.
+Ensure a Slack notifier in Central (default channel \`#acs-demo-notifier\`).
 
-Depends on:
-  - Central API auth in lab-credentials.json (API token or admin password)
-  - DEMO policies from modules such as init-demo / signature-integration
-    (re-run those first if policies exist without category DEMO)
+Defaults ship in \`config/slack-notifier.defaults.json\`. Lab credentials may
+override notifier name, webhook, and channel URL.
 
-Flags:
-  --webhook URL       Override Incoming Webhook for this invocation
-  --name NAME         Override Central notifier display name
-  --channel-url URL   Override Slack channel deep link in status folds
+\`--run\` sends Central's Test notifier message, then a second lab-context
+ping (lab name, Central host, secured cluster) via the Incoming Webhook,
+then attaches this notifier to every Central policy with category **DEMO**.
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  ACS_CENTRAL_ENDPOINT       Override Central console URL
-  ROX_API_TOKEN / TOKEN      Override Central API token
-  ACS_DEMO_PYTHON            Override Python interpreter
-  ACS_INSECURE_SKIP_TLS_VERIFY  Skip TLS verify for Central
+## Usage
 
-Side effects:
-  --run         create/update Slack notifier; Central test + lab-context
-                webhook ping; attach notifier to DEMO-category policies
-  --uninstall   detach this notifier from DEMO policies; delete the notifier
-                (policies and DEMO category stay)
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--webhook URL] [--name NAME] [--channel-url URL]
+$(basename "$0") --run [--dry-run] [--webhook URL] [--name NAME] [--channel-url URL]
+$(basename "$0") --uninstall [--dry-run] [--webhook URL] [--name NAME] [--channel-url URL]
+\`\`\`
+
+## Flags
+
+- \`--webhook URL\` - Override Incoming Webhook for this invocation
+- \`--name NAME\` - Override Central notifier display name
+- \`--channel-url URL\` - Override Slack channel deep link in status folds
+- \`--dry-run\` - Print the plan; change nothing
+
+## Status Info
+
+- Slack notifier name, Central id, webhook source, and channel link
+- One fold per Central policy with category **DEMO** (notifier attached or missing)
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` creates/updates the Slack notifier; Central test + lab-context
+  webhook ping; attaches the notifier to DEMO-category policies
+- \`--uninstall\` detaches this notifier from DEMO policies and deletes the
+  notifier (policies and DEMO category stay)
 EOF
 }
 

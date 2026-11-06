@@ -16,38 +16,42 @@ fi
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
-       $(basename "$0") --hard-delete [--dry-run]
+# signature-integration
 
-Purpose:
-  Ensure Signature Integration "Red Hat Public" (release key 3), Inform
-  Build+Deploy policy "Images must be signed by Red Hat Public", and prime
-  3 signed images via Central image scan (no deploy).
+Ensure Signature Integration **Red Hat Public** (release key 3), an Inform
+Build+Deploy policy **Images must be signed by Red Hat Public**, and prime
+three signed images via Central image scan (no deploy).
 
-Depends on:
-  - Central API auth in lab-credentials.json (API token or admin password)
-  - Central able to pull Quay / registry.access.redhat.com for primed images
+## Usage
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  ACS_CENTRAL_ENDPOINT       Override Central console URL
-  ROX_API_TOKEN / TOKEN      Override Central API token
-  ACS_DEMO_PYTHON            Override Python interpreter
-  ACS_INSECURE_SKIP_TLS_VERIFY  Skip TLS verify for Central
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status
+$(basename "$0") --run [--dry-run]
+$(basename "$0") --uninstall [--dry-run]
+$(basename "$0") --hard-delete [--dry-run]
+\`\`\`
 
-Side effects:
-  --run         ensure Red Hat Public + Inform policy; prime images
-  --uninstall   remove Inform policy only. Leaves Red Hat Public;
-                --status not ok until --run or --hard-delete
-  --hard-delete remove Inform policy and "Red Hat Public".
-                Only: ./modules/signature-integration.sh --hard-delete
-                (not GUI; not acs-setup.sh). Shows inventory, then requires
-                typing DELETE in an interactive terminal.
-  Does not modify Signature Integration "Red Hat".
-  Does not delete images from Central.
+## Status Info
+
+- **Red Hat Public** - signature integration present
+- **Images must be signed by Red Hat Public** - Inform policy present
+- **Signed digests** - primed image digests Central has scanned
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` ensures Red Hat Public + Inform policy; primes images
+- \`--uninstall\` removes the Inform policy only (leaves Red Hat Public;
+  \`--status\` stays needs-run until \`--run\` or \`--hard-delete\`)
+- \`--hard-delete\` removes the Inform policy and **Red Hat Public**
+  (CLI only, not GUI). Shows inventory, then requires typing \`DELETE\`
+  in an interactive terminal
+- Does not modify Signature Integration **Red Hat**
+- Does not delete images from Central
 EOF
 }
 
