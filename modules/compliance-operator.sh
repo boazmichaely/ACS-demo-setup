@@ -39,8 +39,12 @@ $(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-
 
 ## Flags
 
-- \`--plane central|openshift\` - orchestrator plane split (omit to do both in one process)
-- \`--secured-cluster-id ID\` - repeatable lab SC id (OpenShift: one; Central: selection set)
+- \`--plane openshift\` - Compliance Operator OLM install/status/uninstall on **one** SC
+- \`--plane central\` - Central CIS scan schedule membership for the **selection**
+- omit \`--plane\` - both in one process (legacy; may still loop SCs internally)
+- \`--secured-cluster-id ID\` - repeatable lab SC id. OpenShift plane: exactly one
+  per invoke (orchestrator fans out). Central plane: full selection for schedule merge/drop.
+  Soft-default SC when none passed
 - \`--secured-cluster NAME\` - legacy name filter (prefer \`--secured-cluster-id\`)
 - \`--patch-node-selector\` - Clear \`openshift.io/node-selector\` on
   \`openshift-compliance\` during OLM install

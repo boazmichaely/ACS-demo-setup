@@ -39,15 +39,18 @@ soft-default SC. The orchestrator fans out one invoke per selected SC.
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--secured-cluster-id ID]
-$(basename "$0") --uninstall [--dry-run] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --uninstall [--dry-run] [--plane openshift] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--secured-cluster-id ID\` - lab secured-cluster id (at most one)
-- \`--plane openshift\` - accepted (implied); other planes rejected
+- \`--plane openshift\` - implied; accepted. \`--plane central\` is rejected
+  (this module has no Central API work)
+- \`--secured-cluster-id ID\` - deploy into that lab SC (at most one). Soft-default
+  SC when omitted. Orchestrator fans out one invoke per selected SC
+- \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
 

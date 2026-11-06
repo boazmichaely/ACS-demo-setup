@@ -22,15 +22,25 @@ Ensure Signature Integration **Red Hat Public** (release key 3), an Inform
 Build+Deploy policy **Images must be signed by Red Hat Public**, and prime
 three signed images via Central image scan (no deploy).
 
+Catalog: \`impactPlanes: ["central"]\` (Central API only).
+
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status
-$(basename "$0") --run [--dry-run]
-$(basename "$0") --uninstall [--dry-run]
+$(basename "$0") --status [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]...
 $(basename "$0") --hard-delete [--dry-run]
 \`\`\`
+
+## Flags
+
+- \`--plane central\` - implied; accepted as a no-op
+- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--secured-cluster-id ID\` - ignored (no OpenShift work; warn)
+- \`--dry-run\` - Print the plan; change nothing
+- \`--hard-delete\` - Remove Inform policy and Red Hat Public (CLI only)
 
 ## Status Info
 
@@ -196,8 +206,13 @@ uninstall_module() {
   do_uninstall
 }
 
+# shellcheck source=_central_only_orch_flags.sh
+source "${ROOT}/modules/_central_only_orch_flags.sh"
+
 main() {
   local action="" dry_run=false
+  local prog
+  prog="$(basename "$0")"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -207,8 +222,18 @@ main() {
       --uninstall) action=uninstall ;;
       --hard-delete) action=hard-delete ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --plane needs a value" >&2; exit 1; }
+        central_only_handle_plane "$prog" "$1" || exit 1
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster-id needs an id" >&2; exit 1; }
+        central_only_ignore_sc_id "$prog" "$1"
+        ;;
       *)
-        echo "$(basename "$0"): unknown option: $1" >&2
+        echo "${prog}: unknown option: $1" >&2
         usage >&2
         exit 1
         ;;

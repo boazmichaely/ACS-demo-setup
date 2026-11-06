@@ -66,8 +66,14 @@ $(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-
 
 ## Flags
 
-- \`--plane central|openshift\` - orchestrator split (omit = both in one process)
-- \`--secured-cluster-id ID\` - OpenShift: at most one (CNV/VMs/SC CR). Soft-default when omitted.
+- \`--plane openshift\` - SecuredCluster CR flags, CNV, project \`${NS}\` VMs + agent
+  on the selected (or soft-default) SC
+- \`--plane central\` - Central CR \`ROX_VIRTUAL_MACHINES\` on **Central's OpenShift**
+  (\`_central\`); wait for CVE findings via Central API
+- omit \`--plane\` - both in one process (legacy / bare CLI)
+- \`--secured-cluster-id ID\` - OpenShift plane: at most one lab SC for CNV/VMs/SC CR.
+  Soft-default when omitted. Not used for Central CR (always Central OCP)
+- \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
 
