@@ -30,7 +30,7 @@ Deploy the Mostmark microservices demo (Online Boutique) in OpenShift project
 \`${NS}\` for network/policy/violation demos.
 
 Creates the project if needed and applies the upstream \`application.yaml\`
-from GitHub. Catalog: \`impactPlanes: ["openshift"]\`.
+from GitHub. Catalog: \`impactPlanes: ["secured-cluster"]\`.
 
 With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
 soft-default SC. The orchestrator fans out one invoke per selected SC.
@@ -39,14 +39,14 @@ soft-default SC. The orchestrator fans out one invoke per selected SC.
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane openshift] [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--plane openshift] [--secured-cluster-id ID]
-$(basename "$0") --uninstall [--dry-run] [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane secured-cluster] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID]
+$(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--plane openshift\` - implied; accepted. \`--plane central\` is rejected
+- \`--plane secured-cluster\` - implied; accepted (legacy \`openshift\` also). \`--plane central-api\` / \`central-ocp\` is rejected
   (this module has no Central API work)
 - \`--secured-cluster-id ID\` - deploy into that lab SC (at most one). Soft-default
   SC when omitted. Orchestrator fans out one invoke per selected SC
@@ -524,12 +524,12 @@ main() {
       --dry-run) dry_run=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs secured-cluster" >&2; exit 1; }
         MS_PLANE="$1"
         case "$MS_PLANE" in
-          openshift) ;;
+          secured-cluster|openshift) ;;
           *)
-            echo "$(basename "$0"): OpenShift-only module; --plane must be openshift (got ${MS_PLANE})" >&2
+            echo "$(basename "$0"): secured-cluster-only module; --plane must be secured-cluster (got ${MS_PLANE})" >&2
             exit 1
             ;;
         esac

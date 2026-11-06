@@ -17,7 +17,7 @@ cluster(s) and maintains one Central scan schedule
 
 Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
 
-\`impactPlanes: ["central","openshift"]\`. Prefer the orchestrator:
+\`impactPlanes: ["central-api","secured-cluster"]\`. Prefer the orchestrator:
 
 \`\`\`
 ./scripts/acs-setup.sh --run --module compliance-operator \\
@@ -32,17 +32,17 @@ With no \`--secured-cluster-id\`, default is the lab soft-default SC
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]... [--patch-node-selector]
-$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api|secured-cluster] [--secured-cluster-id ID]... [--patch-node-selector]
+$(basename "$0") --uninstall [--dry-run] [--plane central-api|secured-cluster] [--secured-cluster-id ID]...
 \`\`\`
 
 ## Flags
 
-- \`--plane openshift\` - Compliance Operator OLM install/status/uninstall on **one** SC
-- \`--plane central\` - Central CIS scan schedule membership for the **selection**
+- \`--plane secured-cluster\` - Compliance Operator OLM install/status/uninstall on **one** SC (legacy \`openshift\`)
+- \`--plane central-api\` - Central CIS scan schedule membership for the **selection** (legacy \`central\`)
 - omit \`--plane\` - both in one process (legacy; may still loop SCs internally)
-- \`--secured-cluster-id ID\` - repeatable lab SC id. OpenShift plane: exactly one
+- \`--secured-cluster-id ID\` - repeatable lab SC id. secured-cluster plane: exactly one
   per invoke (orchestrator fans out). Central plane: full selection for schedule merge/drop.
   Soft-default SC when none passed
 - \`--secured-cluster NAME\` - legacy name filter (prefer \`--secured-cluster-id\`)
@@ -61,10 +61,10 @@ none
 
 ## Side effects
 
-- \`--run\` (OpenShift): install/verify OLM on the selected SC
-- \`--run\` (Central): merge selected clusters into the shared scan schedule
-- \`--uninstall\` (OpenShift): remove OLM on the selected SC
-- \`--uninstall\` (Central): drop selected clusters from the schedule (delete if empty)
+- \`--run\` (secured-cluster): install/verify OLM on the selected SC
+- \`--run\` (central-api): merge selected clusters into the shared scan schedule
+- \`--uninstall\` (secured-cluster): remove OLM on the selected SC
+- \`--uninstall\` (central-api): drop selected clusters from the schedule (delete if empty)
 EOF
 }
 
@@ -133,12 +133,12 @@ main() {
       --patch-node-selector) CO_PATCH_NODE_SELECTOR=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central-api|secured-cluster" >&2; exit 1; }
         CO_PLANE="$1"
         case "$CO_PLANE" in
-          central|openshift) ;;
+          central-api|secured-cluster|central|openshift) ;;
           *)
-            echo "$(basename "$0"): --plane must be central or openshift" >&2
+            echo "$(basename "$0"): --plane must be central-api or secured-cluster" >&2
             exit 1
             ;;
         esac

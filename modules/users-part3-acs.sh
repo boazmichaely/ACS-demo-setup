@@ -46,17 +46,17 @@ Demo script: \`modules/users-part1-ocp-demo.md\`
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central] [--secured-cluster-id ID]... [--secured-cluster NAME]
-$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]... [--secured-cluster NAME]
-$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]... [--secured-cluster NAME]
+$(basename "$0") --status [--plane central-api] [--secured-cluster-id ID]... [--secured-cluster NAME]
+$(basename "$0") --run [--dry-run] [--plane central-api] [--secured-cluster-id ID]... [--secured-cluster NAME]
+$(basename "$0") --uninstall [--dry-run] [--plane central-api] [--secured-cluster-id ID]... [--secured-cluster NAME]
 \`\`\`
 
 ## Flags
 
-Catalog: \`impactPlanes: ["central"]\` (Central API only).
+Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
 
-- \`--plane central\` - implied; accepted as a no-op
-- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--plane central-api\` - implied; accepted as a no-op (legacy \`central\` also accepted)
+- \`--plane secured-cluster\` / \`central-ocp\` - ignored (central-api-only; warn on stderr)
 - \`--secured-cluster-id ID\` - **lab** SC id from the orchestrator; ignored here (warn).
   Not the same as \`--secured-cluster\`
 - \`--secured-cluster NAME\` - **ACS** secured cluster **name** used in the access

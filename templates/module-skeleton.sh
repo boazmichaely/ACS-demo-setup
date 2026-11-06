@@ -28,15 +28,15 @@ Do not dump tool-wide \`ACS_*\` credential paths in Usage.
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api|central-ocp|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api|central-ocp|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api|central-ocp|secured-cluster] [--secured-cluster-id ID]...
 \`\`\`
 
 ## Flags
 
-- \`--plane central|openshift\` - which plane this invocation owns (orchestrator sets for \`both\` modules)
-- \`--secured-cluster-id ID\` - lab SC id (OpenShift: exactly one; Central: selection set)
+- \`--plane central-api|central-ocp|secured-cluster\` - which plane this invocation owns (orchestrator sets for multi-plane modules)
+- \`--secured-cluster-id ID\` - lab SC id (\`secured-cluster\`: exactly one; Central planes: selection set)
 
 ## Status Info
 
@@ -231,12 +231,12 @@ main() {
       --dry-run) dry_run=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central-api|central-ocp|secured-cluster" >&2; exit 1; }
         PLANE="$1"
         case "$PLANE" in
-          central|openshift) ;;
+          central-api|central-ocp|secured-cluster|central|openshift) ;;
           *)
-            echo "$(basename "$0"): --plane must be central or openshift (got ${PLANE})" >&2
+            echo "$(basename "$0"): --plane must be central-api, central-ocp, or secured-cluster (got ${PLANE})" >&2
             exit 1
             ;;
         esac

@@ -17,7 +17,7 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=content_copy,done,lock,open_in_new"
     />
-    <link rel="stylesheet" href="/static/demo-setup.css?v=shell84" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell90" />
   </head>
   <body>
     <div class="pf-v6-c-page pf-m-no-sidebar" id="page">
@@ -654,20 +654,60 @@
                   </div>
 
                   <table class="demo-modules" id="modulesTable" aria-label="Demo modules">
+                    <colgroup>
+                      <col data-col="mod" />
+                      <col data-col="api" />
+                      <col data-col="ocp" />
+                      <col data-col="sc" />
+                      <col data-col="desc" />
+                      <col data-col="state" />
+                      <col data-col="actions" />
+                    </colgroup>
                     <thead>
                       <tr>
-                        <th scope="col">Module</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Description</th>
-                        <th scope="col">State</th>
-                        <th scope="col" class="demo-mod__actions">
+                        <th scope="col" rowspan="2" data-col-resize="mod">
+                          Module
+                        </th>
+                        <th scope="colgroup" colspan="3" class="demo-mod__type-group">
+                          Type
+                        </th>
+                        <th scope="col" rowspan="2" data-col-resize="desc">
+                          Description
+                        </th>
+                        <th scope="col" rowspan="2" data-col-resize="state">
+                          State
+                        </th>
+                        <th scope="col" rowspan="2" class="demo-mod__actions">
                           <span class="pf-v6-screen-reader">Actions</span>
+                        </th>
+                      </tr>
+                      <tr>
+                        <th
+                          scope="col"
+                          class="demo-mod__plane-h"
+                          data-plane-col="api"
+                        >
+                          Central API
+                        </th>
+                        <th
+                          scope="col"
+                          class="demo-mod__plane-h"
+                          data-plane-col="ocp"
+                        >
+                          Central OCP
+                        </th>
+                        <th
+                          scope="col"
+                          class="demo-mod__plane-h"
+                          data-plane-col="sc"
+                        >
+                          Secured Cluster
                         </th>
                       </tr>
                     </thead>
                     <tbody id="modulesTbody">
                       <tr>
-                        <td colspan="4">Loading…</td>
+                        <td colspan="7">Loading…</td>
                       </tr>
                     </tbody>
                   </table>
@@ -950,6 +990,6 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="/static/md-render.js?v=shell77"></script>
-    <script src="/static/app.js?v=shell84" type="module"></script>
+    <script src="/static/app.js?v=shell90" type="module"></script>
   </body>
 </html>

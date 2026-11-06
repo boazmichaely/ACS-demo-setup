@@ -6,6 +6,22 @@ You mostly use the **web GUI**. The CLI is available for scripting and is what t
 
 Repo: https://github.com/boazmichaely/ACS-demo-setup
 
+## Architecture (labs, planes, modules)
+
+A **lab** in `lab-credentials.json` is one Central plus zero or more **secured clusters**. Modules are small install/status/uninstall units listed in `config/modules.json`. Each module declares **impact planes** - where it does work:
+
+| Plane | Meaning | ACSCS Central |
+|-------|---------|---------------|
+| `central-api` | RHACS HTTP API only | yes |
+| `central-ocp` | `oc` on Central’s own OpenShift | no |
+| `secured-cluster` | `oc` / Operators / workloads on a secured cluster | yes |
+
+The GUI **Type** column is built from those planes. Before Install/Uninstall on multi-plane modules, the impact picker asks which Central-side work and which secured clusters should take effect. The orchestrator (`scripts/acs-setup.sh` / `lib/module_orchestrate.py`) fans out: one process per selected secured cluster, then at most one `central-ocp` and one `central-api` invoke. Modules must not loop secured clusters themselves.
+
+**ACSCS** (ACS Cloud Service) is hosted Central: `central-api` and `secured-cluster` still apply; anything with `central-ocp` cannot run against ACSCS Central.
+
+Details for authors: [ADDING-A-MODULE.md](ADDING-A-MODULE.md) (Planes and multi-SC). Fleet rename tracker (temporary): [IMPACT-PLANES-RENAME.md](IMPACT-PLANES-RENAME.md).
+
 ## Run the GUI
 
 ```bash

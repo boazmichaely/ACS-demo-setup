@@ -28,32 +28,32 @@ Credentials come from **Central's OpenShift** \`openshift-config/pull-secret\`
 - Public Google Artifact Registry \`us-central1-docker.pkg.dev\` (anonymous;
   so ms-demo Online Boutique images can be scanned)
 
-Catalog: \`impactPlanes: ["central"]\`. Pull-secret is always read from
-**Central's OpenShift** (not from a selected secured cluster).
+Catalog: \`impactPlanes: ["central-api", "central-ocp"]\` (not ACSCS-safe).
+Pull-secret is read from **Central's OpenShift** (not from a secured cluster).
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]...
-$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api|central-ocp] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api|central-ocp] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api|central-ocp] [--secured-cluster-id ID]...
 \`\`\`
 
 ## Flags
 
-- \`--plane central\` - implied; accepted as a no-op
-- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--plane central-ocp\` - read Central OpenShift pull-secret via \`oc\`, cache robot credentials for \`central-api\` (no Central API)
+- \`--plane central-api\` - create/update Central image integrations from that cache (no \`oc\`; run \`central-ocp\` first when split)
+- omit \`--plane\` / legacy \`central\` - both in one process (oc then API; refreshes cache)
+- \`--plane secured-cluster\` - ignored (Central-side; warn on stderr)
 - \`--secured-cluster-id ID\` - ignored (integrations are Central-global; warn)
 - \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
 
-One fold per registry integration in Central:
-
-- \`quay.io\` - present / configured from Central OCP pull-secret
-- \`registry.redhat.io\` - same
-- Google Artifact Registry endpoint - anonymous public registry
+- \`central-ocp\`: Central OpenShift \`openshift-config/pull-secret\` hosts
+- \`central-api\` / both: one fold per registry integration in Central
+  (\`quay.io\`, \`registry.redhat.io\`, Google Artifact Registry)
 
 ## Pre Conditions
 
@@ -61,13 +61,22 @@ none
 
 ## Side effects
 
-- \`--run\` creates or updates image integrations in Central
+- \`--run\` (\`central-ocp\`): validates pull-secret and writes \`.cache/registries-pull-secret.json\`
+- \`--run\` (\`central-api\`): creates or updates image integrations from the cache (Central API only)
+- \`--run\` (both / omit \`--plane\`): oc pull-secret + Central API in one process
 - \`--uninstall\` is not supported (refuses rather than guessing how to undo integrations)
 EOF
 }
 
+# Orchestrator may set --plane central-api|central-ocp (empty = both).
+REG_PLANE=""
+
 run_helper() {
-  "$PYTHON" "$HELPER" "$@"
+  if [[ -n "${REG_PLANE}" ]]; then
+    "$PYTHON" "$HELPER" "$@" --plane "${REG_PLANE}"
+  else
+    "$PYTHON" "$HELPER" "$@"
+  fi
 }
 
 # Print status lines from the helper; last tab-separated row is id/state/message.
@@ -173,8 +182,8 @@ uninstall_module() {
   do_uninstall
 }
 
-# shellcheck source=_central_only_orch_flags.sh
-source "${ROOT}/modules/_central_only_orch_flags.sh"
+# shellcheck source=_central_side_orch_flags.sh
+source "${ROOT}/modules/_central_side_orch_flags.sh"
 
 main() {
   local action="" dry_run=false
@@ -191,12 +200,17 @@ main() {
       --plane)
         shift
         [[ $# -gt 0 ]] || { echo "${prog}: --plane needs a value" >&2; exit 1; }
-        central_only_handle_plane "$prog" "$1" || exit 1
+        central_side_handle_plane "$prog" "$1" || exit 1
+        case "$1" in
+          central-api|central-ocp) REG_PLANE="$1" ;;
+          central) REG_PLANE="" ;; # legacy both
+          *) ;; # ignored secured-cluster etc.
+        esac
         ;;
       --secured-cluster-id)
         shift
         [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster-id needs an id" >&2; exit 1; }
-        central_only_ignore_sc_id "$prog" "$1"
+        central_side_ignore_sc_id "$prog" "$1"
         ;;
       *)
         echo "${prog}: unknown option: $1" >&2

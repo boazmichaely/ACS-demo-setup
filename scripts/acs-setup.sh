@@ -25,14 +25,15 @@ Options:
   --json          With --status: emit JSON array (for GUI)
   --dry-run       With --run or --uninstall: planned actions only
   --secured-cluster-id ID
-                  Repeatable. When set with --module, fan out OpenShift N then
-                  Central 1 (module must accept --plane / --secured-cluster-id).
+                  Repeatable. When set with --module, fan out secured-cluster N
+                  then central-ocp / central-api as listed in the catalog
+                  (module must accept --plane / --secured-cluster-id).
                   When omitted: one invoke, no new flags (legacy behavior),
-                  unless --include-central alone (Central plane only).
+                  unless --include-central alone (Central planes only).
   --include-central
-                  Run the Central plane (with or without SC ids).
+                  Run Central planes (central-api / central-ocp) with or without SC ids.
   --skip-central
-                  OpenShift fan-out only; do not run the Central plane.
+                  secured-cluster fan-out only; skip Central planes.
 
 OpenShift (active lab; lab-credentials.json is source of truth):
   --oc-status     Is oc ready for the active lab? (OK/PROBLEM + next step)

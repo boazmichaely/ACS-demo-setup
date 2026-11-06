@@ -12,7 +12,7 @@ CO_CSV_TIMEOUT_SECONDS=600
 CO_ROLLOUT_TIMEOUT_SECONDS=240
 CO_PATCH_NODE_SELECTOR=false
 CO_SECURED_CLUSTER=""
-# Orchestrator plane: "" | central | openshift (empty = both in one process).
+# Orchestrator plane: "" | central-api | secured-cluster (empty = both; legacy central|openshift).
 CO_PLANE=""
 # Lab secured-cluster ids for this invoke (OpenShift: 0-1; Central: 0-N).
 CO_SC_IDS=()
@@ -633,8 +633,8 @@ compliance_operator_run() {
   local do_oc=true do_central=true
 
   case "${CO_PLANE}" in
-    openshift) do_central=false ;;
-    central) do_oc=false ;;
+    secured-cluster|openshift) do_central=false ;;
+    central-api|central) do_oc=false ;;
   esac
 
   if [[ "$do_oc" == "true" ]]; then
@@ -796,8 +796,8 @@ compliance_operator_uninstall() {
   local do_oc=true do_central=true
 
   case "${CO_PLANE}" in
-    openshift) do_central=false ;;
-    central) do_oc=false ;;
+    secured-cluster|openshift) do_central=false ;;
+    central-api|central) do_oc=false ;;
   esac
 
   # Orchestrator order for both: OpenShift N then Central. Single-process

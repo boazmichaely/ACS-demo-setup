@@ -29,21 +29,21 @@ override notifier name, webhook, and channel URL.
 ping (lab name, Central host, secured cluster) via the Incoming Webhook,
 then attaches this notifier to every Central policy with category **DEMO**.
 
-Catalog: \`impactPlanes: ["central"]\` (Central API only).
+Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central] [--secured-cluster-id ID]... [--webhook URL] [--name NAME] [--channel-url URL]
-$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]... [--webhook URL] [--name NAME] [--channel-url URL]
-$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]... [--webhook URL] [--name NAME] [--channel-url URL]
+$(basename "$0") --status [--plane central-api] [--secured-cluster-id ID]... [--webhook URL] [--name NAME] [--channel-url URL]
+$(basename "$0") --run [--dry-run] [--plane central-api] [--secured-cluster-id ID]... [--webhook URL] [--name NAME] [--channel-url URL]
+$(basename "$0") --uninstall [--dry-run] [--plane central-api] [--secured-cluster-id ID]... [--webhook URL] [--name NAME] [--channel-url URL]
 \`\`\`
 
 ## Flags
 
-- \`--plane central\` - implied; accepted as a no-op
-- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--plane central-api\` - implied; accepted as a no-op (legacy \`central\` also accepted)
+- \`--plane secured-cluster\` / \`central-ocp\` - ignored (central-api-only; warn on stderr)
 - \`--secured-cluster-id ID\` - ignored (notifier is Central-global; warn)
 - \`--webhook URL\` - Override Incoming Webhook for this invocation
 - \`--name NAME\` - Override Central notifier display name

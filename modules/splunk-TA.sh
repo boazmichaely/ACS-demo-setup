@@ -12,7 +12,7 @@ usage() {
 
 Deploy Splunk Operator and a Splunk Free Standalone on the lab OpenShift
 cluster, expose Splunk Web, and install the RHACS Splunkbase Technology
-Add-on (TA) from a local \`.tgz\`. Catalog: \`impactPlanes: ["openshift"]\`.
+Add-on (TA) from a local \`.tgz\`. Catalog: \`impactPlanes: ["secured-cluster"]\`.
 
 With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
 soft-default SC.
@@ -25,14 +25,14 @@ Splunk UI after install - see
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane openshift] [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--plane openshift] [--secured-cluster-id ID] [--ta-dir DIR] [--skip-ta]
-$(basename "$0") --uninstall [--dry-run] [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane secured-cluster] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID] [--ta-dir DIR] [--skip-ta]
+$(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--plane openshift\` - implied; accepted. \`--plane central\` is rejected
+- \`--plane secured-cluster\` - implied; accepted (legacy \`openshift\` also). \`--plane central-api\` / \`central-ocp\` is rejected
   (Splunk Operator/lab live on OpenShift; Central is configured in Splunk UI later)
 - \`--secured-cluster-id ID\` - install on that lab SC (at most one). Soft-default
   SC when omitted
@@ -119,12 +119,12 @@ main() {
       --skip-ta) STA_SKIP_TA=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs secured-cluster" >&2; exit 1; }
         plane="$1"
         case "$plane" in
-          openshift) ;;
+          secured-cluster|openshift) ;;
           *)
-            echo "$(basename "$0"): OpenShift-only module; --plane must be openshift (got ${plane})" >&2
+            echo "$(basename "$0"): secured-cluster-only module; --plane must be secured-cluster (got ${plane})" >&2
             exit 1
             ;;
         esac

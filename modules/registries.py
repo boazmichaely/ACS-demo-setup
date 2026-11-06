@@ -30,6 +30,28 @@ RHEL_INTEGRATION_NAME = "registry.redhat.io"
 GAR_INTEGRATION_NAME = "Public Google Artifact Registry (us-central1)"
 GAR_ENDPOINT = "us-central1-docker.pkg.dev"
 REQUIRED_PULL_SECRET_HOSTS = ("quay.io", "registry.redhat.io")
+# Written by central-ocp; read by central-api. Gitignored under .cache/.
+PULL_SECRET_CACHE = ROOT / ".cache" / "registries-pull-secret.json"
+
+
+def normalize_plane(raw: str | None) -> str | None:
+    """Return canonical plane or None (both planes in one process)."""
+    s = (raw or "").strip().lower().replace("_", "-")
+    if not s:
+        return None
+    if s == "central":
+        return None  # legacy: both
+    if s in ("central-api", "central-ocp"):
+        return s
+    raise ValueError(f"unsupported plane {raw!r} (want central-api|central-ocp or omit)")
+
+
+def want_central_ocp(plane: str | None) -> bool:
+    return plane is None or plane == "central-ocp"
+
+
+def want_central_api(plane: str | None) -> bool:
+    return plane is None or plane == "central-api"
 
 
 def run_oc_json(args: list[str]) -> Any:
@@ -221,7 +243,160 @@ def rescan_unscanned_gar_images(
     return log
 
 
-def evaluate() -> dict[str, Any]:
+def _load_pull_secret_bundle_from_oc(creds: dict[str, Any]) -> dict[str, Any]:
+    """central-ocp only: ensure_oc(_central) + required hosts. Raises RuntimeError with phase hint."""
+    try:
+        ensure_oc(creds, secured_cluster_id=CENTRAL_ONLY_SC_ID)
+    except RuntimeError as exc:
+        raise RuntimeError(f"central-ocp:{exc}") from exc
+    try:
+        auths = load_pull_secret_auths()
+    except RuntimeError as exc:
+        raise RuntimeError(f"pull-secret:{exc}") from exc
+    missing_hosts = [host for host in REQUIRED_PULL_SECRET_HOSTS if host not in auths]
+    if missing_hosts:
+        raise RuntimeError(
+            "pull-secret:missing hosts: "
+            + ", ".join(missing_hosts)
+            + f"|present:{','.join(h for h in REQUIRED_PULL_SECRET_HOSTS if h in auths)}"
+        )
+    quay_user, quay_password = auth_entry(auths, "quay.io")
+    rhel_user, rhel_password = auth_entry(auths, "registry.redhat.io")
+    return {
+        "quayUser": quay_user,
+        "quayPassword": quay_password,
+        "rhelUser": rhel_user,
+        "rhelPassword": rhel_password,
+        "pullSecretPresentHosts": list(REQUIRED_PULL_SECRET_HOSTS),
+        "pullSecretHosts": {
+            "quay.io": {
+                "authPresent": True,
+                "hasUsername": bool(quay_user),
+                "hasPassword": bool(quay_password),
+            },
+            "registry.redhat.io": {
+                "authPresent": True,
+                "hasUsername": bool(rhel_user),
+                "hasPassword": bool(rhel_password),
+            },
+        },
+    }
+
+
+def write_pull_secret_cache(bundle: dict[str, Any]) -> None:
+    """Persist robot credentials for a following central-api invoke (mode 0600)."""
+    PULL_SECRET_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "quayUser": bundle["quayUser"],
+        "quayPassword": bundle["quayPassword"],
+        "rhelUser": bundle["rhelUser"],
+        "rhelPassword": bundle["rhelPassword"],
+        "pullSecretPresentHosts": bundle["pullSecretPresentHosts"],
+        "pullSecretHosts": bundle["pullSecretHosts"],
+    }
+    PULL_SECRET_CACHE.write_text(json.dumps(payload), encoding="utf-8")
+    PULL_SECRET_CACHE.chmod(0o600)
+
+
+def read_pull_secret_cache() -> dict[str, Any]:
+    """central-api only: credentials left by central-ocp (or a prior combined run)."""
+    if not PULL_SECRET_CACHE.is_file():
+        raise RuntimeError(
+            "pull-secret-cache:missing - run central-ocp first "
+            "(or omit --plane so both planes run in one process)"
+        )
+    try:
+        payload = json.loads(PULL_SECRET_CACHE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"pull-secret-cache:unreadable ({exc})") from exc
+    for key in ("quayUser", "quayPassword", "rhelUser", "rhelPassword"):
+        if not str(payload.get(key) or "").strip():
+            raise RuntimeError(f"pull-secret-cache:incomplete (missing {key})")
+    hosts = payload.get("pullSecretHosts") or {}
+    present = payload.get("pullSecretPresentHosts") or list(REQUIRED_PULL_SECRET_HOSTS)
+    return {
+        "quayUser": payload["quayUser"],
+        "quayPassword": payload["quayPassword"],
+        "rhelUser": payload["rhelUser"],
+        "rhelPassword": payload["rhelPassword"],
+        "pullSecretPresentHosts": list(present),
+        "pullSecretHosts": hosts,
+    }
+
+
+def resolve_pull_secret_bundle(
+    plane: str | None, creds: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    central-ocp / combined: read via oc and refresh cache.
+    central-api alone: read cache only (never oc).
+    """
+    if plane == "central-api":
+        return read_pull_secret_cache()
+    bundle = _load_pull_secret_bundle_from_oc(creds)
+    write_pull_secret_cache(bundle)
+    return bundle
+
+
+def _phase_error_from_bundle(exc: RuntimeError, *, central: str = "") -> dict[str, Any]:
+    msg = str(exc)
+    out: dict[str, Any] = {"state": "error", "message": msg}
+    if central:
+        out["central"] = central
+    if msg.startswith("central-ocp:"):
+        out["errorPhase"] = "central-ocp"
+        out["message"] = msg[len("central-ocp:") :]
+        return out
+    if msg.startswith("pull-secret-cache:"):
+        out["errorPhase"] = "pull-secret"
+        out["message"] = msg[len("pull-secret-cache:") :]
+        return out
+    if msg.startswith("pull-secret:missing hosts:"):
+        rest = msg[len("pull-secret:missing hosts:") :]
+        missing_part, _, present_part = rest.partition("|present:")
+        out["errorPhase"] = "pull-secret"
+        out["message"] = f"pull-secret missing hosts: {missing_part}"
+        out["pullSecretMissingHosts"] = [
+            h.strip() for h in missing_part.split(",") if h.strip()
+        ]
+        out["pullSecretPresentHosts"] = [
+            h.strip() for h in present_part.split(",") if h.strip()
+        ]
+        return out
+    if msg.startswith("pull-secret:"):
+        out["errorPhase"] = "pull-secret"
+        out["message"] = msg[len("pull-secret:") :]
+        return out
+    out["errorPhase"] = "central-ocp"
+    return out
+
+
+def evaluate_ocp_only() -> dict[str, Any]:
+    """central-ocp plane: pull-secret via oc, refresh cache, no Central API."""
+    creds = load_lab_credentials()
+    try:
+        bundle = resolve_pull_secret_bundle("central-ocp", creds)
+    except RuntimeError as exc:
+        return _phase_error_from_bundle(exc)
+    return {
+        "state": "ok",
+        "message": (
+            "Central OpenShift pull-secret has quay.io and registry.redhat.io "
+            "(cached for central-api)"
+        ),
+        "plane": "central-ocp",
+        "pullSecretPresentHosts": bundle["pullSecretPresentHosts"],
+        "pullSecretHosts": bundle["pullSecretHosts"],
+        "ocpOnly": True,
+    }
+
+
+def evaluate(*, plane: str | None = None) -> dict[str, Any]:
+    plane = normalize_plane(plane)
+
+    if want_central_ocp(plane) and not want_central_api(plane):
+        return evaluate_ocp_only()
+
     creds = load_lab_credentials()
     base, authorization = central_connection(creds)
 
@@ -230,46 +405,20 @@ def evaluate() -> dict[str, Any]:
         return {
             "state": "error",
             "message": auth_error,
-            "errorPhase": "central",
+            "errorPhase": "central-api",
             "central": base,
         }
 
+    # central-api alone: cache only. Combined (plane None): oc + cache, then API.
     try:
-        # Central-global integrations: always read pull-secret from Central's OCP.
-        ensure_oc(creds, secured_cluster_id=CENTRAL_ONLY_SC_ID)
+        bundle = resolve_pull_secret_bundle(plane if plane else None, creds)
     except RuntimeError as exc:
-        return {
-            "state": "error",
-            "message": str(exc),
-            "errorPhase": "openshift",
-            "central": base,
-        }
+        return _phase_error_from_bundle(exc, central=base)
 
-    try:
-        auths = load_pull_secret_auths()
-    except RuntimeError as exc:
-        return {
-            "state": "error",
-            "message": str(exc),
-            "errorPhase": "pull-secret",
-            "central": base,
-        }
-
-    missing_hosts = [host for host in REQUIRED_PULL_SECRET_HOSTS if host not in auths]
-    if missing_hosts:
-        return {
-            "state": "error",
-            "message": f"pull-secret missing hosts: {', '.join(missing_hosts)}",
-            "errorPhase": "pull-secret",
-            "central": base,
-            "pullSecretMissingHosts": missing_hosts,
-            "pullSecretPresentHosts": [
-                host for host in REQUIRED_PULL_SECRET_HOSTS if host in auths
-            ],
-        }
-
-    quay_user, quay_password = auth_entry(auths, "quay.io")
-    rhel_user, rhel_password = auth_entry(auths, "registry.redhat.io")
+    quay_user = bundle["quayUser"]
+    quay_password = bundle["quayPassword"]
+    rhel_user = bundle["rhelUser"]
+    rhel_password = bundle["rhelPassword"]
     integrations = list_integrations(base, authorization, creds=creds)
     quay = find_quay_integration(integrations)
     rhel = find_rhel_integration(integrations)
@@ -281,6 +430,7 @@ def evaluate() -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "central": base,
+        "plane": plane or "both",
         "quayIntegrationId": quay.get("id") if quay else None,
         "rhelIntegrationId": rhel.get("id") if rhel else None,
         "garIntegrationId": gar.get("id") if gar else None,
@@ -294,20 +444,8 @@ def evaluate() -> dict[str, Any]:
         "rhelUser": rhel_user,
         "quayPassword": quay_password,
         "rhelPassword": rhel_password,
-        "pullSecretPresentHosts": list(REQUIRED_PULL_SECRET_HOSTS),
-        # Presence-only facts for Status folds (never emit values).
-        "pullSecretHosts": {
-            "quay.io": {
-                "authPresent": True,
-                "hasUsername": bool(quay_user),
-                "hasPassword": bool(quay_password),
-            },
-            "registry.redhat.io": {
-                "authPresent": True,
-                "hasUsername": bool(rhel_user),
-                "hasPassword": bool(rhel_password),
-            },
-        },
+        "pullSecretPresentHosts": bundle["pullSecretPresentHosts"],
+        "pullSecretHosts": bundle["pullSecretHosts"],
     }
 
     if quay_ok and rhel_ok and gar_ok:
@@ -416,10 +554,34 @@ def build_sections(result: dict[str, Any]) -> list[dict[str, Any]]:
     message = str(result.get("message") or "").strip()
     phase = str(result.get("errorPhase") or "").strip()
 
+    if result.get("ocpOnly"):
+        host_meta = result.get("pullSecretHosts") or {}
+        body = [
+            "Plane: central-ocp (pull-secret only; no Central API)",
+            *_pull_secret_lines("quay.io", host_meta.get("quay.io")),
+            "",
+            *_pull_secret_lines("registry.redhat.io", host_meta.get("registry.redhat.io")),
+        ]
+        ok = state == "ok"
+        sections.append(
+            {
+                "group": "Central OpenShift",
+                "title": "openshift-config/pull-secret",
+                "tag": "ok" if ok else "error",
+                "tagLabel": "ready" if ok else "error",
+                "summary": "readable" if ok else "blocked",
+                "body": "\n".join(body),
+                "bodyFormat": "prose",
+            }
+        )
+        return sections
+
     if "quayConfigured" not in result:
         title = {
-            "central": "Central API",
-            "openshift": "OpenShift (oc)",
+            "central-api": "Central API",
+            "central": "Central API",  # legacy
+            "central-ocp": "Central OpenShift (oc)",
+            "openshift": "Central OpenShift (oc)",  # legacy
             "pull-secret": "Pull secret",
         }.get(phase, "Status check")
         body_lines = [message or "Unable to evaluate registry integrations."]
@@ -487,10 +649,33 @@ def build_sections(result: dict[str, Any]) -> list[dict[str, Any]]:
     return sections
 
 
-def apply(*, dry_run: bool) -> dict[str, Any]:
-    status = evaluate()
+def apply(*, dry_run: bool, plane: str | None = None) -> dict[str, Any]:
+    plane = normalize_plane(plane)
+    status = evaluate(plane=plane)
     if status["state"] == "error":
         return status
+
+    # central-ocp plane: validate pull-secret only (no Central API mutations).
+    if want_central_ocp(plane) and not want_central_api(plane):
+        msg = (
+            "central-ocp: pull-secret ready and cached for central-api "
+            "(no Central API changes)"
+        )
+        if dry_run:
+            return {
+                **status,
+                "state": "ok",
+                "message": f"dry-run: {msg}",
+                "actions": [msg],
+                "log": ["Planned changes:", f"  - {msg}"],
+            }
+        return {
+            **status,
+            "state": "ok",
+            "message": msg,
+            "log": [msg],
+        }
+
     if status["state"] == "ok":
         return {
             **status,
@@ -607,7 +792,7 @@ def apply(*, dry_run: bool) -> dict[str, Any]:
         log.append(f"{action} {GAR_INTEGRATION_NAME}")
         log.extend(rescan_unscanned_gar_images(base, token, creds=creds))
 
-    final = evaluate()
+    final = evaluate(plane=plane)
     if final.get("state") == "ok":
         final["log"] = log or [
             "Applied registry integrations (pull-secret + public Artifact Registry)."
@@ -635,14 +820,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "run"])
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--plane",
+        default="",
+        help="central-api | central-ocp (omit = both; legacy central = both)",
+    )
     parser.add_argument("--cli", action="store_true", help="Print human output and TSV for shell wrapper")
     args = parser.parse_args()
 
     try:
+        plane = normalize_plane(args.plane)
         if args.command == "status":
-            result = evaluate()
+            result = evaluate(plane=plane)
         else:
-            result = apply(dry_run=args.dry_run)
+            result = apply(dry_run=args.dry_run, plane=plane)
+    except ValueError as exc:
+        result = {"state": "error", "message": str(exc), "errorPhase": "status"}
     except Exception as exc:  # noqa: BLE001 - module status contract
         result = {"state": "error", "message": str(exc), "errorPhase": "status"}
 

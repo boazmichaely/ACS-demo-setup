@@ -3,7 +3,8 @@
 When no secured-cluster ids are passed, callers must invoke the module once
 with no new flags (identical to pre-fan-out behavior).
 
-When ids are passed, build OpenShift-N then Central-1 argv extras and env.
+When ids are passed, build secured-cluster-N then central-ocp / central-api
+argv extras and env (catalog ``planeOrder`` may reverse SC vs Central sides).
 """
 
 from __future__ import annotations
@@ -16,6 +17,16 @@ from typing import Any
 from lib.central import load_lab_document, repo_root
 from lib.lab_doc import active_lab
 from lib.openshift import CENTRAL_ONLY_SC_ID
+
+# Canonical impact plane ids (catalog + --plane).
+PLANE_SECURED_CLUSTER = "secured-cluster"
+PLANE_CENTRAL_API = "central-api"
+PLANE_CENTRAL_OCP = "central-ocp"
+VALID_PLANES = frozenset(
+    {PLANE_SECURED_CLUSTER, PLANE_CENTRAL_API, PLANE_CENTRAL_OCP}
+)
+CENTRAL_PLANES = (PLANE_CENTRAL_OCP, PLANE_CENTRAL_API)  # ocp before api
+
 
 @dataclass(frozen=True)
 class ModuleInvocation:
@@ -44,18 +55,31 @@ def impact_planes(row: dict[str, Any]) -> list[str]:
         return []
     out: list[str] = []
     for p in planes:
-        s = str(p).strip().lower()
-        if s in ("central", "openshift") and s not in out:
+        s = str(p).strip().lower().replace("_", "-")
+        # Legacy aliases from the openshift/central era.
+        if s in ("openshift", "sc"):
+            s = PLANE_SECURED_CLUSTER
+        elif s == "central":
+            s = PLANE_CENTRAL_API
+        if s in VALID_PLANES and s not in out:
             out.append(s)
     return out
 
 
 def plane_order(row: dict[str, Any]) -> str:
-    """Return ``openshift-then-central`` (default) or ``central-then-openshift``."""
+    """Return ``secured-cluster-then-central`` (default) or ``central-then-secured-cluster``."""
     raw = str(row.get("planeOrder") or "").strip().lower().replace("_", "-")
-    if raw in ("central-then-openshift", "central-first"):
-        return "central-then-openshift"
-    return "openshift-then-central"
+    if raw in (
+        "central-then-secured-cluster",
+        "central-then-openshift",  # legacy
+        "central-first",
+    ):
+        return "central-then-secured-cluster"
+    return "secured-cluster-then-central"
+
+
+def has_central_plane(planes: list[str]) -> bool:
+    return any(p in planes for p in (PLANE_CENTRAL_API, PLANE_CENTRAL_OCP))
 
 
 def _sc_name_by_id(sc_id: str, root: Path | None = None) -> str:
@@ -78,23 +102,30 @@ def _sc_name_by_id(sc_id: str, root: Path | None = None) -> str:
     )
 
 
-def _openshift_invocation(sc_id: str, root: Path | None = None) -> ModuleInvocation:
+def _secured_cluster_invocation(sc_id: str, root: Path | None = None) -> ModuleInvocation:
     name = _sc_name_by_id(sc_id, root)
     return ModuleInvocation(
-        plane="openshift",
+        plane=PLANE_SECURED_CLUSTER,
         sc_ids=(sc_id,),
         env={
-            "ACS_DEMO_PLANE": "openshift",
+            "ACS_DEMO_PLANE": PLANE_SECURED_CLUSTER,
             "ACS_DEMO_SC_ID": sc_id,
             "ACS_DEMO_SC_NAME": name,
         },
-        argv_extra=("--plane", "openshift", "--secured-cluster-id", sc_id),
+        argv_extra=(
+            "--plane",
+            PLANE_SECURED_CLUSTER,
+            "--secured-cluster-id",
+            sc_id,
+        ),
     )
 
 
-def _central_invocation(sc_ids: list[str], root: Path | None = None) -> ModuleInvocation:
-    argv: list[str] = ["--plane", "central"]
-    env: dict[str, str] = {"ACS_DEMO_PLANE": "central"}
+def _central_plane_invocation(
+    plane: str, sc_ids: list[str], root: Path | None = None
+) -> ModuleInvocation:
+    argv: list[str] = ["--plane", plane]
+    env: dict[str, str] = {"ACS_DEMO_PLANE": plane}
     ids = tuple(sc_ids)
     if ids:
         # Primary env points at the first id; modules that need the full set
@@ -104,7 +135,7 @@ def _central_invocation(sc_ids: list[str], root: Path | None = None) -> ModuleIn
         for sid in ids:
             argv.extend(["--secured-cluster-id", sid])
     return ModuleInvocation(
-        plane="central",
+        plane=plane,
         sc_ids=ids,
         env=env,
         argv_extra=tuple(argv),
@@ -124,10 +155,12 @@ def plan_module_invocations(
     Empty ``sc_ids`` and ``include_central`` is None → one bare invocation
     (legacy: no new flags).
 
-    ``include_central`` True with empty ``sc_ids`` → Central plane only.
-    Non-empty ``sc_ids`` → OpenShift once per id; Central once if
-    ``include_central`` is not False and the catalog lists central.
-    Default order: all OpenShift, then Central (``planeOrder`` may reverse).
+    ``include_central`` True with empty ``sc_ids`` → Central planes only
+    (``central-ocp`` / ``central-api`` as listed in the catalog).
+    Non-empty ``sc_ids`` → secured-cluster once per id; Central planes once
+    each if ``include_central`` is not False and the catalog lists them.
+    Default order: all secured-cluster, then central-ocp, then central-api
+    (``planeOrder`` may put Central sides before secured-cluster).
     """
     if isinstance(module_row_or_id, str):
         row = module_row(module_row_or_id, root)
@@ -146,19 +179,21 @@ def plan_module_invocations(
     planes = impact_planes(row)
     want_central = False
     if include_central is True:
-        want_central = "central" in planes or not planes
+        want_central = has_central_plane(planes) or not planes
     elif include_central is False:
         want_central = False
     else:
         # Unspecified: Central when catalog has it and we are fanning out.
-        want_central = "central" in planes and bool(uniq)
+        want_central = has_central_plane(planes) and bool(uniq)
 
-    want_openshift = bool(uniq) and ("openshift" in planes or not planes)
+    want_sc = bool(uniq) and (
+        PLANE_SECURED_CLUSTER in planes or not planes
+    )
 
     if not uniq and include_central is None:
         return [ModuleInvocation(plane=None, sc_ids=(), env={}, argv_extra=())]
 
-    if not want_central and not want_openshift:
+    if not want_central and not want_sc:
         raise RuntimeError(
             "nothing to run: select Central and/or at least one secured cluster"
         )
@@ -168,10 +203,12 @@ def plan_module_invocations(
         if not uniq:
             return [
                 ModuleInvocation(
-                    plane="central" if want_central else None,
+                    plane=PLANE_CENTRAL_API if want_central else None,
                     sc_ids=(),
-                    env={"ACS_DEMO_PLANE": "central"} if want_central else {},
-                    argv_extra=("--plane", "central") if want_central else (),
+                    env={"ACS_DEMO_PLANE": PLANE_CENTRAL_API} if want_central else {},
+                    argv_extra=(
+                        ("--plane", PLANE_CENTRAL_API) if want_central else ()
+                    ),
                 )
             ]
         argv: list[str] = []
@@ -191,15 +228,18 @@ def plan_module_invocations(
         ]
 
     _ = action  # reserved if install/uninstall ever diverge on order
-    openshift_steps = (
-        [_openshift_invocation(sid, root) for sid in uniq] if want_openshift else []
+    sc_steps = (
+        [_secured_cluster_invocation(sid, root) for sid in uniq] if want_sc else []
     )
-    central_steps = (
-        [_central_invocation(uniq, root)] if want_central else []
-    )
-    if plane_order(row) == "central-then-openshift":
-        return central_steps + openshift_steps
-    return openshift_steps + central_steps
+    central_steps: list[ModuleInvocation] = []
+    if want_central:
+        for plane in CENTRAL_PLANES:
+            if plane in planes:
+                central_steps.append(_central_plane_invocation(plane, uniq, root))
+
+    if plane_order(row) == "central-then-secured-cluster":
+        return central_steps + sc_steps
+    return sc_steps + central_steps
 
 
 def invocations_to_json(invocations: list[ModuleInvocation]) -> str:
@@ -241,12 +281,12 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument(
         "--include-central",
         action="store_true",
-        help="Run Central plane (alone or after OpenShift)",
+        help="Run Central planes (central-api / central-ocp) alone or after SC",
     )
     g.add_argument(
         "--skip-central",
         action="store_true",
-        help="Do not run Central plane even if the catalog lists it",
+        help="Do not run Central planes even if the catalog lists them",
     )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     include_central: bool | None

@@ -53,26 +53,26 @@ Prepare an ACS guest-vulnerability demo on OpenShift Virtualization:
 
 Talk track: \`modules/virt-vm-demo.md\`
 
-Catalog: \`impactPlanes: ["central","openshift"]\`.
+Catalog: \`impactPlanes: ["central-api","central-ocp","secured-cluster"]\`.
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api|central-ocp|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api|central-ocp|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api|central-ocp|secured-cluster] [--secured-cluster-id ID]...
 \`\`\`
 
 ## Flags
 
-- \`--plane openshift\` - SecuredCluster CR flags, CNV, project \`${NS}\` VMs + agent
-  on the selected (or soft-default) SC
-- \`--plane central\` - Central CR \`ROX_VIRTUAL_MACHINES\` on **Central's OpenShift**
-  (\`_central\`); wait for CVE findings via Central API
-- omit \`--plane\` - both in one process (legacy / bare CLI)
-- \`--secured-cluster-id ID\` - OpenShift plane: at most one lab SC for CNV/VMs/SC CR.
-  Soft-default when omitted. Not used for Central CR (always Central OCP)
+- \`--plane secured-cluster\` - SecuredCluster CR flags, CNV, project \`${NS}\` VMs + agent
+  on the selected (or soft-default) SC (legacy \`openshift\`)
+- \`--plane central-ocp\` - Central CR \`ROX_VIRTUAL_MACHINES\` on **Central's OpenShift** (\`_central\`)
+- \`--plane central-api\` - wait for CVE findings via Central API
+- omit \`--plane\` - all catalog planes in one process (legacy / bare CLI)
+- \`--secured-cluster-id ID\` - secured-cluster plane: at most one lab SC for CNV/VMs/SC CR.
+  Soft-default when omitted. Not used for central-ocp (always Central OCP)
 - \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
@@ -88,19 +88,24 @@ none
 
 ## Side effects
 
-- \`--run\` OpenShift: SecuredCluster flags, CNV, \`${NS}\` VMs + agent
-- \`--run\` Central: Central CR flag on Central OCP; wait for CVE findings
-- \`--uninstall\` deletes project \`${NS}\` (OpenShift plane); leaves CNV and ACS flags
+- \`--run\` secured-cluster: SecuredCluster flags, CNV, \`${NS}\` VMs + agent
+- \`--run\` central-ocp: Central CR flag on Central OCP
+- \`--run\` central-api: wait for CVE findings
+- \`--uninstall\` deletes project \`${NS}\` (secured-cluster plane); leaves CNV and ACS flags
 EOF
 }
 
-# Orchestrator: --plane central|openshift; OpenShift plane ≤1 SC id.
+# Orchestrator: --plane central-api|central-ocp|secured-cluster; SC plane ≤1 SC id.
 VIRT_PLANE=""
 VIRT_SC_IDS=()
 VIRT_SC_ID=""
 
-want_openshift() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "openshift" ]]; }
-want_central() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "central" ]]; }
+want_secured_cluster() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "secured-cluster" || "${VIRT_PLANE}" == "openshift" ]]; }
+want_openshift() { want_secured_cluster; }  # legacy alias
+want_central_ocp() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "central-ocp" || "${VIRT_PLANE}" == "central" ]]; }
+want_central_api() { [[ -z "${VIRT_PLANE}" || "${VIRT_PLANE}" == "central-api" || "${VIRT_PLANE}" == "central" ]]; }
+# want_central: true when this invoke should do any Central-side work
+want_central() { want_central_ocp || want_central_api; }
 
 # Soft-default / selected SC (CNV, VMs, SecuredCluster CR).
 # Pass an explicit id (e.g. _central) to override VIRT_SC_ID.
@@ -204,7 +209,7 @@ vm_names() {
 
 acs_flags_applied() {
   local central_env="" secured_env="" poll=""
-  if want_central; then
+  if want_central_ocp; then
     ensure_oc_central || return 1
     resolve_central_cr || return 1
     central_env="$(oc -n "${CENTRAL_NS}" get central "${CENTRAL_NAME}" -o jsonpath='{.spec.customize.envVars[?(@.name=="ROX_VIRTUAL_MACHINES")].value}' 2>/dev/null || true)"
@@ -225,7 +230,7 @@ apply_acs_flags() {
     echo "Would patch ACS flags (plane=${VIRT_PLANE:-both}): ROX_VIRTUAL_MACHINES / scraper ${POLL_INTERVAL}"
     return 0
   fi
-  if want_central; then
+  if want_central_ocp; then
     ensure_oc_central || return 1
     resolve_central_cr || return 1
     echo "${MODULE_ID}: patching Central ${CENTRAL_NS}/${CENTRAL_NAME} on Central OpenShift"
@@ -773,7 +778,7 @@ do_status() {
   else
     vms_ok=true
   fi
-  if want_central; then
+  if want_central_api; then
     count="$(central_vm_count)"
     scanned="$(central_scanned_count)"
     findings="$(central_findings_count)"
@@ -801,14 +806,14 @@ do_status() {
     fi
   elif want_openshift; then
     if $cnv_ok && $flags_ok && $vms_ok; then
-      printf '%s\tok\t%s/%s VMs Running (openshift plane)\n' "$MODULE_ID" "$ready" "$VM_EXPECTED"
+      printf '%s\tok\t%s/%s VMs Running (secured-cluster plane)\n' "$MODULE_ID" "$ready" "$VM_EXPECTED"
     else
       printf '%s\tneeds-run\tCNV=%s flags=%s VMs=%s/%s\n' \
         "$MODULE_ID" "$cnv_ok" "$flags_ok" "$ready" "$VM_EXPECTED"
     fi
   else
     if $flags_ok && [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
-      printf '%s\tok\tCVE findings on %s/%s VMs (central plane)\n' \
+      printf '%s\tok\tCVE findings on %s/%s VMs (central-api/ocp plane)\n' \
         "$MODULE_ID" "$findings" "$VM_EXPECTED"
     elif $flags_ok; then
       printf '%s\tneeds-run\tCentral flag ok; findings %s/%s\n' \
@@ -829,7 +834,7 @@ demo_ready() {
     ready="$(count_running_vmis || echo 0)"
     [[ "$ready" -ge "$VM_EXPECTED" ]] || return 1
   fi
-  if want_central; then
+  if want_central_api; then
     count="$(central_vm_count)"
     findings="$(central_findings_count)"
     [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]] || return 1
@@ -839,8 +844,10 @@ demo_ready() {
 
 do_dry_run() {
   echo "${MODULE_ID}: dry-run (plane=${VIRT_PLANE:-both})"
-  if want_central; then
+  if want_central_ocp; then
     echo "  - Patch Central CR on Central OpenShift (ROX_VIRTUAL_MACHINES)"
+  fi
+  if want_central_api; then
     echo "  - Wait for Central CVE findings on both VMs"
   fi
   if want_openshift; then
@@ -861,7 +868,7 @@ do_run() {
     wait_vms_running false
     install_agents false
   fi
-  if want_central; then
+  if want_central_api; then
     wait_central_vms false
   fi
   echo "${MODULE_ID}: done. Talk track: ${ROOT}/modules/virt-vm-demo.md"
@@ -874,8 +881,8 @@ do_run() {
 
 do_uninstall() {
   if ! want_openshift; then
-    echo "${MODULE_ID}: central plane uninstall keeps CNV/VMs/flags (no-op)"
-    printf '%s\tok\tnothing to uninstall on central plane\n' "$MODULE_ID"
+    echo "${MODULE_ID}: central-side uninstall keeps CNV/VMs/flags (no-op)"
+    printf '%s\tok\tnothing to uninstall on central-api/ocp planes\n' "$MODULE_ID"
     return 0
   fi
   ensure_oc
@@ -889,7 +896,7 @@ do_uninstall_dry_run() {
   if want_openshift; then
     echo "${MODULE_ID}: would delete project ${NS}; CNV and ACS flags kept"
   else
-    echo "${MODULE_ID}: central plane uninstall dry-run (no-op)"
+    echo "${MODULE_ID}: central-side uninstall dry-run (no-op)"
   fi
 }
 
@@ -912,12 +919,12 @@ main() {
       --dry-run) dry_run=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central-api|central-ocp|secured-cluster" >&2; exit 1; }
         VIRT_PLANE="$1"
         case "$VIRT_PLANE" in
-          central|openshift) ;;
+          central-api|central-ocp|secured-cluster|central|openshift) ;;
           *)
-            echo "$(basename "$0"): --plane must be central or openshift" >&2
+            echo "$(basename "$0"): --plane must be central-api, central-ocp, or secured-cluster" >&2
             exit 1
             ;;
         esac
@@ -936,7 +943,7 @@ main() {
     shift
   done
 
-  if [[ "${VIRT_PLANE}" == "openshift" ]] && ((${#VIRT_SC_IDS[@]} > 1)); then
+  if [[ "${VIRT_PLANE}" == "secured-cluster" || "${VIRT_PLANE}" == "openshift" ]] && ((${#VIRT_SC_IDS[@]} > 1)); then
     echo "$(basename "$0"): OpenShift plane expects at most one --secured-cluster-id" >&2
     exit 1
   fi
