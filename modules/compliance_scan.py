@@ -3,7 +3,7 @@
 
 One Central schedule (``ocp4-cis-scan-schedule``). Selection comes from
 ``--secured-cluster-id`` (repeatable) and/or ``--secured-cluster NAME``.
-With neither, only the lab Target cluster for Setup is used. Install merges
+With neither, only the lab soft-default SC is used. Install merges
 selected Central cluster ids into the schedule; uninstall drops them (deletes
 the schedule when empty).
 """
@@ -86,7 +86,7 @@ def central_cluster_by_name(
 
 
 def _default_target_name_filter() -> str:
-    """Lab Target cluster for Setup name when no selection flags were passed."""
+    """Lab soft-default SC name when no selection flags were passed."""
     lab = active_lab(load_lab_document())
     sc = preferred_secured_cluster(lab)
     return (sc.get("name") or "").strip()
@@ -327,7 +327,7 @@ def _selection_filters() -> tuple[str, list[str]]:
     name = SECURED_CLUSTER_OVERRIDE.strip()
     if ids or name:
         return name, ids
-    # Default: Target cluster for Setup only.
+    # Default: soft-default SC only.
     return _default_target_name_filter(), []
 
 

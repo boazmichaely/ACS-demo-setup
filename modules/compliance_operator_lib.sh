@@ -73,7 +73,7 @@ for r in rows:
     if [[ -n "$CO_SECURED_CLUSTER" ]]; then
       "$py" -m lib.openshift list-secured-clusters --name "$CO_SECURED_CLUSTER"
     else
-      # Target cluster for Setup only (not every lab SC).
+      # Soft-default SC only (not every lab SC).
       "$py" - <<'PY'
 from lib.lab_doc import active_lab, preferred_secured_cluster
 from lib.central import load_lab_document

@@ -5,7 +5,7 @@ treats the operator’s interactive ``~/.kube/config`` as authoritative.
 
 **Derived cache:** kubeconfigs under ``<repo>/.cache/kubeconfigs/``:
 
-- Default (Target cluster for Setup): ``<lab-id>.kubeconfig``
+- Default (soft-default SC): ``<lab-id>.kubeconfig``
 - Per secured cluster (e.g. compliance-operator fan-out):
   ``<lab-id>__<sc-id>.kubeconfig``
 
@@ -324,7 +324,7 @@ def ensure_oc(
 ) -> Path:
     """Ensure oc talks to the active lab (or a specific secured cluster).
 
-    Default (no ``secured_cluster_id``): Target cluster for Setup → per-lab kubeconfig.
+    Default (no ``secured_cluster_id``): soft-default SC → per-lab kubeconfig.
     With ``secured_cluster_id``: that SC’s OpenShift → per-lab+SC kubeconfig.
 
     Returns the kubeconfig path and sets ``os.environ["KUBECONFIG"]`` for this process.
@@ -740,7 +740,7 @@ def main(argv: list[str] | None = None) -> int:
     p_login.add_argument(
         "--secured-cluster-id",
         default="",
-        help="Login to this secured cluster (not Target cluster for Setup)",
+        help="Login to this secured cluster (not the lab soft-default SC)",
     )
 
     p_list = sub.add_parser(

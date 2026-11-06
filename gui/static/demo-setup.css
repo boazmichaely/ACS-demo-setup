@@ -352,54 +352,6 @@ body:has(#page) {
   padding-bottom: 0.35rem;
 }
 
-.demo-setup-target {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  margin: 0 0 var(--pf-t--global--spacer--md);
-  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border-radius: var(--pf-t--global--border--radius--small);
-  border: 1px solid transparent;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.demo-setup-target.is-not-central {
-  background: #ffe5e5;
-  border-color: rgb(255, 0, 0);
-}
-
-.demo-setup-target__label {
-  font-size: var(--pf-t--global--font--size--sm);
-  font-weight: var(--pf-t--global--font--weight--bold);
-  white-space: nowrap;
-}
-
-.demo-setup-target__same {
-  margin: 0;
-}
-
-.demo-setup-target__select {
-  width: auto;
-  min-width: 12rem;
-  max-width: 20rem;
-}
-
-.demo-setup-target__select[hidden] {
-  display: none;
-}
-
-.demo-setup-target-warn {
-  color: rgb(255, 0, 0);
-  font-size: var(--pf-t--global--font--size--sm);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.demo-setup-target-warn[hidden] {
-  display: none;
-}
-
 .demo-cred-form.is-readonly input,
 .demo-cred-form.is-readonly select,
 .demo-cred-form.is-readonly textarea {

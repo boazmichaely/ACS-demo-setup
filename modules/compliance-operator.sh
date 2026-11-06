@@ -25,8 +25,8 @@ Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
 \`\`\`
 
 That runs OpenShift once per id, then Central once with the full selection.
-With no \`--secured-cluster-id\`, default is the lab **Target cluster for Setup**
-only (not every lab SC).
+With no \`--secured-cluster-id\`, default is the lab soft-default SC
+(\`activeSecuredClusterId\`) only (not every lab SC).
 
 ## Usage
 
