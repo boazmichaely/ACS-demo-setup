@@ -30,14 +30,23 @@ Part of the Users series:
 Demo script: \`modules/users-part1-ocp-demo.md\`
 (GUI: \`/help?doc=users-part1-ocp-demo\`). Status → Demo also links there.
 
+Catalog: \`impactPlanes: ["central"]\` (Central API only).
+
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status
-$(basename "$0") --run [--dry-run]
-$(basename "$0") --uninstall [--dry-run]
+$(basename "$0") --status [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]...
 \`\`\`
+
+## Flags
+
+- \`--plane central\` - implied; accepted as a no-op
+- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--secured-cluster-id ID\` - ignored (auth provider is Central-global; warn)
+- \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
 
@@ -181,8 +190,13 @@ uninstall_module() {
   do_uninstall
 }
 
+# shellcheck source=_central_only_orch_flags.sh
+source "${ROOT}/modules/_central_only_orch_flags.sh"
+
 main() {
   local action="" dry_run=false
+  local prog
+  prog="$(basename "$0")"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -191,8 +205,18 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --plane needs a value" >&2; exit 1; }
+        central_only_handle_plane "$prog" "$1" || exit 1
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster-id needs an id" >&2; exit 1; }
+        central_only_ignore_sc_id "$prog" "$1"
+        ;;
       *)
-        echo "$(basename "$0"): unknown option: $1" >&2
+        echo "${prog}: unknown option: $1" >&2
         usage >&2
         exit 1
         ;;

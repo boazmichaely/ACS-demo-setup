@@ -28,16 +28,24 @@ Credentials come from **Central's OpenShift** \`openshift-config/pull-secret\`
 - Public Google Artifact Registry \`us-central1-docker.pkg.dev\` (anonymous;
   so ms-demo Online Boutique images can be scanned)
 
-Catalog: \`impactPlanes: ["central"]\` only (no SC picker / OpenShift fan-out).
+Catalog: \`impactPlanes: ["central"]\`. Pull-secret is always read from
+**Central's OpenShift** (not from a selected secured cluster).
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status
-$(basename "$0") --run [--dry-run]
-$(basename "$0") --uninstall [--dry-run]
+$(basename "$0") --status [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]...
 \`\`\`
+
+## Flags
+
+- \`--plane central\` - implied; accepted as a no-op
+- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--secured-cluster-id ID\` - ignored (integrations are Central-global; warn)
+- \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
 
@@ -165,8 +173,13 @@ uninstall_module() {
   do_uninstall
 }
 
+# shellcheck source=_central_only_orch_flags.sh
+source "${ROOT}/modules/_central_only_orch_flags.sh"
+
 main() {
   local action="" dry_run=false
+  local prog
+  prog="$(basename "$0")"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -175,8 +188,18 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --plane needs a value" >&2; exit 1; }
+        central_only_handle_plane "$prog" "$1" || exit 1
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster-id needs an id" >&2; exit 1; }
+        central_only_ignore_sc_id "$prog" "$1"
+        ;;
       *)
-        echo "$(basename "$0"): unknown option: $1" >&2
+        echo "${prog}: unknown option: $1" >&2
         usage >&2
         exit 1
         ;;

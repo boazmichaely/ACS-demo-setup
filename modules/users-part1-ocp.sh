@@ -68,15 +68,17 @@ the lab soft-default SC.
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--secured-cluster-id ID] [--chris-ns NS]...
-$(basename "$0") --uninstall [--dry-run] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane openshift] [--secured-cluster-id ID] [--chris-ns NS]...
+$(basename "$0") --uninstall [--dry-run] [--plane openshift] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--secured-cluster-id ID\` - lab secured-cluster id (at most one)
-- \`--plane openshift\` - accepted (implied); other planes rejected
+- \`--plane openshift\` - implied; accepted. \`--plane central\` is rejected
+  (HTPasswd/IdP/RBAC are OpenShift-only; Parts 2–3 own Central)
+- \`--secured-cluster-id ID\` - create users/RBAC on that lab SC (at most one).
+  Soft-default SC when omitted. This is the cluster whose console shows Security
 - \`--chris-ns NS\` - Extra OpenShift namespace where chris gets admin
   (repeatable; always includes \`${MS_NS}\` and \`${INIT_NS}\`)
 - \`--dry-run\` - Print the plan; change nothing

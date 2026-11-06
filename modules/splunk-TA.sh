@@ -25,15 +25,17 @@ Splunk UI after install - see
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--secured-cluster-id ID] [--ta-dir DIR] [--skip-ta]
-$(basename "$0") --uninstall [--dry-run] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane openshift] [--secured-cluster-id ID] [--ta-dir DIR] [--skip-ta]
+$(basename "$0") --uninstall [--dry-run] [--plane openshift] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--secured-cluster-id ID\` - lab secured-cluster id (at most one)
-- \`--plane openshift\` - accepted (implied); other planes rejected
+- \`--plane openshift\` - implied; accepted. \`--plane central\` is rejected
+  (Splunk Operator/lab live on OpenShift; Central is configured in Splunk UI later)
+- \`--secured-cluster-id ID\` - install on that lab SC (at most one). Soft-default
+  SC when omitted
 - \`--ta-dir DIR\` - Directory with the Splunkbase \`.tgz\` (default \`~/code/Splunk\`)
 - \`--skip-ta\` - Install Operator + Standalone + Route only (no TA package)
 - \`--dry-run\` - Print the plan; change nothing

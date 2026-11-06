@@ -81,9 +81,13 @@ $(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-
 
 ## Flags
 
-- \`--plane central|openshift\` - orchestrator split (omit = both in one process)
-- \`--secured-cluster-id ID\` - OpenShift: at most one; Central: selection ignored
-  (policies are namespace-scoped). Soft-default SC when OpenShift and none passed.
+- \`--plane openshift\` - project \`${NS}\` + four upstream Deployments only
+- \`--plane central\` - upsert/delete DEMO-Init-Test policies only (Central API)
+- omit \`--plane\` - both in one process (legacy / bare CLI)
+- \`--secured-cluster-id ID\` - OpenShift plane: at most one lab SC (soft-default
+  if omitted). Central plane: accepted but ignored (policies are namespace-scoped,
+  not cluster-membership)
+- \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
 

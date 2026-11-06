@@ -46,15 +46,21 @@ Demo script: \`modules/users-part1-ocp-demo.md\`
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--secured-cluster NAME]
-$(basename "$0") --run [--dry-run] [--secured-cluster NAME]
-$(basename "$0") --uninstall [--dry-run] [--secured-cluster NAME]
+$(basename "$0") --status [--plane central] [--secured-cluster-id ID]... [--secured-cluster NAME]
+$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]... [--secured-cluster NAME]
+$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]... [--secured-cluster NAME]
 \`\`\`
 
 ## Flags
 
-- \`--secured-cluster NAME\` - ACS secured cluster name used in the scope
-  (default: the single cluster listed in Central)
+Catalog: \`impactPlanes: ["central"]\` (Central API only).
+
+- \`--plane central\` - implied; accepted as a no-op
+- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--secured-cluster-id ID\` - **lab** SC id from the orchestrator; ignored here (warn).
+  Not the same as \`--secured-cluster\`
+- \`--secured-cluster NAME\` - **ACS** secured cluster **name** used in the access
+  scope (default: the single cluster listed in Central)
 - \`--dry-run\` - Print the plan; change nothing
 
 ## Status Info
@@ -202,8 +208,13 @@ uninstall_module() {
   do_uninstall
 }
 
+# shellcheck source=_central_only_orch_flags.sh
+source "${ROOT}/modules/_central_only_orch_flags.sh"
+
 main() {
   local action="" dry_run=false
+  local prog
+  prog="$(basename "$0")"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -212,13 +223,23 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --plane needs a value" >&2; exit 1; }
+        central_only_handle_plane "$prog" "$1" || exit 1
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster-id needs an id" >&2; exit 1; }
+        central_only_ignore_sc_id "$prog" "$1"
+        ;;
       --secured-cluster)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster needs a name" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster needs a name" >&2; exit 1; }
         EXTRA_ARGS+=(--secured-cluster "$1")
         ;;
       *)
-        echo "$(basename "$0"): unknown option: $1" >&2
+        echo "${prog}: unknown option: $1" >&2
         usage >&2
         exit 1
         ;;
