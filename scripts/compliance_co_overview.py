@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
-NS = os.environ.get("COMPLIANCE_OPERATOR_NAMESPACE", "openshift-compliance")
+NS = "openshift-compliance"
 
 ACS_LABEL_MANAGED_BY = "app.kubernetes.io/managed-by"
 ACS_LABEL_CREATED_BY = "app.kubernetes.io/created-by"
@@ -1304,8 +1304,13 @@ def build_overview_sections() -> list[dict[str, Any]]:
     return sort_overview_sections(sections)
 
 
-def emit_sections_json() -> None:
-    payload = {"sections": build_overview_sections()}
+def emit_sections_json(*, cluster: str = "") -> None:
+    sections = build_overview_sections()
+    label = (cluster or "").strip()
+    if label:
+        for row in sections:
+            row["cluster"] = label
+    payload = {"sections": sections}
     print(f"ACS_SECTIONS_JSON={json.dumps(payload, separators=(',', ':'))}")
 
 
@@ -1389,9 +1394,14 @@ def main() -> None:
         action="store_true",
         help="Emit ACS_SECTIONS_JSON=... for GUI module status",
     )
+    parser.add_argument(
+        "--cluster",
+        default="",
+        help="Stamp each Status fold with this secured-cluster display name",
+    )
     args = parser.parse_args()
     if args.sections_json:
-        emit_sections_json()
+        emit_sections_json(cluster=args.cluster or "")
         return
 
     need_oc()

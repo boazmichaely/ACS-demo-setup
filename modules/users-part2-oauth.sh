@@ -16,38 +16,43 @@ fi
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# users-part2-oauth
 
-Purpose:
-  Configure Central to accept OpenShift login (openshift auth provider)
-  so the Users Part 1 people can sign into ACS with Login with OpenShift.
+Configure Central to accept OpenShift login (openshift auth provider)
+so the Users Part 1 people can sign into ACS with **Login with OpenShift**.
 
-  Part of the Users series:
-    Part 1 (OCP)   - OpenShift users + RBAC  (users-part1-ocp)
-    Part 2 (OAuth) - this module
-    Part 3 (ACS)   - ACS roles and scopes   (users-part3-acs)
+Part of the Users series:
 
-  Demo script (before/after tables for adam, boaz, chris):
-    modules/users-part1-ocp-demo.md
-    GUI: /help?doc=users-part1-ocp-demo
-  (Status → Demo also links there. Part 2 enables Login with OpenShift.)
+- Part 1 (OCP) - OpenShift users + RBAC (\`users-part1-ocp\`)
+- Part 2 (OAuth) - this module
+- Part 3 (ACS) - ACS roles and scopes (\`users-part3-acs\`)
 
-Depends on:
-  users-part1-ocp (catalog; needed for end-to-end login demos)
-  Lab credentials with Central API access
+Demo script: \`modules/users-part1-ocp-demo.md\`
+(GUI: \`/help?doc=users-part1-ocp-demo\`). Status → Demo also links there.
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  ACS_DEMO_PYTHON            Override Python interpreter
+## Usage
 
-Side effects:
-  --run ensures one openshift-type auth provider on Central
-    (creates name OpenShift when missing)
-  --uninstall deletes that openshift-type auth provider
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status
+$(basename "$0") --run [--dry-run]
+$(basename "$0") --uninstall [--dry-run]
+\`\`\`
 
+## Status Info
+
+- Central API reachability
+- OpenShift auth provider present (name and type)
+
+## Pre Conditions
+
+- \`users-part1-ocp\` installed (OpenShift users for the login demo)
+
+## Side effects
+
+- \`--run\` ensures one openshift-type auth provider on Central
+  (creates name OpenShift when missing)
+- \`--uninstall\` deletes that openshift-type auth provider
 EOF
 }
 

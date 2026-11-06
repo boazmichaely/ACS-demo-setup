@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -76,10 +75,14 @@ def find_openshift_provider(
     return None
 
 
+# Set from --secured-cluster before status/run/uninstall.
+SECURED_CLUSTER_OVERRIDE = ""
+
+
 def resolve_cluster_name(
     base: str, authorization: str, *, creds: dict[str, Any]
 ) -> str:
-    override = os.environ.get("ACS_SECURED_CLUSTER_NAME", "").strip()
+    override = SECURED_CLUSTER_OVERRIDE.strip()
     if override:
         return override
     code, body = central_request(
@@ -93,9 +96,9 @@ def resolve_cluster_name(
         if name:
             return name
     raise RuntimeError(
-        "Could not resolve the ACS secured cluster name. Set "
-        "ACS_SECURED_CLUSTER_NAME to the name shown under ACS → "
-        "Platform Configuration → Clusters."
+        "Could not resolve the ACS secured cluster name. Pass "
+        "--secured-cluster NAME (the name shown under ACS → "
+        "Platform Configuration → Clusters)."
     )
 
 
@@ -1031,11 +1034,18 @@ def print_cli(result: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    global SECURED_CLUSTER_OVERRIDE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["status", "run", "uninstall"])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--cli", action="store_true")
+    parser.add_argument(
+        "--secured-cluster",
+        default="",
+        help="ACS secured cluster name for the access scope",
+    )
     args = parser.parse_args()
+    SECURED_CLUSTER_OVERRIDE = (args.secured_cluster or "").strip()
 
     try:
         if args.command == "status":

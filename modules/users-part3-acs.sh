@@ -13,67 +13,72 @@ if [[ -z "$PYTHON" ]]; then
     PYTHON="$(command -v python3)"
   fi
 fi
+EXTRA_ARGS=()
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# users-part3-acs
 
-Purpose:
-  Map the OpenShift logins adam, boaz, and chris to ACS roles and
-  access scopes for Central. The OpenShift console Security plugin
-  still follows OpenShift RBAC from Part 1; this module does not change
-  that.
+Map the OpenShift logins adam, boaz, and chris to ACS roles and
+access scopes for Central. The OpenShift console Security plugin
+still follows OpenShift RBAC from Part 1; this module does not change
+that.
 
-  Part 1 gives boaz and chris different OpenShift roles. Part 3 adds
-  ACS roles and scopes for Central login. Adam becomes Admin in ACS.
-  Boaz and chris become Analysts in ACS, scoped to ms-demo only.
+Part 1 gives boaz and chris different OpenShift roles. Part 3 adds
+ACS roles and scopes for Central login. Adam becomes Admin in ACS.
+Boaz and chris become Analysts in ACS, scoped to \`ms-demo\` only.
 
-  Act 2 of the demo compares console vs ACS Central:
-    boaz  aligned    - both sides cover ms-demo only
-    chris misaligned - OCP admin on ms-demo and acs-init-container-test,
-                       ACS only ms-demo (init-demo missing in Central)
+**Act 2** of the demo compares console vs ACS Central:
 
-  This module is Part 3 of the Users series. Part 1 (OCP) creates the
-  OpenShift users and RBAC in users-part1-ocp. Part 2 (OAuth) configures
-  Central OpenShift login in users-part2-oauth. Part 3 (ACS) is this
-  module.
+- \`boaz\` aligned - both sides cover \`ms-demo\` only
+- \`chris\` misaligned - OCP admin on \`ms-demo\` and
+  \`acs-init-container-test\`, ACS only \`ms-demo\` (init-demo missing in Central)
 
-  Adam maps to the built-in Admin role with full ACS access. Boaz maps
-  to boaz-in-acs as an Analyst with access scope limited to ms-demo.
-  Chris maps to chris-in-acs as an Analyst with access scope limited to
-  ms-demo, which is incomplete compared with his two OpenShift
-  administrator namespaces.
+Adam maps to the built-in Admin role with full ACS access. Boaz maps
+to \`boaz-in-acs\` as an Analyst scoped to \`ms-demo\`. Chris maps to
+\`chris-in-acs\` as an Analyst scoped to \`ms-demo\` only, which is
+incomplete compared with his two OpenShift administrator namespaces.
 
-  Demo script (Act 1 console / Act 2 console vs Central):
-    modules/users-part1-ocp-demo.md
-    GUI: /help?doc=users-part1-ocp-demo
-  (Status → Demo also links there.)
+Demo script: \`modules/users-part1-ocp-demo.md\`
+(GUI: \`/help?doc=users-part1-ocp-demo\`). Status → Demo also links there.
 
-Depends on:
-  users-part2-oauth, which provides an openshift-type auth provider on Central
-  Lab credentials with Central API access
-  Exactly one secured cluster in Central, or ACS_SECURED_CLUSTER_NAME
+## Usage
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE     Override path to lab-credentials.json
-  ACS_DEMO_PYTHON              Override Python interpreter
-  ACS_SECURED_CLUSTER_NAME     Override ACS cluster name used in the scope
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--secured-cluster NAME]
+$(basename "$0") --run [--dry-run] [--secured-cluster NAME]
+$(basename "$0") --uninstall [--dry-run] [--secured-cluster NAME]
+\`\`\`
 
-Side effects:
-  --run reconciles access scope ms-demo, roles boaz-in-acs and
-    chris-in-acs, and OpenShift auth group rules for adam, boaz, and chris
-  --uninstall removes those roles, that scope, and those name rules.
-    It does not remove the Part 2 auth provider. It also does not remove
-    the default rule that maps unmatched users to None
+## Flags
 
+- \`--secured-cluster NAME\` - ACS secured cluster name used in the scope
+  (default: the single cluster listed in Central)
+- \`--dry-run\` - Print the plan; change nothing
+
+## Status Info
+
+- Demo script link; Central API
+- OpenShift provider still present (from Part 2)
+- Access scope \`ms-demo\`, roles \`boaz-in-acs\` / \`chris-in-acs\`, group rules
+
+## Pre Conditions
+
+- \`users-part2-oauth\` installed (OpenShift login on Central)
+
+## Side effects
+
+- \`--run\` reconciles access scope \`ms-demo\`, roles \`boaz-in-acs\` and
+  \`chris-in-acs\`, and OpenShift auth group rules for adam, boaz, and chris
+- \`--uninstall\` removes those roles, that scope, and those name rules.
+  It does not remove the Part 2 auth provider, or the default rule that
+  maps unmatched users to None
 EOF
 }
 
 run_helper() {
-  "$PYTHON" "$HELPER" "$@"
+  "$PYTHON" "$HELPER" "$@" "${EXTRA_ARGS[@]}"
 }
 
 do_status() {
@@ -207,6 +212,11 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --secured-cluster)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster needs a name" >&2; exit 1; }
+        EXTRA_ARGS+=(--secured-cluster "$1")
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2
