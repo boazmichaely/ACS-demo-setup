@@ -624,6 +624,7 @@ body:has(#page) {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
+  border: 1px solid var(--pf-t--global--border--color--default);
 }
 
 .demo-modules th,
@@ -631,57 +632,134 @@ body:has(#page) {
   text-align: left;
   vertical-align: middle;
   padding: 0.35rem var(--pf-t--global--spacer--md);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--pf-t--global--border--color--default) 55%,
+      transparent
+    );
 }
 
 .demo-modules th {
   font-size: var(--pf-t--global--font--size--sm);
   color: var(--pf-t--global--text--color--subtle);
   font-weight: var(--pf-t--global--font--weight--body--bold);
+  position: relative;
 }
 
-/* Widths set from JS after render to hug Module/Type/State content. */
-.demo-modules th:nth-child(1),
+/* Widths: Module / State from JS (or user resize). Plane cols stay tight.
+   Body: 1 Module | 2-4 planes | 5 Description | 6 State | 7 Actions */
+.demo-modules thead tr:first-child th:first-child,
 .demo-modules td:nth-child(1) {
   width: var(--demo-mod-col, 12rem);
   white-space: nowrap;
 }
 
-.demo-modules th:nth-child(2),
-.demo-modules td:nth-child(2) {
-  width: var(--demo-type-col, 8rem);
-  white-space: nowrap;
+/* Column widths come from <colgroup> (JS). Plane cells stay compact. */
+.demo-modules thead .demo-mod__plane-h,
+.demo-modules td.demo-mod__plane-cell {
+  padding-inline: 0.35rem;
 }
 
-.demo-modules th:nth-child(4),
-.demo-modules td:nth-child(4) {
-  width: var(--demo-state-col, 7rem);
-  white-space: nowrap;
-}
-
-.demo-modules th:nth-child(5),
 .demo-modules td:nth-child(5) {
-  width: 2.75rem;
+  /* Description absorbs leftover; do not give plane cols free space */
+  width: auto;
+}
+
+.demo-modules td:nth-child(6) {
+  white-space: nowrap;
+}
+
+.demo-modules td:nth-child(7) {
+  padding-inline: var(--pf-t--global--spacer--xs);
   padding-inline-end: var(--pf-t--global--spacer--sm);
+}
+
+.demo-modules col[data-col="actions"] {
+  width: 2.75rem;
+}
+
+.demo-modules col[data-col="desc"] {
+  width: auto;
 }
 
 .demo-modules.is-measuring {
   table-layout: auto;
 }
 
-.demo-modules.is-measuring th:nth-child(1),
 .demo-modules.is-measuring td:nth-child(1),
-.demo-modules.is-measuring th:nth-child(2),
-.demo-modules.is-measuring td:nth-child(2),
-.demo-modules.is-measuring th:nth-child(4),
-.demo-modules.is-measuring td:nth-child(4) {
+.demo-modules.is-measuring td:nth-child(6) {
   width: auto;
 }
 
-.demo-mod__type-cell {
+.demo-mod__type-group {
+  text-align: center !important;
+  vertical-align: bottom;
+  padding: 0.25rem 0.35rem 0.1rem;
+}
+
+/* Width hugs this label (set in JS); little padding beyond the words. */
+.demo-mod__plane-h {
+  text-align: center !important;
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 1.2;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
   color: var(--pf-t--global--text--color--subtle);
-  font-size: var(--pf-t--global--font--size--sm);
   white-space: nowrap;
+  vertical-align: bottom;
+  padding-block: 0.2rem 0.35rem;
+}
+
+.demo-mod__plane-cell {
+  text-align: center !important;
+  vertical-align: middle;
+  padding-block: 0.3rem;
+  line-height: 1;
+}
+
+/* PatternFly-style presence: success check (Material done, already loaded). */
+.demo-mod__plane-yes {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pf-t--global--icon--color--status--success--default);
+}
+
+.demo-mod__plane-icon.material-symbols-outlined {
+  font-size: 1.125rem;
+  line-height: 1;
+  font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 20;
+}
+
+.demo-mod__plane-cell--empty {
+  color: var(--pf-t--global--text--color--disabled);
+}
+
+/* Drag edge to resize Module / Description / State */
+.demo-mod__col-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+  user-select: none;
+  touch-action: none;
+}
+
+.demo-mod__col-resize:hover,
+.demo-mod__col-resize.is-dragging {
+  background: color-mix(
+    in srgb,
+    var(--pf-t--global--color--brand--default) 35%,
+    transparent
+  );
+}
+
+.demo-modules.is-col-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .demo-mod__desc-cell {

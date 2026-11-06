@@ -27,13 +27,14 @@ if [[ -z "$PYTHON" ]]; then
   fi
 fi
 
-# Orchestrator: --plane central|openshift; OpenShift plane ≤1 SC id.
+# Orchestrator: --plane central-api|secured-cluster; secured-cluster plane ≤1 SC id.
 INIT_PLANE=""
 INIT_SC_IDS=()
 INIT_SC_ID=""
 
-want_openshift() { [[ -z "${INIT_PLANE}" || "${INIT_PLANE}" == "openshift" ]]; }
-want_central() { [[ -z "${INIT_PLANE}" || "${INIT_PLANE}" == "central" ]]; }
+want_secured_cluster() { [[ -z "${INIT_PLANE}" || "${INIT_PLANE}" == "secured-cluster" || "${INIT_PLANE}" == "openshift" ]]; }
+want_openshift() { want_secured_cluster; }  # legacy alias
+want_central() { [[ -z "${INIT_PLANE}" || "${INIT_PLANE}" == "central-api" || "${INIT_PLANE}" == "central" ]]; }
 
 usage() {
   cat <<EOF
@@ -42,7 +43,7 @@ usage() {
 Install the RHACS init-container demo in OpenShift project \`${NS}\`:
 four small apps (clean / dirty / blue / red) that show Central scanning
 and policy evaluation on init containers, not only main containers.
-Catalog: \`impactPlanes: ["central","openshift"]\`.
+Catalog: \`impactPlanes: ["central-api","secured-cluster"]\`.
 
 **What each app is for**
 
@@ -74,17 +75,17 @@ https://github.com/boazmichaely/ACS-init-container-test/blob/main/README.md
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
-$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api|secured-cluster] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api|secured-cluster] [--secured-cluster-id ID]...
 \`\`\`
 
 ## Flags
 
-- \`--plane openshift\` - project \`${NS}\` + four upstream Deployments only
-- \`--plane central\` - upsert/delete DEMO-Init-Test policies only (Central API)
+- \`--plane secured-cluster\` - project \`${NS}\` + four upstream Deployments only (legacy \`openshift\`)
+- \`--plane central-api\` - upsert/delete DEMO-Init-Test policies only (Central API; legacy \`central\`)
 - omit \`--plane\` - both in one process (legacy / bare CLI)
-- \`--secured-cluster-id ID\` - OpenShift plane: at most one lab SC (soft-default
+- \`--secured-cluster-id ID\` - secured-cluster plane: at most one lab SC (soft-default
   if omitted). Central plane: accepted but ignored (policies are namespace-scoped,
   not cluster-membership)
 - \`--dry-run\` - Print the plan; change nothing
@@ -101,8 +102,8 @@ none
 
 ## Side effects
 
-- \`--run\` OpenShift: creates project \`${NS}\`, applies upstream manifests
-- \`--run\` Central: upserts the three DEMO-Init-Test policies
+- \`--run\` secured-cluster: creates project \`${NS}\`, applies upstream manifests
+- \`--run\` central-api: upserts the three DEMO-Init-Test policies
 - \`--uninstall\` reverses the selected plane(s)
 EOF
 }
@@ -347,7 +348,7 @@ do_status() {
     project_present="n/a"
     wl_sum="skipped (central plane)"
     wl_tag="ok"
-    wl_body="OpenShift plane not in this invoke."
+    wl_body="secured-cluster plane not in this invoke."
     required_ok=1
   fi
 
@@ -402,7 +403,7 @@ do_status() {
     fi
   else
     pol_tag="ok"
-    pol_sum="skipped (openshift plane)"
+    pol_sum="skipped (secured-cluster plane)"
     pol_body="Central plane not in this invoke."
     viol_tag="ok"
     viol_sum="skipped"
@@ -430,7 +431,7 @@ do_status() {
   elif want_openshift; then
     if [[ "$wl_tag" == "ok" ]]; then
       state="ok"
-      message="workloads ready in ${NS} (openshift plane)"
+      message="workloads ready in ${NS} (secured-cluster plane)"
     else
       state="needs-run"
       message="workloads ${wl_sum}"
@@ -492,7 +493,7 @@ do_run() {
   if want_openshift && want_central; then
     printf '%s\tok\tinit-demo ready in %s (DEMO-Init-Test policies upserted)\n' "$MODULE_ID" "$NS"
   elif want_openshift; then
-    printf '%s\tok\tworkloads ready in %s (openshift plane)\n' "$MODULE_ID" "$NS"
+    printf '%s\tok\tworkloads ready in %s (secured-cluster plane)\n' "$MODULE_ID" "$NS"
   else
     printf '%s\tok\tDEMO-Init-Test policies upserted (central plane)\n' "$MODULE_ID"
   fi
@@ -648,12 +649,12 @@ main() {
       --dry-run) dry_run=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central-api|secured-cluster" >&2; exit 1; }
         INIT_PLANE="$1"
         case "$INIT_PLANE" in
-          central|openshift) ;;
+          central-api|secured-cluster|central|openshift) ;;
           *)
-            echo "$(basename "$0"): --plane must be central or openshift" >&2
+            echo "$(basename "$0"): --plane must be central-api or secured-cluster" >&2
             exit 1
             ;;
         esac
@@ -674,8 +675,8 @@ main() {
 
   if want_openshift && ((${#INIT_SC_IDS[@]} > 1)); then
     # Orchestrator OpenShift invoke always passes one id; reject accidental multi.
-    if [[ "${INIT_PLANE}" == "openshift" ]]; then
-      echo "$(basename "$0"): OpenShift plane expects at most one --secured-cluster-id" >&2
+    if [[ "${INIT_PLANE}" == "secured-cluster" || "${INIT_PLANE}" == "openshift" ]]; then
+      echo "$(basename "$0"): secured-cluster plane expects at most one --secured-cluster-id" >&2
       exit 1
     fi
   fi

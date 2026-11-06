@@ -5,49 +5,49 @@
       "label": "Configure ACS image integrations",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central"]
+      "impactPlanes": ["central-api", "central-ocp"]
     },
     {
       "id": "signature-integration",
       "label": "ACS Cosign / signature integration (Red Hat Public)",
       "dependsOn": [],
       "statusComplexity": 4,
-      "impactPlanes": ["central"]
+      "impactPlanes": ["central-api"]
     },
     {
       "id": "compliance-operator",
       "label": "Compliance Operator (OLM) + Central CIS scan schedule",
       "dependsOn": [],
       "statusComplexity": 7,
-      "impactPlanes": ["central", "openshift"]
+      "impactPlanes": ["central-api", "secured-cluster"]
     },
     {
       "id": "virt-vm-demo",
       "label": "Deploy OCP Virt + RHEL VMs for ACS guest vulnerability demo",
       "dependsOn": [],
       "statusComplexity": 9,
-      "impactPlanes": ["central", "openshift"]
+      "impactPlanes": ["central-api", "central-ocp", "secured-cluster"]
     },
     {
       "id": "ms-demo",
       "label": "Mostmark microservices (project ms-demo)",
       "dependsOn": [],
       "statusComplexity": 4,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     },
     {
       "id": "init-demo",
       "label": "Init-container Clean/Dirty/Blue/Red (acs-init-container-test)",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central", "openshift"]
+      "impactPlanes": ["central-api", "secured-cluster"]
     },
     {
       "id": "users-part1-ocp",
       "label": "Users Part 1 (OCP)",
       "dependsOn": [],
       "statusComplexity": 2,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     },
     {
       "id": "users-part2-oauth",
@@ -56,7 +56,7 @@
         "users-part1-ocp"
       ],
       "statusComplexity": 2,
-      "impactPlanes": ["central"]
+      "impactPlanes": ["central-api"]
     },
     {
       "id": "users-part3-acs",
@@ -65,63 +65,63 @@
         "users-part2-oauth"
       ],
       "statusComplexity": 2,
-      "impactPlanes": ["central"]
+      "impactPlanes": ["central-api"]
     },
     {
       "id": "slack-notifier",
       "label": "Central Slack integration",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central"]
+      "impactPlanes": ["central-api"]
     },
     {
       "id": "splunk-TA",
       "label": "Splunk Operator + RHACS Technology Add-on",
       "dependsOn": [],
       "statusComplexity": 6,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     },
     {
       "id": "openshift-mcp",
       "label": "Installs/updates an OpenShift MCP server on your cluster and wires it to your preferred AI agent",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     },
     {
       "id": "openshift-mcp-gateway",
       "label": "Launches an MCP gateway on the cluster you designate",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     },
     {
       "id": "acs-lightspeed",
       "label": "Configures OpenShift Lightspeed integration",
       "dependsOn": [],
       "statusComplexity": 4,
-      "impactPlanes": ["central", "openshift"]
+      "impactPlanes": ["central-api", "secured-cluster"]
     },
     {
       "id": "acs-mcp",
       "label": "Installs/updates an ACS MCP server on your cluster and wires it to your agent",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     },
     {
       "id": "prometheus",
       "label": "Install Prometheus on your cluster and wire ACS monitoring",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["central", "openshift"]
+      "impactPlanes": ["central-api", "secured-cluster"]
     },
     {
       "id": "secrets-manager",
       "label": "Install Hashi on your cluster, enable External Secret Management Console plugin, External Secrets Operator (ESO) and a demo application",
       "dependsOn": [],
       "statusComplexity": 6,
-      "impactPlanes": ["openshift"]
+      "impactPlanes": ["secured-cluster"]
     }
   ]
 }

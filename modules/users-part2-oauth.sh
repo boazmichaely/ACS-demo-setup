@@ -30,21 +30,21 @@ Part of the Users series:
 Demo script: \`modules/users-part1-ocp-demo.md\`
 (GUI: \`/help?doc=users-part1-ocp-demo\`). Status → Demo also links there.
 
-Catalog: \`impactPlanes: ["central"]\` (Central API only).
+Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]...
-$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api] [--secured-cluster-id ID]...
 \`\`\`
 
 ## Flags
 
-- \`--plane central\` - implied; accepted as a no-op
-- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--plane central-api\` - implied; accepted as a no-op (legacy \`central\` also accepted)
+- \`--plane secured-cluster\` / \`central-ocp\` - ignored (central-api-only; warn on stderr)
 - \`--secured-cluster-id ID\` - ignored (auth provider is Central-global; warn)
 - \`--dry-run\` - Print the plan; change nothing
 

@@ -65,7 +65,7 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
   "label": "Short description for the Description column",
   "dependsOn": [],
   "statusComplexity": 5,
-  "impactPlanes": ["openshift"]
+  "impactPlanes": ["secured-cluster"]
 }
 ```
 
@@ -221,40 +221,52 @@ Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. 
 
 ## Planes and multi-SC
 
-A module may touch **Central** (RHACS API), **OpenShift** (workloads / Operators via `oc`), or both. Multi-secured-cluster labs select which OpenShift clusters take impact; Central API work always uses Central credentials (no picker for that plane).
+A module declares one or more **impact planes** in the catalog. That drives the GUI **Type** column, the pre-launch impact picker, and orchestrator fan-out.
+
+| Plane id | GUI Type fragment | What it means | Works with ACSCS Central |
+|----------|-------------------|---------------|--------------------------|
+| `central-api` | Central API | RHACS HTTP API only | yes |
+| `central-ocp` | Central OCP | `oc` against Central’s OpenShift (`_central`) | **no** |
+| `secured-cluster` | Secured cluster | `oc` / Operators / workloads on a secured cluster | yes |
+
+ACSCS-safe modules list only `central-api` and/or `secured-cluster` (never `central-ocp`). Multi-secured-cluster labs select which SCs take `secured-cluster` impact; Central-side planes run once (no per-SC fan-out).
 
 ### Catalog: `impactPlanes` (Type)
 
-| Value | GUI Type column | Meaning |
-|-------|-----------------|---------|
-| `["central"]` | Central | ACS API / Central only |
-| `["openshift"]` | OpenShift | OpenShift only |
-| `["central","openshift"]` | Central + OpenShift | Both; the orchestrator splits invocations |
+Examples:
 
-Optional future key (not required today): `planeOrder` - `"openshift-then-central"` (default) or `"central-then-openshift"` when a module needs Central before OpenShift. Omit it unless you need the non-default order.
+| Value | GUI Type column |
+|-------|-----------------|
+| `["central-api"]` | Central API |
+| `["secured-cluster"]` | Secured cluster |
+| `["central-api","secured-cluster"]` | Central API + Secured cluster |
+| `["central-api","central-ocp"]` | Central API + Central OCP |
+| `["central-api","central-ocp","secured-cluster"]` | Central API + Central OCP + Secured cluster |
+
+Optional: `planeOrder` - `"secured-cluster-then-central"` (default) or `"central-then-secured-cluster"`. When both Central planes are listed, orchestrator order is `central-ocp` then `central-api`. Omit `planeOrder` unless you need Central before secured-cluster.
 
 ### Orchestrator call pattern
 
-Modules stay **single OpenShift target** per OpenShift-plane process. The orchestrator fans out:
+Modules stay **single secured-cluster target** per `secured-cluster` process. The orchestrator fans out:
 
-- `["central"]` - one invocation
-- `["openshift"]` - one invocation per selected secured-cluster id
-- `["central","openshift"]` - by default **all OpenShift (SC) invokes first, then Central once** (install, uninstall, and status). Override later with catalog `planeOrder` if needed. Central receives the full selection as repeated `--secured-cluster-id` flags when the module needs them (for example a shared scan schedule).
+- `central-api` / `central-ocp` - one invocation each when selected
+- `secured-cluster` - one invocation per selected secured-cluster id
+- mixed - by default **all secured-cluster invokes first**, then `central-ocp`, then `central-api` (install, uninstall, and status). Central-side invokes receive the full SC selection as repeated `--secured-cluster-id` flags when the module needs them (for example a shared scan schedule).
 
 Flags the orchestrator may pass:
 
 | Flag | Rule |
 |------|------|
-| `--plane central\|openshift` | Required when the catalog lists both planes. Single-plane modules may omit (implied). |
-| `--secured-cluster-id <id>` | OpenShift plane: exactly one. Central plane: zero or more (picker selection). |
+| `--plane central-api\|central-ocp\|secured-cluster` | Required when the catalog lists more than one plane. Single-plane modules may omit (implied). |
+| `--secured-cluster-id <id>` | `secured-cluster` plane: exactly one. Central planes: zero or more (picker selection). |
 
 `activeSecuredClusterId` is a quiet soft default (same-as-Central, else first SC) for the pre-launch picker / bare CLI when no `--secured-cluster-id` is passed. It is not a hidden “install everywhere” switch. `sameAsCentralCluster` on a secured cluster is a **credentials shortcut** only; that SC is still a normal target in the list.
 
 ### Central membership (optional)
 
-When a Central-plane install or uninstall runs with a selection of secured-cluster ids, the module **may** compare that selection to what is already configured in Central (policies, scan schedules, access scopes, and so on) and merge or drop cluster membership. This is not enforced by the orchestrator - each module decides whether adjustment is appropriate. [`compliance-operator`](modules/compliance-operator.sh) merges/drops schedule `clusters[]` this way.
+When a `central-api` install or uninstall runs with a selection of secured-cluster ids, the module **may** compare that selection to what is already configured in Central (policies, scan schedules, access scopes, and so on) and merge or drop cluster membership. This is not enforced by the orchestrator - each module decides whether adjustment is appropriate. [`compliance-operator`](modules/compliance-operator.sh) merges/drops schedule `clusters[]` this way.
 
-### Workload label (OpenShift plane)
+### Workload label (`secured-cluster` plane)
 
 Every module-owned object applied as YAML must carry:
 
@@ -264,9 +276,9 @@ Use shared helpers in [`lib/openshift.py`](https://github.com/boazmichaely/ACS-d
 
 ### Idempotency and no SC loops
 
-Each single invocation (one plane; one SC on OpenShift) must be safe to re-run. Install on cluster A must not require uninstalling B. Modules must **not** loop `securedClusters` themselves; the orchestrator owns multi-select.
+Each single invocation (one plane; one SC on `secured-cluster`) must be safe to re-run. Install on cluster A must not require uninstalling B. Modules must **not** loop `securedClusters` themselves; the orchestrator owns multi-select.
 
-Reference `both` module: [`compliance-operator`](modules/compliance-operator.sh) (orchestrator fans out; module stays single-SC per OpenShift invoke).
+Reference multi-plane module: [`compliance-operator`](modules/compliance-operator.sh) (orchestrator fans out; module stays single-SC per `secured-cluster` invoke).
 
 ## Credentials and auth
 

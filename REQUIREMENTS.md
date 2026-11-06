@@ -62,7 +62,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password, optional `apiToken` | If `apiToken` is set, modules use `oc login --token=` (SSO labs). Else username/password. |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** quietly soft-defaults which SC is pre-selected for OpenShift impact (same-as-Central, else first). Catalog `impactPlanes` (GUI Type) + orchestrator fan-out (default: all OpenShift, then Central for `both`; optional `planeOrder`) own multi-SC runs; modules must not loop SCs. Central-plane modules may adjust Central membership when the selection changes (not enforced). Empty `securedClusters` → Central OpenShift |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** quietly soft-defaults which SC is pre-selected for `secured-cluster` impact (same-as-Central, else first). Catalog `impactPlanes` (GUI Type: `central-api` / `central-ocp` / `secured-cluster`) + orchestrator fan-out (default: all secured-cluster, then central-ocp, then central-api; optional `planeOrder`) own multi-SC runs; modules must not loop SCs. `central-api` modules may adjust Central membership when the selection changes (not enforced). Empty `securedClusters` → Central OpenShift for `oc` helpers. Modules with `central-ocp` are not ACSCS-safe |
 
 Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
@@ -175,7 +175,7 @@ For each module: **purpose**, **pre conditions** (usually none; another installe
 
 ### M1 — `registries` (ACS image integrations)
 
-**Purpose:** Configure RHACS image integrations needed for vulnerability scanning. Catalog: `impactPlanes: ["central"]`. Reads Quay and `registry.redhat.io` credentials from **Central's OpenShift** `openshift-config/pull-secret` (not from a secured cluster), and adds an anonymous public integration for Google Artifact Registry (`us-central1-docker.pkg.dev`) so `ms-demo` Online Boutique images can be scanned.
+**Purpose:** Configure RHACS image integrations needed for vulnerability scanning. Catalog: `impactPlanes: ["central-api","central-ocp"]` (not ACSCS-safe). Reads Quay and `registry.redhat.io` credentials from **Central's OpenShift** `openshift-config/pull-secret` (not from a secured cluster), and adds an anonymous public integration for Google Artifact Registry (`us-central1-docker.pkg.dev`) so `ms-demo` Online Boutique images can be scanned.
 
 **Pre conditions:** none
 
@@ -223,7 +223,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M2 — `compliance-operator` (Compliance Operator + Central CIS scan schedule)
 
-**Purpose:** Install the OpenShift Compliance Operator on selected secured clusters and maintain one Central scan schedule (`ocp4-cis-scan-schedule`). Catalog: `impactPlanes: ["central","openshift"]`. Orchestrator fans out OpenShift N then Central 1 when `--secured-cluster-id` is passed; with no ids, default is the soft-default SC (`activeSecuredClusterId`) only.
+**Purpose:** Install the OpenShift Compliance Operator on selected secured clusters and maintain one Central scan schedule (`ocp4-cis-scan-schedule`). Catalog: `impactPlanes: ["central-api","secured-cluster"]`. Orchestrator fans out secured-cluster N then central-api 1 when `--secured-cluster-id` is passed; with no ids, default is the soft-default SC (`activeSecuredClusterId`) only.
 
 **ACS principle (required):** Do **not** configure compliance scans by applying Compliance Operator `ScanSetting` / `ScanSettingBinding` (or related scan CRs) directly on the cluster. Operator install is on-cluster (`oc` per SC); scan schedules go through **Central API** only.
 
@@ -231,7 +231,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Status must verify:** For the selection (or soft-default SC), Compliance Operator healthy; Central schedule membership reflects the selection (merged installs).
 
-**Run must do:** OpenShift plane: OLM install/verify in `openshift-compliance` on one SC. Central plane: merge selected ACS cluster ids into the shared schedule.
+**Run must do:** `secured-cluster` plane: OLM install/verify in `openshift-compliance` on one SC. `central-api` plane: merge selected ACS cluster ids into the shared schedule.
 
 **Uninstall must do:** OpenShift: OLM uninstall on the selected SC. Central: drop selected ids from the schedule (delete schedule if empty).
 
@@ -241,7 +241,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M2b — `virt-vm-demo` (ACS guest vulnerabilities on OCP Virt)
 
-**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`. Catalog: `impactPlanes: ["central","openshift"]`. Central CR patches use Central's OpenShift (`_central`); CNV / VMs / SecuredCluster use the soft-default SC.
+**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`. Catalog: `impactPlanes: ["central-api","central-ocp","secured-cluster"]` (not ACSCS-safe). `central-ocp`: Central CR on Central's OpenShift (`_central`); `central-api`: wait for VM CVEs; `secured-cluster`: CNV / VMs / SecuredCluster on the soft-default SC.
 
 **Pre conditions:** none
 

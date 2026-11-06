@@ -631,51 +631,192 @@ function moduleDescriptionCellHtml(m) {
   return `<span title="${escapeHtml(text)}">${escapeHtml(text)}</span>`;
 }
 
-/** Human Type label from catalog ``impactPlanes``. */
+/** Normalized impact plane ids from catalog ``impactPlanes``. */
+function moduleImpactPlaneSet(m) {
+  const raw = Array.isArray(m?.impactPlanes) ? m.impactPlanes : [];
+  const planes = raw.map((p) => String(p).toLowerCase().replace(/_/g, "-"));
+  return {
+    centralApi: planes.includes("central-api") || planes.includes("central"),
+    centralOcp: planes.includes("central-ocp"),
+    securedCluster:
+      planes.includes("secured-cluster") || planes.includes("openshift"),
+  };
+}
+
+/** Human Type label (picker / titles); table uses plane mark columns instead. */
 function moduleTypeLabel(m) {
-  const planes = Array.isArray(m?.impactPlanes)
-    ? m.impactPlanes.map((p) => String(p).toLowerCase())
-    : [];
-  const hasCentral = planes.includes("central");
-  const hasOpenShift = planes.includes("openshift");
-  if (hasCentral && hasOpenShift) return "Central + OpenShift";
-  if (hasCentral) return "Central";
-  if (hasOpenShift) return "OpenShift";
-  return "—";
+  const p = moduleImpactPlaneSet(m);
+  const parts = [];
+  if (p.centralApi) parts.push("Central API");
+  if (p.centralOcp) parts.push("Central OCP");
+  if (p.securedCluster) parts.push("Secured cluster");
+  return parts.length ? parts.join(" + ") : "—";
 }
 
-function moduleTypeCellHtml(m) {
-  const text = moduleTypeLabel(m);
-  return `<span class="demo-mod__type" title="${escapeHtml(text)}">${escapeHtml(text)}</span>`;
+function modulePlaneMarkCell(active, label) {
+  if (active) {
+    return `<td class="demo-mod__plane-cell" title="${escapeHtml(label)}">
+      <span class="demo-mod__plane-yes" aria-label="${escapeHtml(label)}">
+        <span class="material-symbols-outlined demo-mod__plane-icon" aria-hidden="true">done</span>
+      </span>
+    </td>`;
+  }
+  return `<td class="demo-mod__plane-cell demo-mod__plane-cell--empty" title="Not ${escapeHtml(label)}"><span class="pf-v6-screen-reader">Not ${escapeHtml(label)}</span></td>`;
 }
 
-/** Size Module + Type + State columns to content; Description keeps the leftover. */
+function moduleTypeCellsHtml(m) {
+  const p = moduleImpactPlaneSet(m);
+  return (
+    modulePlaneMarkCell(p.centralApi, "Central API") +
+    modulePlaneMarkCell(p.centralOcp, "Central OCP") +
+    modulePlaneMarkCell(p.securedCluster, "Secured Cluster")
+  );
+}
+
+const MODULES_COL_WIDTHS_KEY = "acsDemoModulesColWidths";
+
+function readModulesColWidths() {
+  try {
+    const raw = localStorage.getItem(MODULES_COL_WIDTHS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeModulesColWidths(partial) {
+  const next = { ...readModulesColWidths(), ...partial };
+  try {
+    localStorage.setItem(MODULES_COL_WIDTHS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function modulesColEl(table, key) {
+  return table.querySelector(`colgroup col[data-col="${key}"]`);
+}
+
+function setModulesColWidth(table, key, pxOrCss) {
+  const col = modulesColEl(table, key);
+  if (col) col.style.width = pxOrCss;
+}
+
+/**
+ * Size columns via <colgroup> so table-layout:fixed cannot redistribute
+ * leftover width into the Type plane columns (that was the “not tight” bug).
+ * Plane cols hug each header label; Description takes the rest.
+ */
 function syncModulesColumnWidths() {
   const table = document.getElementById("modulesTable");
   if (!table || !table.tBodies?.[0]?.rows?.length) return;
+  if (!table.querySelector("colgroup")) return;
 
+  const saved = readModulesColWidths();
+
+  // Measure with auto layout and cleared col widths.
   table.classList.add("is-measuring");
-  table.style.removeProperty("--demo-mod-col");
-  table.style.removeProperty("--demo-type-col");
-  table.style.removeProperty("--demo-state-col");
+  ["mod", "api", "ocp", "sc", "desc", "state"].forEach((key) => {
+    const col = modulesColEl(table, key);
+    if (col) col.style.width = "";
+  });
 
   let mod = 0;
-  let typ = 0;
   let state = 0;
-  table.querySelectorAll("thead th:nth-child(1), tbody td:nth-child(1)").forEach((el) => {
+  table.querySelectorAll("tbody td:nth-child(1)").forEach((el) => {
     mod = Math.max(mod, el.scrollWidth);
   });
-  table.querySelectorAll("thead th:nth-child(2), tbody td:nth-child(2)").forEach((el) => {
-    typ = Math.max(typ, el.scrollWidth);
-  });
-  table.querySelectorAll("thead th:nth-child(4), tbody td:nth-child(4)").forEach((el) => {
+  const modTh = table.querySelector("thead tr:first-child th:first-child");
+  if (modTh) mod = Math.max(mod, modTh.scrollWidth);
+
+  table.querySelectorAll("tbody td:nth-child(6)").forEach((el) => {
     state = Math.max(state, el.scrollWidth);
+  });
+  const stateTh = table.querySelector('thead th[data-col-resize="state"]');
+  if (stateTh) state = Math.max(state, stateTh.scrollWidth);
+
+  const planeW = {};
+  ["api", "ocp", "sc"].forEach((key) => {
+    const th = table.querySelector(
+      `thead .demo-mod__plane-h[data-plane-col="${key}"]`
+    );
+    // scrollWidth while measuring = label + padding; that is the tight width.
+    planeW[key] = th ? Math.ceil(th.scrollWidth) : 72;
   });
 
   table.classList.remove("is-measuring");
-  table.style.setProperty("--demo-mod-col", `${Math.ceil(mod) + 4}px`);
-  table.style.setProperty("--demo-type-col", `${Math.ceil(typ) + 4}px`);
-  table.style.setProperty("--demo-state-col", `${Math.ceil(state) + 4}px`);
+
+  setModulesColWidth(
+    table,
+    "mod",
+    saved.mod || `${Math.max(96, Math.ceil(mod) + 4)}px`
+  );
+  setModulesColWidth(table, "api", `${planeW.api}px`);
+  setModulesColWidth(table, "ocp", `${planeW.ocp}px`);
+  setModulesColWidth(table, "sc", `${planeW.sc}px`);
+  // Explicit auto so leftover does not pad Type columns.
+  setModulesColWidth(table, "desc", saved.desc || "auto");
+  setModulesColWidth(
+    table,
+    "state",
+    saved.state || `${Math.max(72, Math.ceil(state) + 4)}px`
+  );
+  setModulesColWidth(table, "actions", "2.75rem");
+
+  // Keep colspan Type header from requesting more width than the three planes.
+  const typeGroup = table.querySelector("thead .demo-mod__type-group");
+  if (typeGroup) {
+    typeGroup.style.width = `${planeW.api + planeW.ocp + planeW.sc}px`;
+  }
+}
+
+function bindModulesColumnResize() {
+  const table = document.getElementById("modulesTable");
+  if (!table || table.dataset.colResizeBound === "1") return;
+  table.dataset.colResizeBound = "1";
+
+  const minPx = { mod: 96, desc: 120, state: 72 };
+
+  table.querySelectorAll("thead th[data-col-resize]").forEach((th) => {
+    const key = th.getAttribute("data-col-resize");
+    if (!key || !minPx[key]) return;
+    if (th.querySelector(".demo-mod__col-resize")) return;
+    const handle = document.createElement("span");
+    handle.className = "demo-mod__col-resize";
+    handle.title = "Drag to resize column";
+    handle.setAttribute("aria-hidden", "true");
+    th.appendChild(handle);
+
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = th.getBoundingClientRect().width;
+      handle.classList.add("is-dragging");
+      table.classList.add("is-col-resizing");
+      handle.setPointerCapture(e.pointerId);
+
+      const onMove = (ev) => {
+        const w = Math.max(minPx[key], Math.round(startW + (ev.clientX - startX)));
+        setModulesColWidth(table, key, `${w}px`);
+      };
+      const onUp = (ev) => {
+        handle.releasePointerCapture(ev.pointerId);
+        handle.classList.remove("is-dragging");
+        table.classList.remove("is-col-resizing");
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        const finalW = th.getBoundingClientRect().width;
+        writeModulesColWidths({ [key]: `${Math.round(finalW)}px` });
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    });
+  });
 }
 
 function moduleActionsCellHtml(m) {
@@ -1097,7 +1238,7 @@ function applySelectAll(on) {
 
 function renderModuleRows() {
   if (!registryModules.length) {
-    modulesTbody.innerHTML = '<tr><td colspan="5">No modules.</td></tr>';
+    modulesTbody.innerHTML = '<tr><td colspan="7">No modules.</td></tr>';
     return;
   }
 
@@ -1115,7 +1256,7 @@ function renderModuleRows() {
             ${moduleCellHtml(m)}
           </div>
         </td>
-        <td class="demo-mod__type-cell">${moduleTypeCellHtml(m)}</td>
+        ${moduleTypeCellsHtml(m)}
         <td class="demo-mod__desc-cell">${moduleDescriptionCellHtml(m)}</td>
         <td class="js-status-cell" data-module-id="${id}">
           ${moduleStatusCellHtml(m.id)}
@@ -1138,6 +1279,7 @@ function renderModuleRows() {
   syncMasterCheckbox();
   refreshStatusCells();
   syncModulesColumnWidths();
+  bindModulesColumnResize();
 }
 
 function jumpToStatusModule(moduleId) {
@@ -1590,9 +1732,18 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
     const lab = activeLab();
     const clusters = [...(lab?.securedClusters || [])];
     const debug = debugScPickerEnabled();
-    const planes = moduleImpactPlanes(moduleId);
-    const centralOk = planes.includes("central");
-    const openshiftOk = planes.includes("openshift");
+    const planes = moduleImpactPlanes(moduleId).map((p) =>
+      String(p).toLowerCase().replace(/_/g, "-")
+    );
+    const centralOk =
+      planes.includes("central-api") ||
+      planes.includes("central-ocp") ||
+      planes.includes("central");
+    const hasCentralApi =
+      planes.includes("central-api") || planes.includes("central");
+    const hasCentralOcp = planes.includes("central-ocp");
+    const securedClusterOk =
+      planes.includes("secured-cluster") || planes.includes("openshift");
 
     const verb = uninstall ? "Uninstall" : "Install";
     if (title) {
@@ -1609,9 +1760,19 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
 
     const centralDisabled = centralOk ? "" : "disabled";
     const centralChecked = centralOk ? "checked" : "";
-    const centralNote = centralOk
-      ? "<small>RHACS Central API / policies</small>"
-      : "<small>Not used by this module (Type has no Central)</small>";
+    let centralNoteHtml;
+    if (!centralOk) {
+      centralNoteHtml =
+        "<small>Not used by this module (Type has no Central API / Central OCP)</small>";
+    } else if (hasCentralApi && hasCentralOcp) {
+      centralNoteHtml =
+        "<small>Central API + Central OCP (not ACSCS-safe)</small>";
+    } else if (hasCentralOcp) {
+      centralNoteHtml =
+        "<small>Central OpenShift via oc (not ACSCS-safe)</small>";
+    } else {
+      centralNoteHtml = "<small>RHACS Central API</small>";
+    }
     const rows = [
       `<label class="demo-sc-picker__row${
         centralOk ? "" : " demo-sc-picker__row--disabled"
@@ -1619,7 +1780,7 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
           <input type="checkbox" name="central" value="1" ${centralChecked} ${centralDisabled} />
           <span class="demo-sc-picker__row-meta">
             <span>Central</span>
-            ${centralNote}
+            ${centralNoteHtml}
           </span>
         </label>`,
     ];
@@ -1627,7 +1788,7 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
     for (const sc of clusters) {
       const id = sc.id || "";
       const name = sc.name || id;
-      const can = openshiftOk && Boolean(id);
+      const can = securedClusterOk && Boolean(id);
       const checked = can && id === activeId ? "checked" : "";
       const disabled = can ? "" : "disabled";
       const same = sc.sameAsCentralCluster
@@ -1637,7 +1798,7 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
         ? same
           ? `<small>${escapeHtml(same)}</small>`
           : ""
-        : "<small>Not used by this module (Type has no OpenShift)</small>";
+        : "<small>Not used by this module (Type has no secured-cluster)</small>";
       rows.push(`<label class="demo-sc-picker__row${
         can ? "" : " demo-sc-picker__row--disabled"
       }">
@@ -2966,6 +3127,7 @@ async function init() {
     setupCredentialCopyButtons();
     // Version + soft update nudge (non-blocking vs status refresh).
     void loadInstalledVersionAndMaybeNudge();
+    bindModulesColumnResize();
     await loadRegistry();
     await loadCredentials();
     logLabEvent("page-load");
@@ -2975,7 +3137,7 @@ async function init() {
   } catch (err) {
     log(`\n${err.message}\n`);
     modulesTbody.innerHTML =
-      '<tr><td colspan="5">Failed to load.</td></tr>';
+      '<tr><td colspan="7">Failed to load.</td></tr>';
   }
 }
 

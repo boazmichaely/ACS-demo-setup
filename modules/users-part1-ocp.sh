@@ -60,7 +60,7 @@ Status → Demo also links there.
 
 Lab passwords are listed under Status → Credentials.
 
-Catalog: \`impactPlanes: ["openshift"]\`. With \`--secured-cluster-id\`,
+Catalog: \`impactPlanes: ["secured-cluster"]\`. With \`--secured-cluster-id\`,
 targets that SC (console plugin / HTPasswd live there). With none, uses
 the lab soft-default SC.
 
@@ -68,14 +68,14 @@ the lab soft-default SC.
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane openshift] [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--plane openshift] [--secured-cluster-id ID] [--chris-ns NS]...
-$(basename "$0") --uninstall [--dry-run] [--plane openshift] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane secured-cluster] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID] [--chris-ns NS]...
+$(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--plane openshift\` - implied; accepted. \`--plane central\` is rejected
+- \`--plane secured-cluster\` - implied; accepted (legacy \`openshift\` also). \`--plane central-api\` / \`central-ocp\` is rejected
   (HTPasswd/IdP/RBAC are OpenShift-only; Parts 2–3 own Central)
 - \`--secured-cluster-id ID\` - create users/RBAC on that lab SC (at most one).
   Soft-default SC when omitted. This is the cluster whose console shows Security
@@ -754,12 +754,12 @@ main() {
       --dry-run) dry_run=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs openshift" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs secured-cluster" >&2; exit 1; }
         U1_PLANE="$1"
         case "$U1_PLANE" in
-          openshift) ;;
+          secured-cluster|openshift) ;;
           *)
-            echo "$(basename "$0"): OpenShift-only module; --plane must be openshift (got ${U1_PLANE})" >&2
+            echo "$(basename "$0"): secured-cluster-only module; --plane must be secured-cluster (got ${U1_PLANE})" >&2
             exit 1
             ;;
         esac

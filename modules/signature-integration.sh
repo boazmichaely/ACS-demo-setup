@@ -22,22 +22,22 @@ Ensure Signature Integration **Red Hat Public** (release key 3), an Inform
 Build+Deploy policy **Images must be signed by Red Hat Public**, and prime
 three signed images via Central image scan (no deploy).
 
-Catalog: \`impactPlanes: ["central"]\` (Central API only).
+Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central] [--secured-cluster-id ID]...
-$(basename "$0") --run [--dry-run] [--plane central] [--secured-cluster-id ID]...
-$(basename "$0") --uninstall [--dry-run] [--plane central] [--secured-cluster-id ID]...
+$(basename "$0") --status [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api] [--secured-cluster-id ID]...
 $(basename "$0") --hard-delete [--dry-run]
 \`\`\`
 
 ## Flags
 
-- \`--plane central\` - implied; accepted as a no-op
-- \`--plane openshift\` - ignored (Central-only; warn on stderr)
+- \`--plane central-api\` - implied; accepted as a no-op (legacy \`central\` also accepted)
+- \`--plane secured-cluster\` / \`central-ocp\` - ignored (central-api-only; warn on stderr)
 - \`--secured-cluster-id ID\` - ignored (no OpenShift work; warn)
 - \`--dry-run\` - Print the plan; change nothing
 - \`--hard-delete\` - Remove Inform policy and Red Hat Public (CLI only)
