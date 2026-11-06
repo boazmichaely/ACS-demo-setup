@@ -27,7 +27,12 @@ Options:
   --secured-cluster-id ID
                   Repeatable. When set with --module, fan out OpenShift N then
                   Central 1 (module must accept --plane / --secured-cluster-id).
-                  When omitted: one invoke, no new flags (legacy behavior).
+                  When omitted: one invoke, no new flags (legacy behavior),
+                  unless --include-central alone (Central plane only).
+  --include-central
+                  Run the Central plane (with or without SC ids).
+  --skip-central
+                  OpenShift fan-out only; do not run the Central plane.
 
 OpenShift (active lab; lab-credentials.json is source of truth):
   --oc-status     Is oc ready for the active lab? (OK/PROBLEM + next step)
@@ -205,6 +210,9 @@ status_json() {
   printf '[%s]\n' "$joined"
 }
 
+# Set by main: "" | include | skip
+INCLUDE_CENTRAL_MODE=""
+
 # Plan invocations via lib.module_orchestrate. Prints JSON array.
 # Args: module_id action sc_id...
 plan_invocations_json() {
@@ -215,6 +223,10 @@ plan_invocations_json() {
   for sid in "$@"; do
     [[ -n "$sid" ]] && args+=( --secured-cluster-id "$sid" )
   done
+  case "${INCLUDE_CENTRAL_MODE}" in
+    include) args+=( --include-central ) ;;
+    skip) args+=( --skip-central ) ;;
+  esac
   py="$(acs_python)"
   [[ -n "$py" ]] || die "python3 not found (set ACS_DEMO_PYTHON or use gui/.venv)"
   (cd "$ROOT" && "$py" "${args[@]}")
@@ -249,12 +261,15 @@ invoke_module_once() {
   fi
 }
 
-# Fan-out when SC_IDS non-empty; else single legacy invoke.
+# Fan-out when SC ids and/or --include-central; else single legacy invoke.
 # Args: action_flag ( --run | --uninstall | --status ) module_id dry_run sc_id...
 run_module_planned() {
   local action_flag="$1" filter_id="$2" dry_run="$3"
   shift 3
-  local sc_ids=("$@")
+  local -a sc_ids=()
+  if [[ $# -gt 0 ]]; then
+    sc_ids=("$@")
+  fi
   local script plan n i plane env_json argv_json
   script="$(module_script_path "$filter_id")"
   if [[ ! -x "$script" ]]; then
@@ -262,7 +277,12 @@ run_module_planned() {
     return 1
   fi
 
-  if [[ ${#sc_ids[@]} -eq 0 ]]; then
+  local planned=false
+  if [[ ${#sc_ids[@]} -gt 0 || "${INCLUDE_CENTRAL_MODE}" == "include" || "${INCLUDE_CENTRAL_MODE}" == "skip" ]]; then
+    planned=true
+  fi
+
+  if [[ "$planned" != "true" ]]; then
     local args=("$action_flag")
     [[ "$dry_run" == "true" && "$action_flag" != "--status" ]] && args+=(--dry-run)
     "$script" "${args[@]}"
@@ -276,7 +296,11 @@ run_module_planned() {
     *) orch_action=run ;;
   esac
 
-  plan="$(plan_invocations_json "$filter_id" "$orch_action" "${sc_ids[@]}")" || return 1
+  if [[ ${#sc_ids[@]} -gt 0 ]]; then
+    plan="$(plan_invocations_json "$filter_id" "$orch_action" "${sc_ids[@]}")" || return 1
+  else
+    plan="$(plan_invocations_json "$filter_id" "$orch_action")" || return 1
+  fi
   n="$(printf '%s' "$plan" | jq 'length')"
   for ((i = 0; i < n; i++)); do
     plane="$(printf '%s' "$plan" | jq -r --argjson i "$i" '.[$i].plane // empty')"
@@ -369,6 +393,7 @@ main() {
 
   local action="" module_id="" json=false dry_run=false force=false
   local -a sc_ids=()
+  INCLUDE_CENTRAL_MODE=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -381,6 +406,16 @@ main() {
         shift
         [[ -n "${1:-}" ]] || die "--secured-cluster-id requires an id"
         sc_ids+=("$1")
+        ;;
+      --include-central)
+        [[ -z "$INCLUDE_CENTRAL_MODE" || "$INCLUDE_CENTRAL_MODE" == "include" ]] \
+          || die "--include-central and --skip-central are mutually exclusive"
+        INCLUDE_CENTRAL_MODE=include
+        ;;
+      --skip-central)
+        [[ -z "$INCLUDE_CENTRAL_MODE" || "$INCLUDE_CENTRAL_MODE" == "skip" ]] \
+          || die "--include-central and --skip-central are mutually exclusive"
+        INCLUDE_CENTRAL_MODE=skip
         ;;
       --json) json=true ;;
       --dry-run) dry_run=true ;;
@@ -404,14 +439,21 @@ main() {
       if [[ ${#sc_ids[@]} -gt 0 && -z "$module_id" ]]; then
         die "--secured-cluster-id requires --module <id>"
       fi
+      if [[ -n "$INCLUDE_CENTRAL_MODE" && -z "$module_id" ]]; then
+        die "--include-central / --skip-central requires --module <id>"
+      fi
       ;;
   esac
 
   case "$action" in
     status)
-      if [[ ${#sc_ids[@]} -gt 0 ]]; then
-        [[ -n "$module_id" ]] || die "--secured-cluster-id requires --module <id>"
-        run_module_planned --status "$module_id" false "${sc_ids[@]}"
+      if [[ ${#sc_ids[@]} -gt 0 || -n "$INCLUDE_CENTRAL_MODE" ]]; then
+        [[ -n "$module_id" ]] || die "planned status requires --module <id>"
+        if [[ ${#sc_ids[@]} -gt 0 ]]; then
+          run_module_planned --status "$module_id" false "${sc_ids[@]}"
+        else
+          run_module_planned --status "$module_id" false
+        fi
       elif [[ "$json" == true ]]; then
         status_json "$module_id"
       else
@@ -419,15 +461,26 @@ main() {
       fi
       ;;
     run)
-      if [[ ${#sc_ids[@]} -gt 0 ]]; then
-        run_modules "$module_id" "$dry_run" "${sc_ids[@]}"
+      if [[ ${#sc_ids[@]} -gt 0 || -n "$INCLUDE_CENTRAL_MODE" ]]; then
+        [[ -n "$module_id" ]] || die "planned run requires --module <id>"
+        if [[ ${#sc_ids[@]} -gt 0 ]]; then
+          run_modules "$module_id" "$dry_run" "${sc_ids[@]}"
+        else
+          # Central-only / skip-central with no SC ids still needs planned path.
+          run_module_planned --run "$module_id" "$dry_run"
+        fi
       else
         run_modules "$module_id" "$dry_run"
       fi
       ;;
     uninstall)
-      if [[ ${#sc_ids[@]} -gt 0 ]]; then
-        uninstall_module "$module_id" "$dry_run" "${sc_ids[@]}"
+      if [[ ${#sc_ids[@]} -gt 0 || -n "$INCLUDE_CENTRAL_MODE" ]]; then
+        [[ -n "$module_id" ]] || die "planned uninstall requires --module <id>"
+        if [[ ${#sc_ids[@]} -gt 0 ]]; then
+          uninstall_module "$module_id" "$dry_run" "${sc_ids[@]}"
+        else
+          run_module_planned --uninstall "$module_id" "$dry_run"
+        fi
       else
         uninstall_module "$module_id" "$dry_run"
       fi

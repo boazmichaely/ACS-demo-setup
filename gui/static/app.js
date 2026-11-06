@@ -1550,19 +1550,24 @@ function moduleImpactPlanes(moduleId) {
   return Array.isArray(raw) ? raw.map((p) => String(p).toLowerCase()) : [];
 }
 
-function moduleNeedsScPicker(moduleId) {
-  if (!moduleImpactPlanes(moduleId).includes("openshift")) return false;
-  // Debug: show picker for every OpenShift-impact module, not only the allowlist.
+function moduleNeedsImpactPicker(moduleId) {
+  const planes = moduleImpactPlanes(moduleId);
+  if (!planes.length) return false;
+  // Debug: show the same Central + SC template for every typed module.
   if (debugScPickerEnabled()) return true;
   return ORCHESTRATOR_PLANE_MODULES.has(moduleId);
 }
 
+/** @deprecated use moduleNeedsImpactPicker */
+function moduleNeedsScPicker(moduleId) {
+  return moduleNeedsImpactPicker(moduleId);
+}
+
 /**
- * Pre-launch multi-select for OpenShift-impact modules.
- * Resolves to selected secured-cluster ids, or null if the user cancels.
- * Returns [] when the lab has no SCs (caller runs without fan-out flags).
+ * Pre-launch impact picker: always Central + every SC (gray out irrelevant).
+ * Resolves to ``{ includeCentral, securedClusterIds }`` or null if cancelled.
  */
-function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
+function pickImpactTargets(moduleId, { uninstall = false } = {}) {
   return new Promise((resolve) => {
     const dialog = document.getElementById("scPickerDialog");
     const list = document.getElementById("scPickerList");
@@ -1571,54 +1576,76 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
     const hint = document.getElementById("scPickerHint");
     const closeBtn = document.getElementById("scPickerClose");
     if (!dialog || !list || !form) {
-      resolve([]);
+      resolve({ includeCentral: false, securedClusterIds: [] });
       return;
     }
 
     const lab = activeLab();
     const clusters = [...(lab?.securedClusters || [])];
     const debug = debugScPickerEnabled();
-    if (!clusters.length && !debug) {
-      resolve([]);
-      return;
-    }
+    const planes = moduleImpactPlanes(moduleId);
+    const centralOk = planes.includes("central");
+    const openshiftOk = planes.includes("openshift");
 
     const verb = uninstall ? "Uninstall" : "Install";
     if (title) {
-      title.textContent = `${verb} ${moduleId} - select clusters${
+      title.textContent = `${verb} ${moduleId} - select impact${
         debug ? " (debug)" : ""
       }`;
     }
     if (hint) {
-      hint.textContent = debug
-        ? "Debug multi-select is on (?debugScPicker=1). Placeholder rows are not sent on Continue. Add real secured clusters in Lab credentials for a real multi-SC run."
-        : "OpenShift impact runs on the clusters you select. Central API work always uses Central (no choice needed). Target cluster for Setup is pre-checked.";
+      hint.textContent =
+        "Same checklist every time. Gray rows are not used by this module’s Type. Check Central and/or secured clusters that should take impact.";
     }
 
     const activeId =
       (lab?.activeSecuredClusterId || "").trim() || (clusters[0]?.id || "");
 
-    const realRows = clusters.map((sc) => {
+    const centralDisabled = centralOk ? "" : "disabled";
+    const centralChecked = centralOk ? "checked" : "";
+    const centralNote = centralOk
+      ? "<small>RHACS Central API / policies</small>"
+      : "<small>Not used by this module (Type has no Central)</small>";
+    const rows = [
+      `<label class="demo-sc-picker__row${
+        centralOk ? "" : " demo-sc-picker__row--disabled"
+      }">
+          <input type="checkbox" name="central" value="1" ${centralChecked} ${centralDisabled} />
+          <span class="demo-sc-picker__row-meta">
+            <span>Central</span>
+            ${centralNote}
+          </span>
+        </label>`,
+    ];
+
+    for (const sc of clusters) {
       const id = sc.id || "";
       const name = sc.name || id;
-      const checked = id && id === activeId ? "checked" : "";
+      const can = openshiftOk && Boolean(id);
+      const checked = can && id === activeId ? "checked" : "";
+      const disabled = can ? "" : "disabled";
       const same = sc.sameAsCentralCluster
-        ? `<small>same OpenShift as Central (cred shortcut)</small>`
+        ? "same OpenShift as Central (cred shortcut)"
         : "";
-      return `<label class="demo-sc-picker__row">
-          <input type="checkbox" name="sc" value="${escapeHtml(id)}" ${checked} />
+      const note = can
+        ? same
+          ? `<small>${escapeHtml(same)}</small>`
+          : ""
+        : "<small>Not used by this module (Type has no OpenShift)</small>";
+      rows.push(`<label class="demo-sc-picker__row${
+        can ? "" : " demo-sc-picker__row--disabled"
+      }">
+          <input type="checkbox" name="sc" value="${escapeHtml(id)}" ${checked} ${disabled} />
           <span class="demo-sc-picker__row-meta">
             <span>${escapeHtml(name)}</span>
-            ${same}
+            ${note}
           </span>
-        </label>`;
-    });
+        </label>`);
+    }
 
-    // With 0–1 real SCs, pad with disabled placeholders so the multi-select UI is visible.
-    const placeholders = [];
     if (debug && clusters.length < 2) {
       for (let i = clusters.length; i < 2; i++) {
-        placeholders.push(`<label class="demo-sc-picker__row demo-sc-picker__row--debug">
+        rows.push(`<label class="demo-sc-picker__row demo-sc-picker__row--debug">
           <input type="checkbox" disabled />
           <span class="demo-sc-picker__row-meta">
             <span>(debug) secured-cluster-${i + 1}</span>
@@ -1628,19 +1655,14 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
       }
     }
 
-    if (!realRows.length && debug) {
-      // No real SCs: still open the dialog with placeholders; Continue yields [].
-      list.innerHTML = placeholders.join("");
-    } else {
-      list.innerHTML = realRows.concat(placeholders).join("");
-    }
+    list.innerHTML = rows.join("");
 
-    const finish = (ids) => {
+    const finish = (selection) => {
       dialog.removeEventListener("close", onDialogClose);
       form.removeEventListener("submit", onSubmit);
       if (closeBtn) closeBtn.removeEventListener("click", onCancelClick);
       if (dialog.open) dialog.close();
-      resolve(ids);
+      resolve(selection);
     };
 
     const onCancelClick = () => finish(null);
@@ -1653,23 +1675,22 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
         finish(null);
         return;
       }
-      const selected = [...list.querySelectorAll('input[name="sc"]:checked')]
+      const includeCentral = Boolean(
+        list.querySelector('input[name="central"]:checked:not(:disabled)')
+      );
+      const securedClusterIds = [
+        ...list.querySelectorAll('input[name="sc"]:checked:not(:disabled)'),
+      ]
         .map((el) => el.value)
         .filter(Boolean);
-      if (!selected.length) {
-        if (debug && !clusters.length) {
-          // Debug UI only - no real SCs to send.
-          finish([]);
-          return;
-        }
-        window.alert("Select at least one secured cluster.");
+      if (!includeCentral && !securedClusterIds.length) {
+        window.alert("Select Central and/or at least one secured cluster.");
         return;
       }
-      finish(selected);
+      finish({ includeCentral, securedClusterIds });
     };
 
     const onDialogClose = () => {
-      // Esc / backdrop without an explicit finish
       if (dialog.returnValue === "cancel") finish(null);
     };
 
@@ -1682,7 +1703,12 @@ function pickSecuredClusterIds(moduleId, { uninstall = false } = {}) {
 
 async function executeModuleRun(
   moduleId,
-  { dryRun = false, uninstall = false, securedClusterIds = null } = {}
+  {
+    dryRun = false,
+    uninstall = false,
+    securedClusterIds = null,
+    includeCentral = null,
+  } = {}
 ) {
   const params = new URLSearchParams();
   if (dryRun) params.set("dry_run", "true");
@@ -1690,6 +1716,8 @@ async function executeModuleRun(
   for (const id of securedClusterIds || []) {
     if (id) params.append("secured_cluster_id", id);
   }
+  if (includeCentral === true) params.set("include_central", "true");
+  if (includeCentral === false) params.set("include_central", "false");
   const qs = params.toString();
   const res = await fetch(
     `/api/run/${encodeURIComponent(moduleId)}${qs ? `?${qs}` : ""}`,
@@ -1741,9 +1769,12 @@ async function executeModuleRun(
 async function runModule(moduleId, { dryRun = false, uninstall = false } = {}) {
   if (!moduleId) return;
   let securedClusterIds = null;
-  if (moduleNeedsScPicker(moduleId)) {
-    securedClusterIds = await pickSecuredClusterIds(moduleId, { uninstall });
-    if (securedClusterIds === null) return;
+  let includeCentral = null;
+  if (moduleNeedsImpactPicker(moduleId)) {
+    const picked = await pickImpactTargets(moduleId, { uninstall });
+    if (picked === null) return;
+    securedClusterIds = picked.securedClusterIds;
+    includeCentral = picked.includeCentral;
   }
   const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
@@ -1755,6 +1786,7 @@ async function runModule(moduleId, { dryRun = false, uninstall = false } = {}) {
       dryRun,
       uninstall,
       securedClusterIds,
+      includeCentral,
     });
     recordLastAction(moduleId, { verb: label, ok: result.ok });
     await fetchStatus([moduleId]);
@@ -1781,16 +1813,22 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
     }
   }
   const order = uninstall ? [...ids] : topologicalRunOrder(ids);
-  /** @type {Map<string, string[]|null>} */
-  const scByModule = new Map();
+  /** @type {Map<string, {securedClusterIds: string[]|null, includeCentral: boolean|null}>} */
+  const impactByModule = new Map();
   for (const moduleId of order) {
-    if (!moduleNeedsScPicker(moduleId)) {
-      scByModule.set(moduleId, null);
+    if (!moduleNeedsImpactPicker(moduleId)) {
+      impactByModule.set(moduleId, {
+        securedClusterIds: null,
+        includeCentral: null,
+      });
       continue;
     }
-    const picked = await pickSecuredClusterIds(moduleId, { uninstall });
+    const picked = await pickImpactTargets(moduleId, { uninstall });
     if (picked === null) return;
-    scByModule.set(moduleId, picked);
+    impactByModule.set(moduleId, {
+      securedClusterIds: picked.securedClusterIds,
+      includeCentral: picked.includeCentral,
+    });
   }
   const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
@@ -1803,10 +1841,12 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
       if (order.length > 1) {
         log(`\n[${moduleId}]\n`);
       }
+      const impact = impactByModule.get(moduleId) || {};
       const result = await executeModuleRun(moduleId, {
         dryRun,
         uninstall,
-        securedClusterIds: scByModule.get(moduleId),
+        securedClusterIds: impact.securedClusterIds,
+        includeCentral: impact.includeCentral,
       });
       recordLastAction(moduleId, { verb: label, ok: result.ok });
     }
