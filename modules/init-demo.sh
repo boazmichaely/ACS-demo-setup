@@ -27,66 +27,83 @@ if [[ -z "$PYTHON" ]]; then
   fi
 fi
 
+# Orchestrator: --plane central|openshift; OpenShift plane ≤1 SC id.
+INIT_PLANE=""
+INIT_SC_IDS=()
+INIT_SC_ID=""
+
+want_openshift() { [[ -z "${INIT_PLANE}" || "${INIT_PLANE}" == "openshift" ]]; }
+want_central() { [[ -z "${INIT_PLANE}" || "${INIT_PLANE}" == "central" ]]; }
+
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# init-demo
 
-Purpose:
-  Install the RHACS init-container demo in OpenShift project
-  ${NS}: four small apps (clean / dirty / blue / red)
-  that show Central scanning and policy evaluation on init containers,
-  not only main containers.
+Install the RHACS init-container demo in OpenShift project \`${NS}\`:
+four small apps (clean / dirty / blue / red) that show Central scanning
+and policy evaluation on init containers, not only main containers.
+Catalog: \`impactPlanes: ["central","openshift"]\`.
 
-  What each app is for:
-    clean-app  Baseline - well-behaved init (no CVEs, not privileged).
-    dirty-app  Init image has fixable Important+ CVEs.
-    blue-app   Privileged init (legitimate pattern); main has a probe.
-    red-app    Privileged init + CVEs; main missing liveness probe.
+**What each app is for**
 
-  Also creates three namespace-scoped Central policies (no enforcement):
-    DEMO-Init-Test: Privileged Container (Blue/Red)
-    DEMO-Init-Test: Fixable Important+ CVE (Dirty/Red)
-    DEMO-Init-Test: Missing Liveness Probe (main only)
+- \`clean-app\` - Baseline; well-behaved init (no CVEs, not privileged)
+- \`dirty-app\` - Init image has fixable Important+ CVEs
+- \`blue-app\` - Privileged init (legitimate pattern); main has a probe
+- \`red-app\` - Privileged init + CVEs; main missing liveness probe
 
-  Policy JSON comes from upstream (DEMO-Init-Test names as published).
+Also creates three namespace-scoped Central policies (no enforcement):
 
-  Module Status
-    Status includes the list of artifacts as well as violations found
+- DEMO-Init-Test: Privileged Container (Blue/Red)
+- DEMO-Init-Test: Fixable Important+ CVE (Dirty/Red)
+- DEMO-Init-Test: Missing Liveness Probe (main only)
 
-  How to use after --run:
-    Open Central → search namespace ${NS} for the four
-    deployments, init-container findings, and violations from the
-    DEMO-Init-Test policies. blue-app/red-app may stay 0/1 Ready until
-    someone grants the privileged SCC (expected; RHACS still evaluates
-    the Deployment spec).
+Policy JSON comes from upstream (DEMO-Init-Test names as published).
+Status lists artifacts and violations found.
 
-  Full upstream write-up:
-    https://github.com/boazmichaely/ACS-init-container-test/blob/main/README.md
+**After \`--run\`**
 
-Depends on:
-  none (other modules)
-  Lab credentials with OpenShift access (“OpenShift for modules”) and
-  Central API access (for the three policies).
-  oc on PATH.
+Open Central and search namespace \`${NS}\` for the four deployments,
+init-container findings, and violations from the DEMO-Init-Test policies.
+\`blue-app\` / \`red-app\` may stay 0/1 Ready until someone grants the
+privileged SCC (expected; RHACS still evaluates the Deployment spec).
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  ACS_DEMO_PYTHON            Override Python interpreter
+Full upstream write-up:
+https://github.com/boazmichaely/ACS-init-container-test/blob/main/README.md
 
-Side effects:
-  --run creates project ${NS} if missing, applies the
-    four upstream manifests from GitHub, waits for clean-app/dirty-app,
-    and upserts the three DEMO-Init-Test policies.
-  --uninstall deletes those three policies and deletes project
-    ${NS} (waits until gone).
+## Usage
 
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central|openshift] [--secured-cluster-id ID]...
+\`\`\`
+
+## Flags
+
+- \`--plane central|openshift\` - orchestrator split (omit = both in one process)
+- \`--secured-cluster-id ID\` - OpenShift: at most one; Central: selection ignored
+  (policies are namespace-scoped). Soft-default SC when OpenShift and none passed.
+
+## Status Info
+
+- Project \`${NS}\` and deployment readiness (clean/dirty/blue/red)
+- DEMO-Init-Test policies present in Central
+- Violations found for those policies in the demo namespace
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` OpenShift: creates project \`${NS}\`, applies upstream manifests
+- \`--run\` Central: upserts the three DEMO-Init-Test policies
+- \`--uninstall\` reverses the selected plane(s)
 EOF
 }
 
-# Export KUBECONFIG for the user-selected OpenShift target (lab credentials).
+# Export KUBECONFIG for selected or soft-default OpenShift target.
 ensure_oc() {
   local kc errf err
   if ! command -v oc >/dev/null 2>&1; then
@@ -96,7 +113,11 @@ ensure_oc() {
   errf="$(mktemp)"
   if ! kc="$(
     cd "${ROOT}" || exit 1
-    "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    if [[ -n "${INIT_SC_ID}" ]]; then
+      "$PYTHON" -m lib.openshift login --secured-cluster-id "${INIT_SC_ID}" --print-kubeconfig 2>"${errf}"
+    else
+      "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    fi
   )"; then
     err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
     rm -f "${errf}"
@@ -268,249 +289,320 @@ do_status() {
   local name line present=0 required_ok=1
   local state message
 
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+  if want_openshift; then
+    errf="$(mktemp)"
+    if ! ensure_oc 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      emit_status_sections "no" "OpenShift login failed." "error" "error" \
+        "—" "error" "error" \
+        "${err:-OpenShift access failed}" "error" "error"
+      printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 0
+    fi
     rm -f "${errf}"
-    emit_status_sections "no" "OpenShift login failed." "error" "error" \
-      "—" "error" "error" \
-      "${err:-OpenShift access failed}" "error" "error"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 0
-  fi
-  rm -f "${errf}"
+    if oc get project "${NS}" >/dev/null 2>&1; then
+      project_present="yes"
+    fi
 
-  if oc get project "${NS}" >/dev/null 2>&1; then
-    project_present="yes"
-  fi
-
-  wl_body=""
-  if [[ "$project_present" != "yes" ]]; then
-    wl_sum="0/4 present"
-    wl_tag="warn"
-    wl_body="Project missing. Expected deployments: ${ALL_DEPLOYS[*]}"
-    required_ok=0
-  else
-    for name in "${ALL_DEPLOYS[@]}"; do
-      if oc get deploy "$name" -n "${NS}" >/dev/null 2>&1; then
-        present=$((present + 1))
+    wl_body=""
+    if [[ "$project_present" != "yes" ]]; then
+      wl_sum="0/4 present"
+      wl_tag="warn"
+      wl_body="Project missing. Expected deployments: ${ALL_DEPLOYS[*]}"
+      required_ok=0
+    else
+      for name in "${ALL_DEPLOYS[@]}"; do
+        if oc get deploy "$name" -n "${NS}" >/dev/null 2>&1; then
+          present=$((present + 1))
+        fi
+        line="$(deploy_ready_line "$name" || true)"
+        wl_body+="${line}"$'\n'
+        case "$name" in
+          clean-app|dirty-app)
+            if ! printf '%s' "$line" | grep -q ' ready '; then
+              required_ok=0
+            fi
+            ;;
+        esac
+      done
+      wl_body+=$'\n'"Note: blue-app/red-app may stay 0/1 without privileged SCC (expected)."
+      wl_sum="${present}/4 present"
+      if [[ "$required_ok" -eq 1 && "$present" -eq 4 ]]; then
+        wl_tag="ok"
+        wl_sum+="; clean/dirty ready"
+      elif [[ "$required_ok" -eq 1 ]]; then
+        wl_tag="warn"
+        wl_sum+="; clean/dirty ready (some deploys missing)"
+      else
+        wl_tag="warn"
+        wl_sum+="; clean/dirty not ready"
       fi
-      line="$(deploy_ready_line "$name" || true)"
-      wl_body+="${line}"$'\n'
-      case "$name" in
-        clean-app|dirty-app)
-          if ! printf '%s' "$line" | grep -q ' ready '; then
-            required_ok=0
-          fi
-          ;;
-      esac
-    done
-    wl_body+=$'\n'"Note: blue-app/red-app may stay 0/1 without privileged SCC (expected)."
-    wl_sum="${present}/4 present"
-    if [[ "$required_ok" -eq 1 && "$present" -eq 4 ]]; then
-      wl_tag="ok"
-      wl_sum+="; clean/dirty ready"
-    elif [[ "$required_ok" -eq 1 ]]; then
-      wl_tag="warn"
-      wl_sum+="; clean/dirty ready (some deploys missing)"
-    else
-      wl_tag="warn"
-      wl_sum+="; clean/dirty not ready"
     fi
+  else
+    project_present="n/a"
+    wl_sum="skipped (central plane)"
+    wl_tag="ok"
+    wl_body="OpenShift plane not in this invoke."
+    required_ok=1
   fi
 
-  pol_json="$(run_helper policy-status 2>/dev/null || echo '{"ok":false,"error":"helper failed"}')"
-  if ! printf '%s' "$pol_json" | jq -e . >/dev/null 2>&1; then
-    pol_tag="error"
-    pol_sum="error"
-    pol_body="Could not read policy status from helper."
-  elif [[ "$(printf '%s' "$pol_json" | jq -r '.ok')" != "true" ]]; then
-    pol_tag="error"
-    pol_sum="error"
-    pol_body="$(printf '%s' "$pol_json" | jq -r '.error // "Central unreachable"')"
-  else
-    pol_body="$(printf '%s' "$pol_json" | jq -r '.policies[] | "\(.name): \(if .present then "present" else "MISSING" end)"')"
-    local present_n total_n
-    present_n="$(printf '%s' "$pol_json" | jq '[.policies[] | select(.present)] | length')"
-    total_n="$(printf '%s' "$pol_json" | jq '.policies | length')"
-    pol_sum="${present_n}/${total_n} present"
-    if [[ "$(printf '%s' "$pol_json" | jq -r '.allPresent')" == "true" ]]; then
-      pol_tag="ok"
+  if want_central; then
+    pol_json="$(run_helper policy-status 2>/dev/null || echo '{"ok":false,"error":"helper failed"}')"
+    if ! printf '%s' "$pol_json" | jq -e . >/dev/null 2>&1; then
+      pol_tag="error"
+      pol_sum="error"
+      pol_body="Could not read policy status from helper."
+    elif [[ "$(printf '%s' "$pol_json" | jq -r '.ok')" != "true" ]]; then
+      pol_tag="error"
+      pol_sum="error"
+      pol_body="$(printf '%s' "$pol_json" | jq -r '.error // "Central unreachable"')"
     else
-      pol_tag="warn"
+      pol_body="$(printf '%s' "$pol_json" | jq -r '.policies[] | "\(.name): \(if .present then "present" else "MISSING" end)"')"
+      local present_n total_n
+      present_n="$(printf '%s' "$pol_json" | jq '[.policies[] | select(.present)] | length')"
+      total_n="$(printf '%s' "$pol_json" | jq '.policies | length')"
+      pol_sum="${present_n}/${total_n} present"
+      if [[ "$(printf '%s' "$pol_json" | jq -r '.allPresent')" == "true" ]]; then
+        pol_tag="ok"
+      else
+        pol_tag="warn"
+      fi
     fi
-  fi
 
-  viol_json="$(run_helper violations --namespace "$NS" 2>/dev/null || echo '{"ok":false,"error":"helper failed","alerts":[]}')"
-  if ! printf '%s' "$viol_json" | jq -e . >/dev/null 2>&1; then
-    viol_tag="warn"
-    viol_sum="unavailable"
-    viol_body="Could not list violations."
-  elif [[ "$(printf '%s' "$viol_json" | jq -r '.ok')" != "true" ]]; then
-    viol_tag="warn"
-    viol_sum="unavailable"
-    viol_body="$(printf '%s' "$viol_json" | jq -r '.error // "Central unreachable"')"
-  else
-    local n
-    n="$(printf '%s' "$viol_json" | jq '.alerts | length')"
-    viol_sum="${n} active"
-    if [[ "$n" -eq 0 ]]; then
-      viol_tag="ok"
-      viol_body="No active alerts in ${NS} yet (Sensor delay is normal after a fresh apply)."
+    viol_json="$(run_helper violations --namespace "$NS" 2>/dev/null || echo '{"ok":false,"error":"helper failed","alerts":[]}')"
+    if ! printf '%s' "$viol_json" | jq -e . >/dev/null 2>&1; then
+      viol_tag="warn"
+      viol_sum="unavailable"
+      viol_body="Could not list violations."
+    elif [[ "$(printf '%s' "$viol_json" | jq -r '.ok')" != "true" ]]; then
+      viol_tag="warn"
+      viol_sum="unavailable"
+      viol_body="$(printf '%s' "$viol_json" | jq -r '.error // "Central unreachable"')"
     else
-      viol_tag="ok"
-      # One block per alert: label line + Central console deep link (GUI linkifies https://).
-      viol_body="$(printf '%s' "$viol_json" | jq -r '
-        .alerts[] |
-        "\(.policy // "?") → \(.deployment // "?") (\(.state // "?"))"
-        + (if (.url // "") != "" then "\n\(.url)" else "" end)
-        + "\n"
-      ' | sed '/^$/d')"
+      local n
+      n="$(printf '%s' "$viol_json" | jq '.alerts | length')"
+      viol_sum="${n} active"
+      if [[ "$n" -eq 0 ]]; then
+        viol_tag="ok"
+        viol_body="No active alerts in ${NS} yet (Sensor delay is normal after a fresh apply)."
+      else
+        viol_tag="ok"
+        viol_body="$(printf '%s' "$viol_json" | jq -r '
+          .alerts[] |
+          "\(.policy // "?") → \(.deployment // "?") (\(.state // "?"))"
+          + (if (.url // "") != "" then "\n\(.url)" else "" end)
+          + "\n"
+        ' | sed '/^$/d')"
+      fi
     fi
+  else
+    pol_tag="ok"
+    pol_sum="skipped (openshift plane)"
+    pol_body="Central plane not in this invoke."
+    viol_tag="ok"
+    viol_sum="skipped"
+    viol_body="Central plane not in this invoke."
   fi
 
   emit_status_sections "$project_present" "$wl_body" "$wl_sum" "$wl_tag" \
     "$pol_body" "$pol_sum" "$pol_tag" \
     "$viol_body" "$viol_sum" "$viol_tag"
 
-  if [[ "$wl_tag" == "ok" && "$pol_tag" == "ok" ]]; then
-    state="ok"
-    message="init-demo ready in ${NS}; policies present"
-  elif [[ "$pol_tag" == "error" && "$project_present" != "yes" ]]; then
-    state="needs-run"
-    message="project ${NS} missing; Central: ${pol_sum}"
-  elif [[ "$pol_tag" == "error" ]]; then
-    state="error"
-    message="workloads ${wl_sum}; Central ${pol_sum}"
+  if want_openshift && want_central; then
+    if [[ "$wl_tag" == "ok" && "$pol_tag" == "ok" ]]; then
+      state="ok"
+      message="init-demo ready in ${NS}; policies present"
+    elif [[ "$pol_tag" == "error" && "$project_present" != "yes" ]]; then
+      state="needs-run"
+      message="project ${NS} missing; Central: ${pol_sum}"
+    elif [[ "$pol_tag" == "error" ]]; then
+      state="error"
+      message="workloads ${wl_sum}; Central ${pol_sum}"
+    else
+      state="needs-run"
+      message="workloads ${wl_sum}; policies ${pol_sum}"
+    fi
+  elif want_openshift; then
+    if [[ "$wl_tag" == "ok" ]]; then
+      state="ok"
+      message="workloads ready in ${NS} (openshift plane)"
+    else
+      state="needs-run"
+      message="workloads ${wl_sum}"
+    fi
   else
-    state="needs-run"
-    message="workloads ${wl_sum}; policies ${pol_sum}"
+    if [[ "$pol_tag" == "ok" ]]; then
+      state="ok"
+      message="DEMO-Init-Test policies present (central plane)"
+    elif [[ "$pol_tag" == "error" ]]; then
+      state="error"
+      message="Central: ${pol_sum}"
+    else
+      state="needs-run"
+      message="policies ${pol_sum}"
+    fi
   fi
   printf '%s\t%s\t%s\n' "$MODULE_ID" "$state" "$message"
 }
 
 do_run() {
   local errf err url
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+
+  if want_openshift; then
+    errf="$(mktemp)"
+    if ! ensure_oc 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
     rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
-  fi
-  rm -f "${errf}"
 
-  if ! oc get project "${NS}" >/dev/null 2>&1; then
-    oc new-project "${NS}" --display-name="ACS init-container demo"
-  fi
+    if ! oc get project "${NS}" >/dev/null 2>&1; then
+      oc new-project "${NS}" --display-name="ACS init-container demo"
+    fi
 
-  for url in "${MANIFEST_URLS[@]}"; do
-    echo "${MODULE_ID}: applying ${url}"
-    oc apply -f "${url}"
-  done
+    for url in "${MANIFEST_URLS[@]}"; do
+      echo "${MODULE_ID}: applying ${url}"
+      oc apply -f "${url}"
+    done
 
-  if ! wait_until_ready 120; then
-    printf '%s\tneeds-run\tapplied but clean/dirty not ready yet (check Status)\n' "$MODULE_ID"
-    # Still try policies so a partial lab is useful.
-    upsert_all_policies || true
-    return 1
-  fi
-
-  if ! upsert_all_policies; then
-    printf '%s\terror\tworkloads ready but policy upsert failed\n' "$MODULE_ID"
-    return 1
+    if ! wait_until_ready 120; then
+      printf '%s\tneeds-run\tapplied but clean/dirty not ready yet (check Status)\n' "$MODULE_ID"
+      # Bare (both-plane) invoke: still try policies so a partial lab is useful.
+      if want_central; then
+        upsert_all_policies || true
+      fi
+      return 1
+    fi
   fi
 
-  printf '%s\tok\tinit-demo ready in %s (DEMO-Init-Test policies upserted)\n' "$MODULE_ID" "$NS"
+  if want_central; then
+    if ! upsert_all_policies; then
+      printf '%s\terror\tpolicy upsert failed\n' "$MODULE_ID"
+      return 1
+    fi
+  fi
+
+  if want_openshift && want_central; then
+    printf '%s\tok\tinit-demo ready in %s (DEMO-Init-Test policies upserted)\n' "$MODULE_ID" "$NS"
+  elif want_openshift; then
+    printf '%s\tok\tworkloads ready in %s (openshift plane)\n' "$MODULE_ID" "$NS"
+  else
+    printf '%s\tok\tDEMO-Init-Test policies upserted (central plane)\n' "$MODULE_ID"
+  fi
   return 0
 }
 
 do_dry_run() {
   local errf err have="missing" url name
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+  if want_openshift; then
+    errf="$(mktemp)"
+    if ! ensure_oc 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
     rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
+    if oc get project "${NS}" >/dev/null 2>&1; then
+      have="present"
+    fi
   fi
-  rm -f "${errf}"
-  if oc get project "${NS}" >/dev/null 2>&1; then
-    have="present"
+  echo "${MODULE_ID}: dry-run (plane=${INIT_PLANE:-both})"
+  if want_openshift; then
+    echo "  Project ${NS}: ${have} (would create if missing)"
+    echo "  Would apply:"
+    for url in "${MANIFEST_URLS[@]}"; do
+      echo "    ${url}"
+      oc apply -f "${url}" --dry-run=client -o name >/dev/null || true
+    done
+    echo "  OpenShift target: ${INIT_SC_ID:-lab soft-default SC}"
   fi
-  cat <<EOF
-${MODULE_ID}: dry-run
-  Project ${NS}: ${have} (would create if missing)
-  Would apply:
-EOF
-  for url in "${MANIFEST_URLS[@]}"; do
-    echo "    ${url}"
-    oc apply -f "${url}" --dry-run=client -o name >/dev/null || true
-  done
-  echo "  Would upsert Central policies:"
-  while IFS= read -r name; do
-    [[ -z "$name" ]] && continue
-    echo "    ${name}"
-  done < <(run_helper list-demo-names)
-  echo "  OpenShift target: lab “OpenShift for modules” secured cluster (via ensure_oc)"
+  if want_central; then
+    echo "  Would upsert Central policies:"
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      echo "    ${name}"
+    done < <(run_helper list-demo-names)
+  fi
   printf '%s\tok\tdry-run only\n' "$MODULE_ID"
 }
 
 do_uninstall() {
   local errf err
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+
+  if want_central; then
+    delete_all_policies || {
+      printf '%s\terror\tfailed deleting DEMO-Init-Test policies\n' "$MODULE_ID"
+      return 1
+    }
+  fi
+
+  if want_openshift; then
+    errf="$(mktemp)"
+    if ! ensure_oc 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
     rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
-  fi
-  rm -f "${errf}"
 
-  delete_all_policies || {
-    printf '%s\terror\tfailed deleting DEMO-Init-Test policies\n' "$MODULE_ID"
-    return 1
-  }
-
-  if ! oc get project "${NS}" >/dev/null 2>&1; then
-    printf '%s\tok\tpolicies removed; project %s already absent\n' "$MODULE_ID" "$NS"
-    return 0
-  fi
-  oc delete project "${NS}" --wait=true
-  local i
-  for i in $(seq 1 60); do
     if ! oc get project "${NS}" >/dev/null 2>&1; then
-      printf '%s\tok\tdeleted DEMO-Init-Test policies and project %s\n' "$MODULE_ID" "$NS"
+      if want_central; then
+        printf '%s\tok\tpolicies removed; project %s already absent\n' "$MODULE_ID" "$NS"
+      else
+        printf '%s\tok\tproject %s already absent\n' "$MODULE_ID" "$NS"
+      fi
       return 0
     fi
-    sleep 2
-  done
-  printf '%s\terror\tproject %s still present after delete wait\n' "$MODULE_ID" "$NS"
-  return 1
+    oc delete project "${NS}" --wait=true
+    local i
+    for i in $(seq 1 60); do
+      if ! oc get project "${NS}" >/dev/null 2>&1; then
+        if want_central; then
+          printf '%s\tok\tdeleted DEMO-Init-Test policies and project %s\n' "$MODULE_ID" "$NS"
+        else
+          printf '%s\tok\tdeleted project %s\n' "$MODULE_ID" "$NS"
+        fi
+        return 0
+      fi
+      sleep 2
+    done
+    printf '%s\terror\tproject %s still present after delete wait\n' "$MODULE_ID" "$NS"
+    return 1
+  fi
+
+  printf '%s\tok\tdeleted DEMO-Init-Test policies (central plane)\n' "$MODULE_ID"
+  return 0
 }
 
 do_uninstall_dry_run() {
   local errf err have="absent" name
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+  echo "${MODULE_ID}: uninstall dry-run (plane=${INIT_PLANE:-both})"
+  if want_central; then
+    echo "  Would delete Central policies:"
+    while IFS= read -r name; do
+      [[ -z "$name" ]] && continue
+      echo "    ${name}"
+    done < <(run_helper list-demo-names)
+  fi
+  if want_openshift; then
+    errf="$(mktemp)"
+    if ! ensure_oc 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
     rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
+    if oc get project "${NS}" >/dev/null 2>&1; then
+      have="present (would delete and wait)"
+    fi
+    echo "  Project ${NS}: ${have}"
   fi
-  rm -f "${errf}"
-  if oc get project "${NS}" >/dev/null 2>&1; then
-    have="present (would delete and wait)"
-  fi
-  cat <<EOF
-${MODULE_ID}: uninstall dry-run
-  Would delete Central policies:
-EOF
-  while IFS= read -r name; do
-    [[ -z "$name" ]] && continue
-    echo "    ${name}"
-  done < <(run_helper list-demo-names)
-  echo "  Project ${NS}: ${have}"
   printf '%s\tok\tuninstall dry-run only\n' "$MODULE_ID"
 }
 
@@ -550,6 +642,23 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central|openshift" >&2; exit 1; }
+        INIT_PLANE="$1"
+        case "$INIT_PLANE" in
+          central|openshift) ;;
+          *)
+            echo "$(basename "$0"): --plane must be central or openshift" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        INIT_SC_IDS+=("$1")
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2
@@ -558,6 +667,15 @@ main() {
     esac
     shift
   done
+
+  if want_openshift && ((${#INIT_SC_IDS[@]} > 1)); then
+    # Orchestrator OpenShift invoke always passes one id; reject accidental multi.
+    if [[ "${INIT_PLANE}" == "openshift" ]]; then
+      echo "$(basename "$0"): OpenShift plane expects at most one --secured-cluster-id" >&2
+      exit 1
+    fi
+  fi
+  INIT_SC_ID="${INIT_SC_IDS[0]:-${ACS_DEMO_SC_ID:-}}"
 
   [[ -n "$action" ]] || { usage; exit 0; }
 

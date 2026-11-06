@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Module: registries - ACS image integrations from secured-cluster pull secret
+# Module: registries - ACS image integrations from Central OpenShift pull secret
 # Entrypoint shape matches templates/module-skeleton.sh; logic in registries.py
 set -euo pipefail
 
@@ -17,31 +17,44 @@ fi
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# registries
 
-Purpose:
-  Configure Central image registry integrations needed for vulnerability scanning:
-    - Public Quay.io (robot credentials from pull-secret quay.io)
-    - registry.redhat.io (docker registry from pull-secret)
-    - Public Google Artifact Registry us-central1-docker.pkg.dev (anonymous;
-      needed so ms-demo Online Boutique images can be scanned)
+Configure Central image registry integrations needed for vulnerability scanning.
+Credentials come from **Central's OpenShift** \`openshift-config/pull-secret\`
+(not from a secured cluster):
 
-Depends on:
-  - lab-credentials.json Central API token and/or admin password (or ROX_API_TOKEN)
-  - oc logged into the secured OpenShift cluster (pull-secret in openshift-config)
+- Public Quay.io (robot credentials from that pull-secret)
+- registry.redhat.io (from the same pull-secret)
+- Public Google Artifact Registry \`us-central1-docker.pkg.dev\` (anonymous;
+  so ms-demo Online Boutique images can be scanned)
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override credentials JSON path
-  ACS_CENTRAL_ENDPOINT       Override Central console URL
-  ROX_API_TOKEN / TOKEN      Override Central API token
-  ACS_DEMO_PYTHON            Override Python interpreter
+Catalog: \`impactPlanes: ["central"]\` only (no SC picker / OpenShift fan-out).
 
-Side effects:
-  --run updates or creates image integrations in Central via /v1/imageintegrations
-  --uninstall is not supported (refuses rather than guessing how to undo integrations)
+## Usage
+
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status
+$(basename "$0") --run [--dry-run]
+$(basename "$0") --uninstall [--dry-run]
+\`\`\`
+
+## Status Info
+
+One fold per registry integration in Central:
+
+- \`quay.io\` - present / configured from Central OCP pull-secret
+- \`registry.redhat.io\` - same
+- Google Artifact Registry endpoint - anonymous public registry
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` creates or updates image integrations in Central
+- \`--uninstall\` is not supported (refuses rather than guessing how to undo integrations)
 EOF
 }
 
@@ -113,10 +126,10 @@ do_dry_run() {
 do_uninstall() {
   cat >&2 <<EOF
 ${MODULE_ID}: uninstall is not supported.
-This module creates or updates Central image integrations from the cluster
-pull-secret. Removing them automatically is not safe or well-defined here
-(shared integrations, other consumers). Adjust or delete integrations in the
-RHACS UI if you need to undo them by hand.
+This module creates or updates Central image integrations from Central's
+OpenShift pull-secret. Removing them automatically is not safe or well-defined
+here (shared integrations, other consumers). Adjust or delete integrations in
+the RHACS UI if you need to undo them by hand.
 EOF
   printf '%s\terror\tuninstall not supported for registries\n' "$MODULE_ID"
   return 1

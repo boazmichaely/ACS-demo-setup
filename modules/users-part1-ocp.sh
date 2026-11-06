@@ -12,6 +12,12 @@ PW_CHRIS="chris"
 DEMO_USERS=(adam boaz chris)
 MS_NS="ms-demo"
 INIT_NS="acs-init-container-test"
+# Extra namespaces for chris admin (--chris-ns); ms-demo + init always included.
+CHRIS_EXTRA_NS=()
+# Orchestrator / CLI: at most one SC id (OpenShift-only module).
+U1_SC_IDS=()
+U1_SC_ID=""
+U1_PLANE=""
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_MD="${ROOT}/modules/users-part1-ocp-demo.md"
@@ -26,57 +32,75 @@ fi
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# users-part1-ocp
 
-Purpose:
-  Lead-in for the ACS console plugin visibility demo: create OpenShift
-  HTPasswd users (adam, boaz, chris) and project RBAC so different people
-  can log into the OpenShift console and open Security → Vulnerabilities.
+Lead-in for the ACS console plugin visibility demo: create OpenShift
+HTPasswd users (adam, boaz, chris) and project RBAC so different people
+can log into the OpenShift console and open Security → Vulnerabilities.
 
-  This module alone is not the complete story. Run Users Part 2 (OAuth)
-  and Users Part 3 (ACS) after this for Central OpenShift login and ACS
-  role/scope mappings.
-  The ACS console plugin must already be installed on the cluster.
+This module alone is not the complete story. Run Users Part 2 (OAuth)
+and Users Part 3 (ACS) after this for Central OpenShift login and ACS
+role/scope mappings. The ACS console plugin must already be installed
+on the cluster.
 
-  If ACS is installed but you do not see the Security menu in the
-  OpenShift console, enable it in the OpenShift UI:
-    Administration → Cluster Settings → Configuration → Console →
-    Console plugins, then enable advanced-cluster-security.
+If ACS is installed but you do not see the Security menu in the
+OpenShift console, enable it in the OpenShift UI:
+Administration → Cluster Settings → Configuration → Console →
+Console plugins, then enable \`advanced-cluster-security\`.
 
-  Demo script (before/after tables for adam, boaz, chris):
-    modules/users-part1-ocp-demo.md
-    GUI: /help?doc=users-part1-ocp-demo
-  (Status → Demo also links there.)
+Demo script (before/after tables for adam, boaz, chris):
+\`modules/users-part1-ocp-demo.md\` (GUI: \`/help?doc=users-part1-ocp-demo\`).
+Status → Demo also links there.
 
-  Personas (password = username):
-    adam   cluster-admin
-    boaz   admin on ${MS_NS}
-    chris  admin on ${MS_NS} and ${INIT_NS}
-           (plus optional CHRIS_OCP_NAMESPACES)
+**Personas** (password = username)
 
-  Lab passwords are listed under Status → Credentials.
+- \`adam\` - cluster-admin
+- \`boaz\` - admin on \`${MS_NS}\`
+- \`chris\` - admin on \`${MS_NS}\` and \`${INIT_NS}\` (plus optional \`--chris-ns\`)
 
-Depends on:
-  none (catalog). Demo namespaces ${MS_NS} / ${INIT_NS} are used when present.
-  Lab credentials with OpenShift access (“OpenShift for modules”)
-  oc, htpasswd, openssl, python3, jq on PATH
+Lab passwords are listed under Status → Credentials.
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  ACS_DEMO_PYTHON            Override Python interpreter
-  CHRIS_OCP_NAMESPACES       Optional extra namespaces for chris admin
+Catalog: \`impactPlanes: ["openshift"]\`. With \`--secured-cluster-id\`,
+targets that SC (console plugin / HTPasswd live there). With none, uses
+the lab soft-default SC.
 
-Side effects:
-  --run ensures Secret ${SECRET_NS}/${SECRET_NAME}, IdP ${IDP_NAME},
-    and named RoleBindings for adam/boaz/chris
-  --uninstall removes those RoleBindings, IdP ${IDP_NAME}, the Secret,
-    OCP User and Identity objects for adam/boaz/chris (lab_htpasswd:*),
-    and waits for oauth-openshift to roll out so the login page drops
-    the IdP. Hard-refresh the browser if the old IdP name still appears.
+## Usage
 
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--secured-cluster-id ID] [--chris-ns NS]...
+$(basename "$0") --uninstall [--dry-run] [--secured-cluster-id ID]
+\`\`\`
+
+## Flags
+
+- \`--secured-cluster-id ID\` - lab secured-cluster id (at most one)
+- \`--plane openshift\` - accepted (implied); other planes rejected
+- \`--chris-ns NS\` - Extra OpenShift namespace where chris gets admin
+  (repeatable; always includes \`${MS_NS}\` and \`${INIT_NS}\`)
+- \`--dry-run\` - Print the plan; change nothing
+
+## Status Info
+
+- Demo script link
+- Lab logins (adam / boaz / chris passwords)
+- HTPasswd IdP and \`htpasswd-secret\` state
+- RBAC RoleBindings for the three personas
+
+## Pre Conditions
+
+- ACS console plugin enabled on the cluster
+- \`htpasswd\` and \`openssl\` on PATH
+
+## Side effects
+
+- \`--run\` ensures Secret \`${SECRET_NS}/${SECRET_NAME}\`, IdP \`${IDP_NAME}\`,
+  and named RoleBindings for adam/boaz/chris
+- \`--uninstall\` removes those RoleBindings, IdP \`${IDP_NAME}\`, the Secret,
+  OCP User and Identity objects for adam/boaz/chris (\`lab_htpasswd:*\`),
+  and waits for oauth-openshift to roll out so the login page drops the IdP.
+  Hard-refresh the browser if the old IdP name still appears
 EOF
 }
 
@@ -89,7 +113,11 @@ ensure_oc() {
   errf="$(mktemp)"
   if ! kc="$(
     cd "${ROOT}" || exit 1
-    "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    if [[ -n "${U1_SC_ID}" ]]; then
+      "$PYTHON" -m lib.openshift login --secured-cluster-id "${U1_SC_ID}" --print-kubeconfig 2>"${errf}"
+    else
+      "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    fi
   )"; then
     err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
     rm -f "${errf}"
@@ -117,7 +145,7 @@ require_bins() {
 
 chris_namespaces() {
   local ns
-  for ns in ${CHRIS_OCP_NAMESPACES:-} "$MS_NS" "$INIT_NS"; do
+  for ns in "${CHRIS_EXTRA_NS[@]}" "$MS_NS" "$INIT_NS"; do
     [[ -n "$ns" ]] && printf '%s\n' "$ns"
   done | sed '/^$/d' | sort -u
 }
@@ -722,6 +750,28 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs openshift" >&2; exit 1; }
+        U1_PLANE="$1"
+        case "$U1_PLANE" in
+          openshift) ;;
+          *)
+            echo "$(basename "$0"): OpenShift-only module; --plane must be openshift (got ${U1_PLANE})" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        U1_SC_IDS+=("$1")
+        ;;
+      --chris-ns)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --chris-ns needs a namespace" >&2; exit 1; }
+        CHRIS_EXTRA_NS+=("$1")
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2
@@ -730,6 +780,12 @@ main() {
     esac
     shift
   done
+
+  if ((${#U1_SC_IDS[@]} > 1)); then
+    echo "$(basename "$0"): OpenShift-only module expects at most one --secured-cluster-id" >&2
+    exit 1
+  fi
+  U1_SC_ID="${U1_SC_IDS[0]:-${ACS_DEMO_SC_ID:-}}"
 
   [[ -n "$action" ]] || { usage; exit 0; }
 

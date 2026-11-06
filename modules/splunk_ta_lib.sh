@@ -20,6 +20,7 @@ readonly STA_TA_DIR_DEFAULT="${HOME}/code/Splunk"
 # Set by splunk-TA.sh from flags before calling into this lib.
 STA_TA_DIR="${STA_TA_DIR:-$STA_TA_DIR_DEFAULT}"
 STA_SKIP_TA="${STA_SKIP_TA:-false}"
+STA_SC_ID="${STA_SC_ID:-}"
 
 sta_python() {
   if [[ -n "${ACS_DEMO_PYTHON:-}" ]]; then
@@ -53,7 +54,11 @@ sta_ensure_oc() {
   errf="$(mktemp)"
   if ! kc="$(
     cd "${SPLUNK_MODULE_ROOT}" || exit 1
-    "$py" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    if [[ -n "${STA_SC_ID}" ]]; then
+      "$py" -m lib.openshift login --secured-cluster-id "${STA_SC_ID}" --print-kubeconfig 2>"${errf}"
+    else
+      "$py" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    fi
   )"; then
     err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
     rm -f "${errf}"

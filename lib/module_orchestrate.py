@@ -62,7 +62,7 @@ def _sc_name_by_id(sc_id: str, root: Path | None = None) -> str:
     doc = load_lab_document(root)
     lab = active_lab(doc)
     clusters = list(lab.get("securedClusters") or [])
-    if sc_id == CENTRAL_ONLY_SC_ID and not clusters:
+    if sc_id == CENTRAL_ONLY_SC_ID:
         return "central"
     for item in clusters:
         if (item.get("id") or "").strip() == sc_id:

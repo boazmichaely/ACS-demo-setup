@@ -17,38 +17,57 @@ if [[ -z "$PYTHON" ]]; then
   fi
 fi
 
+# Orchestrator / CLI: at most one SC id (OpenShift-only module).
+MS_SC_IDS=()
+MS_SC_ID=""
+MS_PLANE=""
+
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --help
-       $(basename "$0") --status
-       $(basename "$0") --run [--dry-run]
-       $(basename "$0") --uninstall [--dry-run]
+# ms-demo
 
-Purpose:
-  Deploy the Mostmark microservices demo (Online Boutique) in OpenShift project
-  ${NS} for network/policy/violation demos. Creates the project if needed and
-  applies the upstream application.yaml from GitHub.
+Deploy the Mostmark microservices demo (Online Boutique) in OpenShift project
+\`${NS}\` for network/policy/violation demos.
 
-Depends on:
-  none (other modules)
-  Lab credentials with OpenShift access. Modules use the secured cluster marked
-  “OpenShift for modules” in Lab credentials (or Central OpenShift when the lab
-  has no secured clusters).
-  oc on PATH.
+Creates the project if needed and applies the upstream \`application.yaml\`
+from GitHub. Catalog: \`impactPlanes: ["openshift"]\`.
 
-Environment:
-  ACS_LAB_CREDENTIALS_FILE   Override path to lab-credentials.json
-  ACS_DEMO_PYTHON            Override Python interpreter (for lab oc login)
+With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
+soft-default SC. The orchestrator fans out one invoke per selected SC.
 
-Side effects:
-  --run creates project ${NS} if missing and applies:
-    ${MANIFEST_URL}
-  --uninstall deletes project ${NS} and waits until it is gone.
+## Usage
 
+\`\`\`
+$(basename "$0") --help
+$(basename "$0") --status [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--secured-cluster-id ID]
+$(basename "$0") --uninstall [--dry-run] [--secured-cluster-id ID]
+\`\`\`
+
+## Flags
+
+- \`--secured-cluster-id ID\` - lab secured-cluster id (at most one)
+- \`--plane openshift\` - accepted (implied); other planes rejected
+
+## Status Info
+
+- Project \`${NS}\` and deployment readiness
+- Demo resources vs other resources in the namespace
+- Store URL (OpenShift Route) when present
+
+## Pre Conditions
+
+none
+
+## Side effects
+
+- \`--run\` creates project \`${NS}\` if missing and applies:
+  ${MANIFEST_URL}
+- \`--uninstall\` deletes project \`${NS}\` and waits until it is gone
 EOF
 }
 
-# Export KUBECONFIG for the user-selected OpenShift target (lab credentials).
+# Export KUBECONFIG for the selected or soft-default OpenShift target.
 ensure_oc() {
   local kc errf err
   if ! command -v oc >/dev/null 2>&1; then
@@ -58,7 +77,11 @@ ensure_oc() {
   errf="$(mktemp)"
   if ! kc="$(
     cd "${ROOT}" || exit 1
-    "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    if [[ -n "${MS_SC_ID}" ]]; then
+      "$PYTHON" -m lib.openshift login --secured-cluster-id "${MS_SC_ID}" --print-kubeconfig 2>"${errf}"
+    else
+      "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
+    fi
   )"; then
     err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
     rm -f "${errf}"
@@ -407,7 +430,7 @@ do_dry_run() {
 ${MODULE_ID}: dry-run
   Project ${NS}: ${have} (would create if missing)
   Would apply: ${MANIFEST_URL}
-  OpenShift target: lab “OpenShift for modules” secured cluster (via ensure_oc)
+  OpenShift target: ${MS_SC_ID:-lab soft-default SC} (via ensure_oc)
 EOF
   printf '%s\tok\tdry-run only\n' "$MODULE_ID"
 }
@@ -496,6 +519,23 @@ main() {
       --run) action=run ;;
       --uninstall) action=uninstall ;;
       --dry-run) dry_run=true ;;
+      --plane)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs openshift" >&2; exit 1; }
+        MS_PLANE="$1"
+        case "$MS_PLANE" in
+          openshift) ;;
+          *)
+            echo "$(basename "$0"): OpenShift-only module; --plane must be openshift (got ${MS_PLANE})" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --secured-cluster-id)
+        shift
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --secured-cluster-id needs an id" >&2; exit 1; }
+        MS_SC_IDS+=("$1")
+        ;;
       *)
         echo "$(basename "$0"): unknown option: $1" >&2
         usage >&2
@@ -504,6 +544,12 @@ main() {
     esac
     shift
   done
+
+  if ((${#MS_SC_IDS[@]} > 1)); then
+    echo "$(basename "$0"): OpenShift-only module expects at most one --secured-cluster-id" >&2
+    exit 1
+  fi
+  MS_SC_ID="${MS_SC_IDS[0]:-${ACS_DEMO_SC_ID:-}}"
 
   [[ -n "$action" ]] || { usage; exit 0; }
 
