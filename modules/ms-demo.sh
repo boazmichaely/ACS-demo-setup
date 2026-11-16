@@ -31,6 +31,7 @@ Deploy the Mostmark microservices demo (Online Boutique) in OpenShift project
 
 Creates the project if needed and applies the upstream \`application.yaml\`
 from GitHub. Catalog: \`impactPlanes: ["secured-cluster"]\`.
+\`securedClusterPolicy: multi-warn\` - multi-SC allowed; GUI warns if already elsewhere.
 
 With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
 soft-default SC. The orchestrator fans out one invoke per selected SC.

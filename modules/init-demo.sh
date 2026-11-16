@@ -44,6 +44,7 @@ Install the RHACS init-container demo in OpenShift project \`${NS}\`:
 four small apps (clean / dirty / blue / red) that show Central scanning
 and policy evaluation on init containers, not only main containers.
 Catalog: \`impactPlanes: ["central-api","secured-cluster"]\`.
+\`securedClusterPolicy: multi-warn\` - multi-SC allowed; GUI warns if already elsewhere.
 
 **What each app is for**
 

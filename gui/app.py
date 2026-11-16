@@ -338,6 +338,41 @@ def post_log_page_load() -> dict[str, bool]:
     return {"ok": True}
 
 
+@app.get("/api/modules/{module_id}/sc-presence")
+def module_sc_presence(module_id: str) -> dict:
+    """Return securedClusterPolicy and per-SC footprint presence for the active lab."""
+    mid = (module_id or "").strip()
+    if mid not in _catalog_module_ids():
+        raise HTTPException(status_code=404, detail=f"unknown module: {mid}")
+    from lib.central import load_lab_document
+    from lib.lab_doc import active_lab
+    from lib.module_orchestrate import module_row
+    from lib.sc_presence import presence_by_sc, secured_cluster_policy
+
+    try:
+        row = module_row(mid, REPO_ROOT)
+        policy = secured_cluster_policy(row)
+        lab = active_lab(load_lab_document(REPO_ROOT))
+        sc_ids = [
+            str(c.get("id") or "").strip()
+            for c in (lab.get("securedClusters") or [])
+            if (c.get("id") or "").strip()
+        ]
+        by_sc = presence_by_sc(mid, sc_ids, root=REPO_ROOT) if sc_ids else {}
+        names = {
+            str(c.get("id") or "").strip(): str(c.get("name") or c.get("id") or "")
+            for c in (lab.get("securedClusters") or [])
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "moduleId": mid,
+        "securedClusterPolicy": policy,
+        "bySc": by_sc,
+        "scNames": names,
+    }
+
+
 @app.post("/api/run/{module_id}")
 def run_module(
     module_id: str,
@@ -345,6 +380,7 @@ def run_module(
     uninstall: bool = False,
     secured_cluster_id: list[str] | None = Query(default=None),
     include_central: bool | None = Query(default=None),
+    force: bool = False,
 ) -> StreamingResponse:
     if uninstall:
         args = ["--uninstall", "--module", module_id]
@@ -352,6 +388,8 @@ def run_module(
         args = ["--run", "--module", module_id]
     if dry_run:
         args.append("--dry-run")
+    if force:
+        args.append("--force")
     for sc_id in secured_cluster_id or []:
         sid = (sc_id or "").strip()
         if sid:

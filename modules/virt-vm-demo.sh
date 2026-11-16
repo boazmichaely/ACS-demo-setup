@@ -54,6 +54,7 @@ Prepare an ACS guest-vulnerability demo on OpenShift Virtualization:
 Talk track: \`modules/virt-vm-demo.md\`
 
 Catalog: \`impactPlanes: ["central-api","central-ocp","secured-cluster"]\`.
+\`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
 
 ## Usage
 

@@ -17,7 +17,8 @@ cluster(s) and maintains one Central scan schedule
 
 Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
 
-\`impactPlanes: ["central-api","secured-cluster"]\`. Prefer the orchestrator:
+\`impactPlanes: ["central-api","secured-cluster"]\`.
+\`securedClusterPolicy: multi\` - multi-SC is normal. Prefer the orchestrator:
 
 \`\`\`
 ./scripts/acs-setup.sh --run --module compliance-operator \\

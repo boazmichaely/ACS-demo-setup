@@ -60,9 +60,10 @@ Status → Demo also links there.
 
 Lab passwords are listed under Status → Credentials.
 
-Catalog: \`impactPlanes: ["secured-cluster"]\`. With \`--secured-cluster-id\`,
-targets that SC (console plugin / HTPasswd live there). With none, uses
-the lab soft-default SC.
+Catalog: \`impactPlanes: ["secured-cluster"]\`.
+\`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
+With \`--secured-cluster-id\`, targets that SC (console plugin / HTPasswd live
+there). With none, uses the lab soft-default SC.
 
 ## Usage
 

@@ -62,7 +62,7 @@ Schema **version 2**: `activeLabId` + `labs[]`. Each lab has Central cluster cre
 | **Per lab** | `id`, `name`, `insecureSkipTlsVerify` | TLS skip is per lab; env `ACS_INSECURE_SKIP_TLS_VERIFY` overrides |
 | **Central cluster → OpenShift** | console URL, admin username, admin password, optional `apiToken` | If `apiToken` is set, modules use `oc login --token=` (SSO labs). Else username/password. |
 | **Central cluster → RHACS Central** | console URL, API token, admin username, admin password, `authPreference` | `authPreference`: `apiToken` or `password` when both are set |
-| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** quietly soft-defaults which SC is pre-selected for `secured-cluster` impact (same-as-Central, else first). Catalog `impactPlanes` (GUI Type: `central-api` / `central-ocp` / `secured-cluster`) + orchestrator fan-out (default: all secured-cluster, then central-ocp, then central-api; optional `planeOrder`) own multi-SC runs; modules must not loop SCs. `central-api` modules may adjust Central membership when the selection changes (not enforced). Empty `securedClusters` → Central OpenShift for `oc` helpers. Modules with `central-ocp` are not ACSCS-safe |
+| **Secured clusters** | `id`, `name`, `sameAsCentralCluster`, OpenShift block | Default `sameAsCentralCluster: true` (credentials shortcut only; the SC is still a normal target). **`activeSecuredClusterId`** quietly soft-defaults which SC is pre-selected for `secured-cluster` impact (same-as-Central, else first). Catalog `impactPlanes` (GUI Type: `central-api` / `central-ocp` / `secured-cluster`) + orchestrator fan-out (default: all secured-cluster, then central-ocp, then central-api; optional `planeOrder`) own multi-SC runs; modules must not loop SCs. Catalog **`securedClusterPolicy`**: `single` (refuse multi-SC / refuse install when footprint is on another SC), `multi-warn` (allow; GUI warns if already elsewhere), `multi` (normal multi-SC). Soft-default is not this policy. `central-api` modules may adjust Central membership when the selection changes (not enforced). Empty `securedClusters` → Central OpenShift for `oc` helpers. Modules with `central-ocp` are not ACSCS-safe |
 
 Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (`endpoint` + `token`) are migrated to v2 on load.
 
@@ -358,6 +358,31 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 **Uninstall must do:** Delete Standalone, Helm release, and namespace. Leave cluster-scoped CRDs. `--dry-run` required.
 
 **Acceptance:** Splunk Web reachable; TA installed when `.tgz` present; `--status` folds reflect stack + TA; clear message if TA bundle missing; demo notes cover UI config and search verification
+
+---
+
+### M10 — `syslog-notifier` (SC CEF sink + Central Syslog notifier)
+
+**Purpose:** Deploy a generic TCP syslog/CEF receiver with an in-pod ring-buffer viewer on a **secured cluster** (ACSCS-safe; no Central OCP deploy), configure Central’s Syslog notifier to that public LoadBalancer endpoint, attach the notifier to policies stamped with category `DEMO`, and prove CEF arrival (including CEF vs legacy field-order compare) in a tiny viewer UI.
+
+**Pre conditions:** none (OpenShift LoadBalancer must be able to allocate an address on the target SC)
+
+**Catalog:** `impactPlanes: ["central-api", "secured-cluster"]`
+
+**Plane contract:**
+
+- `secured-cluster`: namespace `acs-syslog-demo`, Deployment (TCP `:5140` + HTTP viewer `:8080`), LoadBalancer Service for syslog, viewer Route; at most one `--secured-cluster-id` per SC invoke
+- `central-api`: upsert Syslog notifier via `/v1/notifiers` (host/port = LB), `POST /v1/notifiers/test` (must succeed), attach/detach on `DEMO` policies (same ownership as Slack)
+- ACSCS-safe: never deploys to Central’s OpenShift
+
+**Status / Run / Acceptance:**
+
+- `--status` is `ok` when receiver Ready, LB has an address, viewer Route present, Syslog notifier points at that host:port, and every `DEMO` policy has the notifier attached; folds show receiver health, syslog endpoint, **viewer Route URL**, notifier summary, and DEMO wiring counts - **not** the message ring
+- `--run` secured-cluster: apply workload + wait Ready/LB; central-api: upsert → Test → wire DEMO policies (default message format `CEF`; `--format LEGACY` for legacy field order)
+- `--uninstall` central-api: detach + delete this notifier only; secured-cluster: delete namespace `acs-syslog-demo`
+- Viewer: list / raw+parsed detail / compare two buffered messages; ring size 100 in memory; clear API; no PVC/TLS/auth in v1
+- Demo notes: [`modules/syslog-notifier-demo.md`](modules/syslog-notifier-demo.md)
+- Shared policy helper: [`lib/demo_policies.py`](lib/demo_policies.py)
 
 ---
 

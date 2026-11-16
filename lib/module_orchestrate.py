@@ -148,6 +148,7 @@ def plan_module_invocations(
     sc_ids: list[str] | None = None,
     *,
     include_central: bool | None = None,
+    force: bool = False,
     root: Path | None = None,
 ) -> list[ModuleInvocation]:
     """Return ordered invocations for run/uninstall/status.
@@ -161,11 +162,16 @@ def plan_module_invocations(
     each if ``include_central`` is not False and the catalog lists them.
     Default order: all secured-cluster, then central-ocp, then central-api
     (``planeOrder`` may put Central sides before secured-cluster).
+
+    Enforces catalog ``securedClusterPolicy`` for run/uninstall (see
+    ``lib.sc_presence.enforce_secured_cluster_policy``).
     """
     if isinstance(module_row_or_id, str):
         row = module_row(module_row_or_id, root)
+        module_id = (row.get("id") or module_row_or_id).strip()
     else:
         row = module_row_or_id
+        module_id = str(row.get("id") or "").strip()
 
     ids = [s.strip() for s in (sc_ids or []) if (s or "").strip()]
     # Dedupe preserving order
@@ -175,6 +181,14 @@ def plan_module_invocations(
         if sid not in seen:
             seen.add(sid)
             uniq.append(sid)
+
+    if module_id and uniq:
+        from lib.sc_presence import enforce_secured_cluster_policy
+
+        for warn in enforce_secured_cluster_policy(
+            module_id, action, uniq, force=force, root=root
+        ):
+            print(f"acs-setup: warning: {warn}", flush=True)
 
     planes = impact_planes(row)
     want_central = False
@@ -288,6 +302,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Do not run Central planes even if the catalog lists them",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Acknowledge multi-warn presence on another SC (GUI after confirm)",
+    )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     include_central: bool | None
     if args.include_central:
@@ -302,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
             args.action,
             list(args.sc_ids),
             include_central=include_central,
+            force=bool(args.force),
         )
     except (KeyError, RuntimeError) as exc:
         print(exc, file=sys.stderr)
