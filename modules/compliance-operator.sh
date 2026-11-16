@@ -25,8 +25,9 @@ Does not apply ScanSetting/ScanSettingBinding CRs on the cluster.
 \`\`\`
 
 That runs OpenShift once per id, then Central once with the full selection.
-With no \`--secured-cluster-id\`, default is the lab soft-default SC
-(\`activeSecuredClusterId\`) only (not every lab SC).
+With no \`--secured-cluster-id\`: \`--status\` reports **every** lab SC;
+\`--run\` / \`--uninstall\` use the soft-default SC
+(\`activeSecuredClusterId\`) only.
 
 ## Usage
 
@@ -44,7 +45,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane central-api|secured-cluster] [
 - omit \`--plane\` - both in one process (legacy; may still loop SCs internally)
 - \`--secured-cluster-id ID\` - repeatable lab SC id. secured-cluster plane: exactly one
   per invoke (orchestrator fans out). Central plane: full selection for schedule merge/drop.
-  Soft-default SC when none passed
+  When none passed: status covers every lab SC; run/uninstall use soft-default SC only
 - \`--secured-cluster NAME\` - legacy name filter (prefer \`--secured-cluster-id\`)
 - \`--patch-node-selector\` - Clear \`openshift.io/node-selector\` on
   \`openshift-compliance\` during OLM install
@@ -52,8 +53,9 @@ $(basename "$0") --uninstall [--dry-run] [--plane central-api|secured-cluster] [
 
 ## Status Info
 
-Per selected secured cluster: Compliance Operator overview and Central schedule
-membership for the selection.
+Per secured cluster (every lab SC when no ids are passed; otherwise the
+selection): Compliance Operator overview labeled by cluster name, plus Central
+schedule membership for the selection.
 
 ## Pre Conditions
 
