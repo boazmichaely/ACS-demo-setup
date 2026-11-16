@@ -606,6 +606,7 @@ def deploy_summary(item: dict[str, Any]) -> str:
 RESULT_EXAMPLE_CAP = 1
 
 ABOUT_SECTION_ORDER = {
+    "About this overview": 0,
     "About workloads": 1,
     "About CO configuration": 2,
     "About profile catalog": 3,
@@ -1001,9 +1002,43 @@ def build_overview_sections() -> list[dict[str, Any]]:
     sections.append(
         make_section(
             "Context",
+            "About this overview",
+            prose_body(
+                "This Status view is a learning map of Compliance Operator (CO) on one "
+                "secured cluster, plus the RHACS Central schedule that drives it. Expand "
+                "the folds below in order the first time: each group is a layer of the "
+                "same story, from OLM install through profiles, Central config, and "
+                "on-cluster scan activity.",
+                "Why these items (and not a raw dump of every CR):\n"
+                "1. Workloads - Subscription, ClusterServiceVersion, and Deployments show "
+                "whether OLM installed the operator and whether the controller / profile "
+                "parsers are Ready.\n"
+                "2. CO configuration - ScanSetting and ScanSettingBinding are the on-cluster "
+                "schedule and profile bind; tags separate RHACS sensor-managed objects from "
+                "local cluster defaults.\n"
+                "3. Profile catalog - Counts and oc/jq examples for exploring Profiles and "
+                "Rules once content has synced.\n"
+                "4. RHACS Central - The ComplianceScanConfiguration in Central's DB (not a "
+                "Kubernetes CR) and how it maps to this secured cluster.\n"
+                "5. CO scan activity - ComplianceSuite / ComplianceScan CRs created when the "
+                "operator reconciles a binding.\n"
+                "6. CO scan results - Check and remediation CR totals after a run.",
+                "How to use it: start at Context for the API endpoint and namespace, confirm "
+                "Workloads are Succeeded/Ready, then compare group 2 (cluster CRs) with "
+                "group 4 (Central schedule) using matching scan names. Groups 5-6 show "
+                "whether that schedule produced live suites, scans, and results. Re-run "
+                "Refresh status after install or a scan to watch the layers fill in.",
+            ),
+            summary="Learning map for CO + RHACS schedule layers",
+        )
+    )
+    sections.append(
+        make_section(
+            "Context",
             "Cluster API",
             {"server": server, "namespace": NS, "time": datetime.now().astimezone().isoformat()},
             body_format="json",
+            summary="API server, namespace, and capture time",
         )
     )
 

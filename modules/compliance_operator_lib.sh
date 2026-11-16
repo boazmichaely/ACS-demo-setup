@@ -49,9 +49,12 @@ co_python() {
 }
 
 # List secured clusters for this invoke as id<TAB>name.
-# Preference: CO_SC_IDS → CO_SECURED_CLUSTER name filter → Target cluster only.
+# Preference: CO_SC_IDS → CO_SECURED_CLUSTER name filter →
+#   --all (status): every lab SC
+#   default (run/uninstall): soft-default SC only
 co_list_sc_targets() {
-  local py
+  local py want_all=false
+  [[ "${1:-}" == "--all" ]] && want_all=true
   py="$(co_python)"
   if [[ ${#CO_SC_IDS[@]} -gt 0 ]]; then
     (
@@ -72,8 +75,10 @@ for r in rows:
     cd "${COMPLIANCE_MODULE_ROOT}" || exit 1
     if [[ -n "$CO_SECURED_CLUSTER" ]]; then
       "$py" -m lib.openshift list-secured-clusters --name "$CO_SECURED_CLUSTER"
+    elif [[ "$want_all" == "true" ]]; then
+      "$py" -m lib.openshift list-secured-clusters
     else
-      # Soft-default SC only (not every lab SC).
+      # Soft-default SC only (not every lab SC) for run/uninstall without ids.
       "$py" - <<'PY'
 from lib.lab_doc import active_lab, preferred_secured_cluster
 from lib.central import load_lab_document
@@ -187,7 +192,7 @@ co_operator_status_line() {
 }
 
 co_scan_status_line() {
-  local helper py output parsed scan_st scan_msg
+  local helper py output parsed scan_st scan_msg flag
   local -a args=(status --cli)
   helper="$(co_scan_helper)"
   py="$(co_python)"
@@ -195,7 +200,9 @@ co_scan_status_line() {
     printf 'error\tmissing helper %s\n' "$helper"
     return 1
   fi
-  [[ -n "$CO_SECURED_CLUSTER" ]] && args+=(--secured-cluster "$CO_SECURED_CLUSTER")
+  while IFS= read -r flag; do
+    [[ -n "$flag" ]] && args+=("$flag")
+  done < <(co_scan_common_args)
   if ! output="$("$py" "$helper" "${args[@]}" 2>&1)"; then
     parsed="$(co_parse_scan_status "$output")"
     if [[ -n "$parsed" ]]; then
@@ -307,7 +314,7 @@ compliance_operator_emit_overview_sections() {
     if [[ -n "$line" ]]; then
       printf '%s\n' "$line" >>"$merged"
     fi
-  done < <(co_list_sc_targets)
+  done < <(co_list_sc_targets --all)
 
   if [[ -s "$merged" ]]; then
     co_merge_sections_json_lines <"$merged"
@@ -339,7 +346,7 @@ co_operator_status_all() {
     elif [[ "$st" == "needs-run" && "$worst" != "error" ]]; then
       worst=needs-run
     fi
-  done < <(co_list_sc_targets)
+  done < <(co_list_sc_targets --all)
 
   if [[ ${#parts[@]} -eq 0 ]]; then
     printf 'error\tno secured clusters listed for this lab\n'
@@ -351,7 +358,15 @@ co_operator_status_all() {
 }
 
 compliance_operator_emit_status() {
-  local op_line scan_line op_st
+  local op_line scan_line op_st sc_id sc_name
+  # Align Central schedule membership check with OLM status scope: when no
+  # SC ids / name filter were passed, evaluate every lab SC (not soft-default).
+  if [[ ${#CO_SC_IDS[@]} -eq 0 && -z "$CO_SECURED_CLUSTER" ]]; then
+    while IFS=$'\t' read -r sc_id sc_name; do
+      [[ -n "$sc_id" ]] || continue
+      CO_SC_IDS+=("$sc_id")
+    done < <(co_list_sc_targets --all)
+  fi
   compliance_operator_emit_overview_sections
   if ! op_line="$(co_operator_status_all)"; then
     :
@@ -548,12 +563,56 @@ compliance_operator_wait_ready() {
 
   main_deploy="$(co_main_deployment "${ns}" 2>/dev/null || true)"
   if [[ -z "${main_deploy}" ]]; then
-    echo "No compliance-operator deployment found; CSV succeeded — verify: oc get deploy -n ${ns}"
-    return 0
+    echo "No compliance-operator deployment found after CSV Succeeded" >&2
+    oc get deploy,pods -n "${ns}" 2>/dev/null || true
+    return 1
   fi
 
   echo "Waiting for deployment/${main_deploy} rollout (timeout ${rollout_timeout}s)"
-  oc rollout status "deploy/${main_deploy}" -n "${ns}" --timeout="${rollout_timeout}s"
+  if ! oc rollout status "deploy/${main_deploy}" -n "${ns}" --timeout="${rollout_timeout}s"; then
+    echo "Deployment/${main_deploy} rollout failed" >&2
+    oc get deploy,pods -n "${ns}" 2>/dev/null || true
+    return 1
+  fi
+
+  # rollout status can pass while the pod is still bouncing once. Poll for
+  # Ready, then require it to hold for a short stability window so CrashLoop
+  # is still caught without failing on a single startup restart.
+  local ready_wait=90
+  local start=$SECONDS
+  while ! co_deployment_ready "${ns}" "${main_deploy}"; do
+    if [[ $((SECONDS - start)) -ge "${ready_wait}" ]]; then
+      echo "Deployment/${main_deploy} not Ready within ${ready_wait}s after rollout" >&2
+      oc get deploy,pods -n "${ns}" -o wide 2>/dev/null || true
+      oc logs -n "${ns}" -l name=compliance-operator --tail=30 2>/dev/null || true
+      return 1
+    fi
+    sleep 5
+  done
+  echo "Deployment/${main_deploy} Ready; checking stability (15s)"
+  sleep 15
+  if ! co_deployment_ready "${ns}" "${main_deploy}"; then
+    echo "Deployment/${main_deploy} lost Ready within stability window" >&2
+    oc get deploy,pods -n "${ns}" -o wide 2>/dev/null || true
+    oc logs -n "${ns}" -l name=compliance-operator --tail=30 2>/dev/null || true
+    return 1
+  fi
+  if ! co_csv_succeeded_name "${ns}" >/dev/null 2>&1; then
+    echo "CSV no longer Succeeded after deployment Ready check" >&2
+    oc get csv -n "${ns}" -o wide 2>/dev/null || true
+    return 1
+  fi
+}
+
+# True when deploy has readyReplicas>=1 and at least one Ready pod.
+co_deployment_ready() {
+  local ns="$1" deploy="$2"
+  local ready
+  ready="$(oc get "deploy/${deploy}" -n "${ns}" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+  [[ "${ready:-0}" =~ ^[1-9][0-9]*$ ]] || return 1
+  oc get pods -n "${ns}" -l name=compliance-operator \
+    -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null \
+    | grep -qx 'true'
 }
 
 co_scan_common_args() {
@@ -769,25 +828,110 @@ compliance_operator_uninstall_olm() {
     echo "OperatorGroup/compliance-operator not present in ${ns}"
   fi
 
-  # ProfileBundles keep namespace finalizers after the operator CSV is gone; clear them
-  # so namespace deletion can finish.
-  local pbs
-  pbs="$(oc get profilebundle.compliance -n "${ns}" -o name 2>/dev/null || true)"
-  if [[ -n "${pbs}" ]]; then
-    while IFS= read -r pb; do
-      [[ -n "$pb" ]] || continue
-      echo "Clear finalizers on ${pb}"
-      oc patch "${pb}" -n "${ns}" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
-      oc delete "${pb}" -n "${ns}" --wait=false || true
-    done <<<"${pbs}"
-  fi
+  # CO CRs often keep finalizers after the operator CSV is gone (ProfileBundles,
+  # ComplianceScan/Suite from RHACS schedules, etc.). Clear then delete so the
+  # namespace can finish terminating.
+  co_clear_compliance_finalizers "${ns}"
 
   if oc get "namespace/${ns}" >/dev/null 2>&1; then
     echo "Delete namespace ${ns}"
-    oc delete "namespace/${ns}" --wait=true --timeout=300s
+    if ! oc delete "namespace/${ns}" --wait=true --timeout=120s; then
+      echo "Namespace ${ns} delete wait timed out; clearing remaining CO finalizers and retrying finalize"
+      co_clear_compliance_finalizers "${ns}"
+      co_finalize_empty_terminating_namespace "${ns}" || return 1
+    fi
   else
     echo "Namespace ${ns} already absent"
   fi
+}
+
+# Clear finalizers and delete common Compliance Operator CRs that block NS delete.
+co_clear_compliance_finalizers() {
+  local ns="$1"
+  local kind obj objs
+  for kind in \
+    compliancescans.compliance.openshift.io \
+    compliancesuites.compliance.openshift.io \
+    compliancecheckresults.compliance.openshift.io \
+    complianceremediations.compliance.openshift.io \
+    scansettingbindings.compliance.openshift.io \
+    scansettings.compliance.openshift.io \
+    profilebundles.compliance.openshift.io \
+    profiles.compliance.openshift.io \
+    rules.compliance.openshift.io \
+    tailoredprofiles.compliance.openshift.io
+  do
+    objs="$(oc get "${kind}" -n "${ns}" -o name 2>/dev/null || true)"
+    [[ -n "${objs}" ]] || continue
+    while IFS= read -r obj; do
+      [[ -n "$obj" ]] || continue
+      echo "Clear finalizers on ${obj}"
+      oc patch "${obj}" -n "${ns}" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
+      oc delete "${obj}" -n "${ns}" --wait=false || true
+    done <<<"${objs}"
+  done
+}
+
+# If ns is Terminating and content is gone (or only discovery is stuck), clear
+# the kubernetes finalizer via the namespace finalize API.
+co_finalize_empty_terminating_namespace() {
+  local ns="$1"
+  local phase content_removed discovery_failed py tmp
+  if ! oc get "namespace/${ns}" >/dev/null 2>&1; then
+    echo "Namespace ${ns} already gone"
+    return 0
+  fi
+  phase="$(oc get "namespace/${ns}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  if [[ "$phase" != "Terminating" ]]; then
+    echo "Namespace ${ns} still present (phase=${phase:-unknown}); not finalizing" >&2
+    return 1
+  fi
+  content_removed="$(oc get "namespace/${ns}" -o jsonpath='{range .status.conditions[?(@.type=="NamespaceContentRemaining")]}{.status}{.reason}{end}' 2>/dev/null || true)"
+  discovery_failed="$(oc get "namespace/${ns}" -o jsonpath='{range .status.conditions[?(@.type=="NamespaceDeletionDiscoveryFailure")]}{.status}{end}' 2>/dev/null || true)"
+  # Prefer ContentRemoved. If content remains, try one more CO finalizer sweep.
+  if [[ "$content_removed" != "FalseContentRemoved" ]]; then
+    echo "Namespace ${ns}: remaining content (${content_removed}); clearing CO finalizers again"
+    co_clear_compliance_finalizers "${ns}"
+    sleep 2
+    content_removed="$(oc get "namespace/${ns}" -o jsonpath='{range .status.conditions[?(@.type=="NamespaceContentRemaining")]}{.status}{.reason}{end}' 2>/dev/null || true)"
+  fi
+  if [[ "$content_removed" != "FalseContentRemoved" ]]; then
+    echo "Namespace ${ns} still has content or unknown remaining state (${content_removed}); not finalizing" >&2
+    return 1
+  fi
+  if [[ "$discovery_failed" == "True" ]]; then
+    echo "Namespace ${ns}: content gone, discovery failure blocking delete; finalizing namespace"
+  else
+    echo "Namespace ${ns}: content gone but still Terminating; finalizing namespace"
+  fi
+  py="$(co_python)"
+  tmp="$(mktemp)"
+  if ! oc get "namespace/${ns}" -o json \
+    | "$py" -c 'import json,sys; ns=json.load(sys.stdin); ns.setdefault("spec",{})["finalizers"]=[]; json.dump(ns,sys.stdout)' \
+    >"$tmp"; then
+    rm -f "$tmp"
+    echo "Failed to build finalize payload for ${ns}" >&2
+    return 1
+  fi
+  if ! oc replace --raw "/api/v1/namespaces/${ns}/finalize" -f "$tmp" >/dev/null; then
+    rm -f "$tmp"
+    echo "Finalize API failed for namespace ${ns}" >&2
+    return 1
+  fi
+  rm -f "$tmp"
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if ! oc get "namespace/${ns}" >/dev/null 2>&1; then
+      echo "Namespace ${ns} removed"
+      return 0
+    fi
+    sleep 1
+  done
+  if oc get "namespace/${ns}" >/dev/null 2>&1; then
+    echo "Namespace ${ns} still present after finalize" >&2
+    return 1
+  fi
+  return 0
 }
 
 compliance_operator_uninstall() {

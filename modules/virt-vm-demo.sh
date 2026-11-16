@@ -77,10 +77,10 @@ $(basename "$0") --uninstall [--dry-run] [--plane central-api|central-ocp|secure
 
 ## Status Info
 
-- OpenShift Virtualization (CNV) install state
-- \`ROX_VIRTUAL_MACHINES\` on Central CR (Central OCP) + SecuredCluster (SC)
-- Demo VMs in \`${NS}\` and Central Virtual Machine inventory (CVE findings)
-- Link to the talk track
+- \`secured-cluster\`: CNV health, SecuredCluster flags/scraper, demo VMs in \`${NS}\`
+- \`central-ocp\`: Central CR \`ROX_VIRTUAL_MACHINES\` on Central OpenShift only
+- \`central-api\`: Central Virtual Machine inventory (CVE findings) only
+- omit \`--plane\`: combined view of all of the above (talk track always included)
 
 ## Pre Conditions
 
@@ -279,10 +279,22 @@ cnv_healthy() {
 }
 
 ensure_kvm_emulation() {
-  local cur
+  local cur use_emul
   cur="$(oc -n "${CNV_NS}" get subscription kubevirt-hyperconverged -o jsonpath='{.spec.config.env[?(@.name=="KVM_EMULATION")].value}' 2>/dev/null || true)"
   if [[ "$cur" == "true" ]]; then
     return 0
+  fi
+  # Half-managed CNV (HCO healthy, Subscription removed) still serves VMs when
+  # KubeVirt already has developerConfiguration.useEmulation. Do not recreate
+  # the Subscription here - that can start a stuck OLM upgrade with no operators.
+  if ! oc -n "${CNV_NS}" get subscription kubevirt-hyperconverged >/dev/null 2>&1; then
+    use_emul="$(oc -n "${CNV_NS}" get kubevirt -o jsonpath='{.items[0].spec.configuration.developerConfiguration.useEmulation}' 2>/dev/null || true)"
+    if [[ "$use_emul" == "true" ]]; then
+      echo "${MODULE_ID}: no CNV Subscription; KubeVirt useEmulation already true - skipping OLM patch"
+      return 0
+    fi
+    echo "${MODULE_ID}: no CNV Subscription and useEmulation not set; cannot enable KVM_EMULATION via OLM" >&2
+    return 1
   fi
   oc -n "${CNV_NS}" patch subscription kubevirt-hyperconverged --type merge -p \
     '{"spec":{"config":{"env":[{"name":"KVM_EMULATION","value":"true"}]}}}'
@@ -687,23 +699,48 @@ wait_central_vms() {
 
 # --- status ----------------------------------------------------------------------
 
+# Build ACS_SECTIONS_JSON for the active plane(s) only. Do not probe SC resources
+# while on central-ocp (Central kubeconfig), or CNV/VMs will look falsely missing.
 emit_status_sections() {
-  local cnv="missing" flags="missing" vms_ready="0" central_json talk
-  talk="${ROOT}/modules/virt-vm-demo.md"
-  if cnv_healthy 2>/dev/null; then cnv="healthy"; elif oc get ns "${CNV_NS}" >/dev/null 2>&1; then cnv="installing/unhealthy"; fi
-  if acs_flags_applied 2>/dev/null; then flags="applied"; fi
-  vms_ready="$(count_running_vmis 2>/dev/null || echo 0)"
-  central_json="$(probe_central_json)"
+  local talk="${ROOT}/modules/virt-vm-demo.md"
+  local sections="[]"
+  local cnv="missing" flags="missing" vms_ready="0"
+  local central_json='{"ok":false,"error":"not probed","count":0,"scanned":0,"withFindings":0,"samples":[],"vms":[]}'
+  local flags_body=""
+
+  if want_openshift; then
+    if cnv_healthy 2>/dev/null; then cnv="healthy"
+    elif oc get ns "${CNV_NS}" >/dev/null 2>&1; then cnv="installing/unhealthy"
+    fi
+    vms_ready="$(count_running_vmis 2>/dev/null || echo 0)"
+  fi
+
+  if want_central_ocp || want_openshift; then
+    if acs_flags_applied 2>/dev/null; then flags="applied"; fi
+  fi
+
+  if want_central_api; then
+    central_json="$(probe_central_json)"
+  fi
+
+  if want_central_ocp && want_openshift; then
+    flags_body="ROX_VIRTUAL_MACHINES on Central CR (Central OCP) + SecuredCluster (SC); scraper poll short for demos. State: ${flags}"
+  elif want_central_ocp; then
+    flags_body="ROX_VIRTUAL_MACHINES on Central CR (Central OCP only). State: ${flags}"
+  elif want_openshift; then
+    flags_body="ROX_VIRTUAL_MACHINES + scraper poll on SecuredCluster (SC only). State: ${flags}"
+  fi
+
   local central_count central_scanned central_findings
   central_count="$(printf '%s' "$central_json" | "$PYTHON" -c 'import sys,json; d=json.load(sys.stdin); print(d.get("count","?"))' 2>/dev/null || echo "?")"
   central_scanned="$(printf '%s' "$central_json" | "$PYTHON" -c 'import sys,json; d=json.load(sys.stdin); print(d.get("scanned","?"))' 2>/dev/null || echo "?")"
   central_findings="$(printf '%s' "$central_json" | "$PYTHON" -c 'import sys,json; d=json.load(sys.stdin); print(d.get("withFindings","?"))' 2>/dev/null || echo "?")"
 
-  local sections_json
-  sections_json="$(
+  sections="$(
     jq -nc \
       --arg cnv "$cnv" \
       --arg flags "$flags" \
+      --arg flags_body "$flags_body" \
       --arg vms "${vms_ready}/${VM_EXPECTED}" \
       --arg cc "$central_count" \
       --arg cs "$central_scanned" \
@@ -711,55 +748,55 @@ emit_status_sections() {
       --arg ns "$NS" \
       --arg talk "$talk" \
       --argjson central "$central_json" \
-      '{
-        sections: [
-          {
-            group: "Cluster",
-            title: "OpenShift Virtualization",
-            summary: $cnv,
-            tag: (if $cnv == "healthy" then "ok" else "error" end),
-            body: ("HyperConverged in openshift-cnv: " + $cnv + " (KVM_EMULATION expected on infra)"),
-            bodyFormat: "prose"
-          },
-          {
-            group: "ACS",
-            title: "Feature flags / scraper",
-            summary: $flags,
-            tag: (if $flags == "applied" then "ok" else "error" end),
-            body: ("ROX_VIRTUAL_MACHINES on Central CR (Central OCP) + SecuredCluster (SC); scraper poll short for demos. State: " + $flags),
-            bodyFormat: "prose"
-          },
-          {
-            group: "Workloads",
-            title: "Demo VMs",
-            summary: $vms,
-            tag: (if ($vms | split("/")[0] | tonumber) >= ($vms | split("/")[1] | tonumber) then "ok" else "error" end),
-            body: ("Namespace " + $ns + " Running VMIs (rhel9-1, rhel9-2): " + $vms),
-            bodyFormat: "prose"
-          },
-          {
-            group: "Central",
-            title: "Virtual Machine inventory",
-            summary: ($cc + " VMs / " + $cs + " scanned / " + ($cf|tostring) + " with CVE counts"),
-            body: $central,
-            bodyFormat: "json"
-          },
-          {
-            group: "Demo",
-            title: "Talk track",
-            body: ("Walkthrough: " + $talk),
-            bodyFormat: "prose"
-          }
-        ]
-      }'
+      --argjson want_sc "$(want_openshift && echo true || echo false)" \
+      --argjson want_ocp "$(want_central_ocp && echo true || echo false)" \
+      --argjson want_api "$(want_central_api && echo true || echo false)" \
+      --argjson want_flags "$( (want_central_ocp || want_openshift) && echo true || echo false )" \
+      '
+      def sec(group; title; summary; tag; body; fmt):
+        {group: group, title: title, summary: summary, tag: tag, body: body, bodyFormat: fmt};
+      [
+        (if $want_sc then
+          sec("Cluster"; "OpenShift Virtualization"; $cnv;
+              (if $cnv == "healthy" then "ok" else "error" end);
+              ("HyperConverged in openshift-cnv: " + $cnv + " (KVM_EMULATION expected on infra)");
+              "prose")
+         else empty end),
+        (if $want_flags then
+          sec("ACS"; "Feature flags / scraper"; $flags;
+              (if $flags == "applied" then "ok" else "error" end);
+              $flags_body;
+              "prose")
+         else empty end),
+        (if $want_sc then
+          sec("Workloads"; "Demo VMs"; $vms;
+              (if ($vms | split("/")[0] | tonumber) >= ($vms | split("/")[1] | tonumber) then "ok" else "error" end);
+              ("Namespace " + $ns + " Running VMIs (rhel9-1, rhel9-2): " + $vms);
+              "prose")
+         else empty end),
+        (if $want_api then
+          sec("Central"; "Virtual Machine inventory";
+              ($cc + " VMs / " + $cs + " scanned / " + ($cf|tostring) + " with CVE counts");
+              (if ($cf|tonumber? // 0) > 0 then "ok" else "error" end);
+              $central;
+              "json")
+         else empty end),
+        sec("Demo"; "Talk track"; ""; "ok"; ("Walkthrough: " + $talk); "prose")
+      ] | {sections: .}
+      '
   )"
-  printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
+  printf 'ACS_SECTIONS_JSON=%s\n' "$sections"
 }
 
 do_status() {
   if want_openshift; then
     ensure_oc || {
       printf '%s\terror\tcannot login to OpenShift via lab credentials\n' "$MODULE_ID"
+      return 0
+    }
+  elif want_central_ocp; then
+    ensure_oc_central || {
+      printf '%s\terror\tcannot login to Central OpenShift via lab credentials\n' "$MODULE_ID"
       return 0
     }
   fi
@@ -770,7 +807,11 @@ do_status() {
   else
     cnv_ok=true
   fi
-  acs_flags_applied && flags_ok=true
+  if want_central_ocp || want_openshift; then
+    acs_flags_applied && flags_ok=true
+  else
+    flags_ok=true
+  fi
   local ready=0 scanned=0 findings=0 count=0
   if want_openshift; then
     ready="$(count_running_vmis || echo 0)"
@@ -784,6 +825,7 @@ do_status() {
     findings="$(central_findings_count)"
   fi
 
+  # All planes in one process (omit --plane), or secured-cluster + any central work.
   if want_openshift && want_central; then
     if $cnv_ok && $flags_ok && $vms_ok && [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
       printf '%s\tok\t%s/%s VMs Running; CVE findings on %s/%s VMs in Central\n' \
@@ -811,16 +853,38 @@ do_status() {
       printf '%s\tneeds-run\tCNV=%s flags=%s VMs=%s/%s\n' \
         "$MODULE_ID" "$cnv_ok" "$flags_ok" "$ready" "$VM_EXPECTED"
     fi
-  else
+  elif want_central_ocp && want_central_api; then
+    # Legacy --plane central: Central CR flag + CVE findings.
     if $flags_ok && [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
-      printf '%s\tok\tCVE findings on %s/%s VMs (central-api/ocp plane)\n' \
+      printf '%s\tok\tCentral CR flag + CVE findings on %s/%s VMs\n' \
         "$MODULE_ID" "$findings" "$VM_EXPECTED"
     elif $flags_ok; then
-      printf '%s\tneeds-run\tCentral flag ok; findings %s/%s\n' \
+      printf '%s\tneeds-run\tCentral CR flag ok; findings %s/%s\n' \
         "$MODULE_ID" "$findings" "$VM_EXPECTED"
     else
       printf '%s\tneeds-run\tCentral CR flag missing\n' "$MODULE_ID"
     fi
+  elif want_central_ocp; then
+    if $flags_ok; then
+      printf '%s\tok\tCentral CR ROX_VIRTUAL_MACHINES applied (central-ocp plane)\n' "$MODULE_ID"
+    else
+      printf '%s\tneeds-run\tCentral CR ROX_VIRTUAL_MACHINES missing (central-ocp plane)\n' "$MODULE_ID"
+    fi
+  elif want_central_api; then
+    if [[ "${findings}" -ge "${VM_EXPECTED}" && "${count}" -ge "${VM_EXPECTED}" ]]; then
+      printf '%s\tok\tCVE findings on %s/%s VMs (central-api plane)\n' \
+        "$MODULE_ID" "$findings" "$VM_EXPECTED"
+    elif [[ "${findings}" -ge 1 ]]; then
+      printf '%s\tneeds-run\tCVE findings on %s/%s VMs (need both; central-api plane)\n' \
+        "$MODULE_ID" "$findings" "$VM_EXPECTED"
+    elif [[ "${scanned}" -ge 1 ]]; then
+      printf '%s\tneeds-run\tVMs inventoried but no CVE results yet (central-api plane)\n' "$MODULE_ID"
+    else
+      printf '%s\tneeds-run\tCVE findings %s/%s (central-api plane)\n' \
+        "$MODULE_ID" "$findings" "$VM_EXPECTED"
+    fi
+  else
+    printf '%s\terror\tno impact plane selected\n' "$MODULE_ID"
   fi
 }
 
@@ -829,7 +893,9 @@ demo_ready() {
   if want_openshift; then
     cnv_healthy || return 1
   fi
-  acs_flags_applied || return 1
+  if want_central_ocp || want_openshift; then
+    acs_flags_applied || return 1
+  fi
   if want_openshift; then
     ready="$(count_running_vmis || echo 0)"
     [[ "$ready" -ge "$VM_EXPECTED" ]] || return 1

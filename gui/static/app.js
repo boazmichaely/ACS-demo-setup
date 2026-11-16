@@ -581,9 +581,8 @@ function renderSectionsHtml(sections, moduleId = "") {
         .filter(Boolean)
     ),
   ];
-  const multiCluster = clusterNames.length > 1;
-
-  if (!multiCluster) {
+  // Always label by secured-cluster name when sections carry cluster (even if only one).
+  if (!clusterNames.length) {
     return renderSectionFoldsHtml(sections, moduleId, 0).html;
   }
 
@@ -596,7 +595,7 @@ function renderSectionsHtml(sections, moduleId = "") {
     index = inner.nextIndex;
     html += `<div class="demo-sec-cluster-block" data-cluster="${escapeHtml(cluster)}">
       <div class="demo-sec-cluster">
-        <span class="demo-sec-cluster__label">${escapeHtml(cluster)}</span>
+        <span class="demo-sec-cluster__label">Cluster: ${escapeHtml(cluster)}</span>
       </div>
       ${inner.html}
     </div>`;
