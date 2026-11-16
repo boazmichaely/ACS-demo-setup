@@ -213,6 +213,8 @@ status_json() {
 
 # Set by main: "" | include | skip
 INCLUDE_CENTRAL_MODE=""
+# Set by main: true when --force (multi-warn after GUI confirm)
+FORCE_MODE=false
 
 # Plan invocations via lib.module_orchestrate. Prints JSON array.
 # Args: module_id action sc_id...
@@ -228,6 +230,7 @@ plan_invocations_json() {
     include) args+=( --include-central ) ;;
     skip) args+=( --skip-central ) ;;
   esac
+  [[ "${FORCE_MODE}" == "true" ]] && args+=( --force )
   py="$(acs_python)"
   [[ -n "$py" ]] || die "python3 not found (set ACS_DEMO_PYTHON or use gui/.venv)"
   (cd "$ROOT" && "$py" "${args[@]}")
@@ -420,7 +423,7 @@ main() {
         ;;
       --json) json=true ;;
       --dry-run) dry_run=true ;;
-      --force) force=true ;;
+      --force) force=true; FORCE_MODE=true ;;
       --oc-status) action=oc-status ;;
       --oc-login) action=oc-login ;;
       *) die "unknown option: $1" ;;
@@ -428,6 +431,7 @@ main() {
     shift
   done
 
+  FORCE_MODE="$force"
   [[ -n "$action" ]] || { usage; exit 0; }
 
   case "$action" in

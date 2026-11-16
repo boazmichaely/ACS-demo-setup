@@ -65,7 +65,8 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
   "label": "Short description for the Description column",
   "dependsOn": [],
   "statusComplexity": 5,
-  "impactPlanes": ["secured-cluster"]
+  "impactPlanes": ["secured-cluster"],
+  "securedClusterPolicy": "single"
 }
 ```
 
@@ -73,6 +74,7 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
 - `statusComplexity` is an integer **1-10** hint for GUI status refresh order (lower = cheaper `--status`, refreshed first). Default to `5` if unsure; heavy OpenShift/Central probes (for example virt) belong near 8-10.
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
 - `impactPlanes` declares where the module does work (GUI **Type** column; see [Planes and multi-SC](#planes-and-multi-sc)). Required for new modules.
+- `securedClusterPolicy` - required when `impactPlanes` includes `secured-cluster`. Values: `single` (default for new modules; refuse multi-SC fan-out), `multi-warn` (allow multi-SC; GUI warns if already present elsewhere), `multi` (multi-SC is normal). Omit for Central-only modules. See [Secured-cluster policy](#secured-cluster-policy).
 - Prefer `my-feature.sh` over `07-my-feature.sh`.
 
 ## Python helper (required for Central)
@@ -262,6 +264,20 @@ Flags the orchestrator may pass:
 
 `activeSecuredClusterId` is a quiet soft default (same-as-Central, else first SC) for the pre-launch picker / bare CLI when no `--secured-cluster-id` is passed. It is not a hidden “install everywhere” switch. `sameAsCentralCluster` on a secured cluster is a **credentials shortcut** only; that SC is still a normal target in the list.
 
+### Secured-cluster policy
+
+Catalog field `securedClusterPolicy` controls multi-SC install mistakes. Soft-default (`activeSecuredClusterId`) is unrelated.
+
+| Value | Orchestrator / CLI | GUI impact picker |
+|-------|--------------------|-------------------|
+| `single` | Error if more than one `--secured-cluster-id`; error if footprint already exists on a *different* SC than the target | One SC only (radio / cannot check two) |
+| `multi-warn` | Allow fan-out; CLI prints a warning if footprint exists on another SC (continue unless `--force` is omitted and you require confirm - GUI uses a modal) | Multi-select allowed; warn if already installed elsewhere |
+| `multi` | Fan-out allowed with no warning | Multi-select, no warning |
+
+Presence probes live in [`lib/sc_presence.py`](lib/sc_presence.py) (namespace / marker per module). Modules stay single-id-per-process; the orchestrator owns policy enforcement.
+
+Current catalog map: `compliance-operator` → `multi`; `ms-demo` / `init-demo` → `multi-warn`; other SC modules → `single`.
+
 ### Central membership (optional)
 
 When a `central-api` install or uninstall runs with a selection of secured-cluster ids, the module **may** compare that selection to what is already configured in Central (policies, scan schedules, access scopes, and so on) and merge or drop cluster membership. This is not enforced by the orchestrator - each module decides whether adjustment is appropriate. [`compliance-operator`](modules/compliance-operator.sh) merges/drops schedule `clusters[]` this way.
@@ -346,8 +362,8 @@ If the RHACS UI configures something in Central, prefer the Central API. Avoid a
 When a module creates or updates RHACS policies for the demo:
 
 1. Upsert through [`lib/demo_policies.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/demo_policies.py) `ensure_managed_policy`. That helper merges category **`DEMO`** into the policy (visible in Policy Management) and preserves any existing notifiers on update.
-2. **Do not** attach Slack (or other) notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier.sh) attaches/detaches the Slack notifier on `--run` / `--uninstall` by discovering policies with category `DEMO`.
-3. After first creating DEMO policies on a lab (or after adding a new demo policy), re-run `slack-notifier` once so the notifier is wired. A full install that already runs `slack-notifier` after the policy modules is enough.
+2. **Do not** attach Slack, Syslog, or other notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier.sh) and [`syslog-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/syslog-notifier.sh) attach/detach their notifiers on `--run` / `--uninstall` by discovering policies with category `DEMO`.
+3. After first creating DEMO policies on a lab (or after adding a new demo policy), re-run `slack-notifier` / `syslog-notifier` once so those notifiers are wired. A full install that already runs them after the policy modules is enough.
 
 Examples: [`modules/init_demo.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/init_demo.py), [`modules/signature_integration.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/signature_integration.py).
 

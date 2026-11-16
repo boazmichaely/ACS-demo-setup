@@ -19,35 +19,40 @@
       "label": "Compliance Operator (OLM) + Central CIS scan schedule",
       "dependsOn": [],
       "statusComplexity": 7,
-      "impactPlanes": ["central-api", "secured-cluster"]
+      "impactPlanes": ["central-api", "secured-cluster"],
+      "securedClusterPolicy": "multi"
     },
     {
       "id": "virt-vm-demo",
       "label": "Deploy OCP Virt + RHEL VMs for ACS guest vulnerability demo",
       "dependsOn": [],
       "statusComplexity": 9,
-      "impactPlanes": ["central-api", "central-ocp", "secured-cluster"]
+      "impactPlanes": ["central-api", "central-ocp", "secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "ms-demo",
       "label": "Mostmark microservices (project ms-demo)",
       "dependsOn": [],
       "statusComplexity": 4,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "multi-warn"
     },
     {
       "id": "init-demo",
       "label": "Init-container Clean/Dirty/Blue/Red (acs-init-container-test)",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central-api", "secured-cluster"]
+      "impactPlanes": ["central-api", "secured-cluster"],
+      "securedClusterPolicy": "multi-warn"
     },
     {
       "id": "users-part1-ocp",
       "label": "Users Part 1 (OCP)",
       "dependsOn": [],
       "statusComplexity": 2,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "users-part2-oauth",
@@ -75,53 +80,68 @@
       "impactPlanes": ["central-api"]
     },
     {
+      "id": "syslog-notifier",
+      "label": "Syslog CEF receiver + ACS notifier",
+      "dependsOn": [],
+      "statusComplexity": 5,
+      "impactPlanes": ["central-api", "secured-cluster"],
+      "securedClusterPolicy": "single"
+    },
+    {
       "id": "splunk-TA",
       "label": "Splunk Operator + RHACS Technology Add-on",
       "dependsOn": [],
       "statusComplexity": 6,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "openshift-mcp",
       "label": "Installs/updates an OpenShift MCP server on your cluster and wires it to your preferred AI agent",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "openshift-mcp-gateway",
       "label": "Launches an MCP gateway on the cluster you designate",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "acs-lightspeed",
       "label": "Configures OpenShift Lightspeed integration",
       "dependsOn": [],
       "statusComplexity": 4,
-      "impactPlanes": ["central-api", "secured-cluster"]
+      "impactPlanes": ["central-api", "secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "acs-mcp",
       "label": "Installs/updates an ACS MCP server on your cluster and wires it to your agent",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "prometheus",
       "label": "Install Prometheus on your cluster and wire ACS monitoring",
       "dependsOn": [],
       "statusComplexity": 5,
-      "impactPlanes": ["central-api", "secured-cluster"]
+      "impactPlanes": ["central-api", "secured-cluster"],
+      "securedClusterPolicy": "single"
     },
     {
       "id": "secrets-manager",
       "label": "Install Hashi on your cluster, enable External Secret Management Console plugin, External Secrets Operator (ESO) and a demo application",
       "dependsOn": [],
       "statusComplexity": 6,
-      "impactPlanes": ["secured-cluster"]
+      "impactPlanes": ["secured-cluster"],
+      "securedClusterPolicy": "single"
     }
   ]
 }

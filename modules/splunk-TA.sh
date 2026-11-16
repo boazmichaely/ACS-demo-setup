@@ -13,6 +13,7 @@ usage() {
 Deploy Splunk Operator and a Splunk Free Standalone on the lab OpenShift
 cluster, expose Splunk Web, and install the RHACS Splunkbase Technology
 Add-on (TA) from a local \`.tgz\`. Catalog: \`impactPlanes: ["secured-cluster"]\`.
+\`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
 
 With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
 soft-default SC.
