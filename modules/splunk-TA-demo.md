@@ -49,7 +49,7 @@ It does **not** configure Central endpoint, API token, or modular inputs in the 
 7. To see only Vulnerability data type `index=* sourcetype="stackrox*" source="stackrox_vulnerability_management://acs_vulnerabilities"`.
 8. You can play with other sources by clicking the `source` field under **SELECTED FIELDS**.
 
-![Splunk Search showing stackrox vulnerability management events and the source field breakdown](splunk-TA-vuln-source.jpg)
+![Splunk Search showing stackrox vulnerability management events and the source field breakdown](../docs/images/splunk-TA-vuln-source.png)
 
 ## Commands
 
