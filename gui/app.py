@@ -83,6 +83,12 @@ class SecuredClusterIn(BaseModel):
     openshift: OpenshiftAccessIn = Field(default_factory=OpenshiftAccessIn)
 
 
+class SlackNotifierIn(BaseModel):
+    webhookUrl: str = ""
+    notifierName: str = ""
+    channelUrl: str = ""
+
+
 class LabIn(BaseModel):
     id: str = ""
     name: str = ""
@@ -90,6 +96,7 @@ class LabIn(BaseModel):
     centralCluster: CentralClusterIn = Field(default_factory=CentralClusterIn)
     securedClusters: list[SecuredClusterIn] = Field(default_factory=list)
     activeSecuredClusterId: str = ""
+    slackNotifier: SlackNotifierIn = Field(default_factory=SlackNotifierIn)
 
 
 class LabCredentialsIn(BaseModel):

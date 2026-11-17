@@ -238,18 +238,16 @@
         </li>
 
         <li>
-          <h2>Update defaults or Lab credentials</h2>
-          <p>
-            In the ACS demo setup GUI: Lab credentials →
-            <strong>Integration Secrets → Slack notifier</strong> → paste the
-            webhook URL, confirm notifier name / channel URL, then Save.
-            <strong>Restore defaults</strong> resets name and channel only; it
-            does not clear a webhook you already pasted.
-          </p>
-          <p>
-            One-shot CLI:
-            <code>./modules/slack-notifier.sh --run --webhook URL --name NAME --channel-url URL</code>.
-          </p>
+          <h2>Update Lab credentials</h2>
+          <p>In ACS demo setup GUI, under <strong>Integration Secrets</strong>  follow these two steps.</p>
+          <ol>
+            <li>
+              Paste the webhook URL that you got from step four above.
+            </li>
+            <li>Paste the Slack channel URL by copying the Slack channel URL from Slack itself.</li>
+          </ol>
+          <p>Then click <strong>Save</strong>.</p>
+          <p>If you want to reset the notifier name and channel URL to the default values, click <strong>Restore defaults</strong>.</p>
         </li>
       </ol>
 

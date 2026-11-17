@@ -1,7 +1,7 @@
-"""Committed defaults for Slack notifier name/channel (#acs-demo-notifier).
+"""Committed defaults for Slack notifier name (#acs-demo-notifier).
 
-webhookUrl is intentionally empty here - Incoming Webhook URLs are credentials-
-only (per lab). Lab credentials supply the webhook; empty name/channel fall
+webhookUrl and channelUrl are intentionally empty here - both are credentials-
+only (per lab). Lab credentials supply those URLs; empty notifierName falls
 back to this file.
 """
 

@@ -221,10 +221,17 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
             active_sc = ""
 
         # Blank / equal-to-default → empty override so config/slack-notifier.defaults.json wins.
-        slack_notifier = store_slack_notifier_override(
-            lab_in.get("slackNotifier") if isinstance(lab_in.get("slackNotifier"), dict) else {},
-            repo_root=repo_root,
-        )
+        # Missing key (older clients) keeps the previously stored override.
+        if isinstance(lab_in.get("slackNotifier"), dict):
+            slack_notifier = store_slack_notifier_override(
+                lab_in.get("slackNotifier"),
+                repo_root=repo_root,
+            )
+        else:
+            slack_notifier = store_slack_notifier_override(
+                prev.get("slackNotifier") if isinstance(prev.get("slackNotifier"), dict) else {},
+                repo_root=repo_root,
+            )
 
         merged_labs.append(
             {

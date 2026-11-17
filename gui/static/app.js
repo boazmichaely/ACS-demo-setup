@@ -92,33 +92,47 @@ function slackNotifierDefaults() {
 
 function restoreSlackNotifierDefaults() {
   const defs = slackNotifierDefaults();
-  // Name + channel come from shared defaults; webhook is never shipped - keep
-  // whatever the lab already has (or empty for a new user).
-  if (fields.slackNotifierName) fields.slackNotifierName.value = defs.notifierName || "";
-  if (fields.slackChannelUrl) fields.slackChannelUrl.value = defs.channelUrl || "";
+  // Shared default is notifier name only; keep lab webhook + channel as-is.
+  if (fields.slackNotifierName) {
+    fields.slackNotifierName.value = defs.notifierName || "#acs-demo-notifier";
+  }
   const lab = editingLab();
   if (lab) {
-    const currentWh = (fields.slackWebhookUrl?.value || lab.slackNotifier?.webhookUrl || "").trim();
+    const currentWh = (
+      fields.slackWebhookUrl?.value ||
+      lab.slackNotifier?.webhookUrl ||
+      ""
+    ).trim();
+    const currentCh = (
+      fields.slackChannelUrl?.value ||
+      lab.slackNotifier?.channelUrl ||
+      ""
+    ).trim();
     lab.slackNotifier = {
       notifierName: defs.notifierName || "#acs-demo-notifier",
-      channelUrl: defs.channelUrl || "",
+      channelUrl: currentCh,
       webhookUrl: currentWh,
     };
     if (fields.slackWebhookUrl) fields.slackWebhookUrl.value = currentWh;
+    if (fields.slackChannelUrl) fields.slackChannelUrl.value = currentCh;
     updateFoldMetas(lab);
   }
-  syncSlackWebhookMissingHint();
+  syncSlackSecretsMissingHints();
   if (credEditMode) syncCredChrome();
 }
 
-/** Show the webhook empty-state callout when the Incoming Webhook URL is blank. */
-function syncSlackWebhookMissingHint() {
-  const missing = document.getElementById("slackWebhookMissing");
-  const field = document.getElementById("slackWebhookField");
-  const input = fields.slackWebhookUrl;
-  const empty = !(input?.value || "").trim();
-  if (missing) missing.hidden = !empty;
-  if (field) field.classList.toggle("demo-field--webhook-missing", empty);
+/** Empty-state callouts for webhook + channel when those credentials fields are blank. */
+function syncSlackSecretsMissingHints() {
+  const whEmpty = !(fields.slackWebhookUrl?.value || "").trim();
+  const chEmpty = !(fields.slackChannelUrl?.value || "").trim();
+  const whMissing = document.getElementById("slackWebhookMissing");
+  const whField = document.getElementById("slackWebhookField");
+  const chMissing = document.getElementById("slackChannelMissing");
+  const chField = document.getElementById("slackChannelField");
+  if (whMissing) whMissing.hidden = !whEmpty;
+  if (whField) whField.classList.toggle("demo-field--secret-missing", whEmpty);
+  if (chMissing) chMissing.hidden = !chEmpty;
+  if (chField) chField.classList.toggle("demo-field--secret-missing", chEmpty);
 }
 
 function emptySlackNotifier() {
@@ -2855,11 +2869,11 @@ function fillEditingLabForm() {
       sn.notifierName || snDefs.notifierName || "#acs-demo-notifier";
   }
   if (fields.slackWebhookUrl) {
-    // Webhook is credentials-only (shared defaults never ship a URL).
+    // Webhook + channel are credentials-only (shared defaults never ship URLs).
     fields.slackWebhookUrl.value = (sn.webhookUrl || "").trim();
   }
   if (fields.slackChannelUrl) {
-    fields.slackChannelUrl.value = sn.channelUrl || snDefs.channelUrl || "";
+    fields.slackChannelUrl.value = (sn.channelUrl || "").trim();
   }
 
   const centralFold = document.getElementById("centralFold");
@@ -2869,7 +2883,7 @@ function fillEditingLabForm() {
 
   renderSecuredClusters(lab);
   updateFoldMetas(lab);
-  syncSlackWebhookMissingHint();
+  syncSlackSecretsMissingHints();
   syncCredentialCopyButtons();
   syncCredChrome();
 }
@@ -2927,6 +2941,7 @@ function applyCredentialsResponse(data, { keepEditingId } = {}) {
   credDoc = {
     activeLabId: data.activeLabId || "",
     labs: Array.isArray(data.labs) ? data.labs : [],
+    slackNotifierDefaults: data.slackNotifierDefaults || credDoc?.slackNotifierDefaults || {},
   };
   if (!credDoc.labs.length) {
     const lab = emptyLab("default");
@@ -2959,6 +2974,8 @@ async function persistEditingLab() {
   credDoc = {
     activeLabId: data.activeLabId || payload.activeLabId,
     labs: Array.isArray(data.labs) ? data.labs : payload.labs,
+    slackNotifierDefaults:
+      data.slackNotifierDefaults || credDoc?.slackNotifierDefaults || {},
   };
   return data;
 }
@@ -3071,6 +3088,12 @@ function syncCredChrome() {
   if (btnSave) {
     btnSave.hidden = !credEditMode;
     btnSave.disabled = busy || labUiBusy || !dirty;
+  }
+  const btnIntegrationsSave = document.getElementById("btnIntegrationsSave");
+  if (btnIntegrationsSave) {
+    // Same gating as top Save; separate control for Integration Secrets.
+    btnIntegrationsSave.hidden = !credEditMode;
+    btnIntegrationsSave.disabled = busy || labUiBusy || !dirty;
   }
   if (btnCancel) {
     btnCancel.hidden = !credEditMode;
@@ -3312,6 +3335,10 @@ document.getElementById("btnCredSave")?.addEventListener("click", (e) => {
   e.preventDefault();
   saveCredentials();
 });
+document.getElementById("btnIntegrationsSave")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  saveCredentials();
+});
 document.getElementById("btnCredCancel")?.addEventListener("click", (e) => {
   e.preventDefault();
   cancelEditingLab().catch((err) => setCredFeedback(err.message, true));
@@ -3337,11 +3364,21 @@ document.getElementById("btnMakeActive")?.addEventListener("click", () => {
 document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSecuredCluster);
 
 fields.slackWebhookUrl?.addEventListener("input", () => {
-  syncSlackWebhookMissingHint();
+  syncSlackSecretsMissingHints();
   const lab = editingLab();
   if (lab) {
     lab.slackNotifier = lab.slackNotifier || emptySlackNotifier();
     lab.slackNotifier.webhookUrl = (fields.slackWebhookUrl.value || "").trim();
+    updateFoldMetas(lab);
+  }
+});
+
+fields.slackChannelUrl?.addEventListener("input", () => {
+  syncSlackSecretsMissingHints();
+  const lab = editingLab();
+  if (lab) {
+    lab.slackNotifier = lab.slackNotifier || emptySlackNotifier();
+    lab.slackNotifier.channelUrl = (fields.slackChannelUrl.value || "").trim();
     updateFoldMetas(lab);
   }
 });

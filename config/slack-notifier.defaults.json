@@ -1,5 +1,5 @@
 {
   "webhookUrl": "",
   "notifierName": "#acs-demo-notifier",
-  "channelUrl": "https://redhat-internal.slack.com/archives/C0B3G64FA2G"
+  "channelUrl": ""
 }

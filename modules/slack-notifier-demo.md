@@ -6,7 +6,7 @@ Module: `slack-notifier`
 ## Before you start
 
 - Lab credentials have working Central API access.
-- Lab credentials have a Slack Incoming Webhook URL (Integration Secrets → Slack notifier). Name/channel default to `#acs-demo-notifier` from `config/slack-notifier.defaults.json`.
+- Lab credentials have Slack Incoming Webhook URL and channel URL (Integration Secrets → Slack notifier). Notifier name defaults to `#acs-demo-notifier` from `config/slack-notifier.defaults.json`.
 
 ## What the module sets up
 
