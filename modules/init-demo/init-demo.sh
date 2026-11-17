@@ -413,6 +413,20 @@ do_status() {
     viol_body="Central plane not in this invoke."
   fi
 
+  # Category DEMO violations list (managed demo policies); GUI linkifies https://.
+  local demo_viol_url="" console
+  if want_central && [[ -n "${viol_json:-}" ]]; then
+    console="$(printf '%s' "$viol_json" | jq -r '.consoleUrl // empty' 2>/dev/null || true)"
+    if [[ -n "$console" ]]; then
+      [[ "$console" =~ ^https?:// ]] || console="https://${console}"
+      console="${console%/}"
+      demo_viol_url="${console}/main/violations?filteredWorkflowView=Full%20view&violationState=ACTIVE&s[Category][0]=DEMO"
+    fi
+  fi
+  if [[ -n "$demo_viol_url" && "$viol_body" != "Central plane not in this invoke." ]]; then
+    viol_body="DEMO category violations:"$'\n'"${demo_viol_url}"$'\n'$'\n'"${viol_body}"
+  fi
+
   emit_status_sections "$project_present" "$wl_body" "$wl_sum" "$wl_tag" \
     "$pol_body" "$pol_sum" "$pol_tag" \
     "$viol_body" "$viol_sum" "$viol_tag"
@@ -420,7 +434,7 @@ do_status() {
   if want_openshift && want_central; then
     if [[ "$wl_tag" == "ok" && "$pol_tag" == "ok" ]]; then
       state="ok"
-      message="init-demo ready in ${NS}; policies present"
+      message="${demo_viol_url:-init-demo ready in ${NS}; policies present}"
     elif [[ "$pol_tag" == "error" && "$project_present" != "yes" ]]; then
       state="needs-run"
       message="project ${NS} missing; Central: ${pol_sum}"
@@ -442,7 +456,7 @@ do_status() {
   else
     if [[ "$pol_tag" == "ok" ]]; then
       state="ok"
-      message="DEMO-Init-Test policies present (central plane)"
+      message="${demo_viol_url:-DEMO-Init-Test policies present (central plane)}"
     elif [[ "$pol_tag" == "error" ]]; then
       state="error"
       message="Central: ${pol_sum}"

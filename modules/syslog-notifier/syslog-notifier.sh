@@ -517,7 +517,14 @@ do_status() {
 
   if want_secured_cluster && want_central_api; then
     if $sc_ok && [[ "$api_state" == "ok" ]]; then
-      printf '%s\tok\t%s\n' "$MODULE_ID" "$(IFS='; '; echo "${msg_parts[*]}")"
+      local url
+      url="$(viewer_url)"
+      # GUI linkifies https:// in the summary (same pattern as splunk-TA).
+      if [[ -n "$url" ]]; then
+        printf '%s\tok\t%s\n' "$MODULE_ID" "$url"
+      else
+        printf '%s\tok\t%s\n' "$MODULE_ID" "$(IFS='; '; echo "${msg_parts[*]}")"
+      fi
     elif [[ "$worst" == "error" ]]; then
       printf '%s\terror\t%s\n' "$MODULE_ID" "$(IFS='; '; echo "${msg_parts[*]}")"
     else
@@ -525,11 +532,13 @@ do_status() {
     fi
   elif want_secured_cluster; then
     if $sc_ok; then
-      local url host
+      local url
       url="$(viewer_url)"
-      host="$(lb_host)"
-      printf '%s\tok\treceiver Ready; syslog %s:%s; viewer %s\n' \
-        "$MODULE_ID" "$host" "$SYSLOG_PORT" "$url"
+      if [[ -n "$url" ]]; then
+        printf '%s\tok\t%s\n' "$MODULE_ID" "$url"
+      else
+        printf '%s\tok\treceiver Ready on %s\n' "$MODULE_ID" "$(sc_label)"
+      fi
     else
       printf '%s\tneeds-run\t%s\n' "$MODULE_ID" "${msg_parts[*]-receiver incomplete}"
     fi

@@ -388,7 +388,8 @@ do_status() {
 
   if [[ "$demo_tag" == "ok" && "$fe_tag" == "ok" ]]; then
     state="ok"
-    message="ms-demo ready; store HTTP ${fe_code}"
+    # GUI linkifies https:// in the summary (same pattern as splunk-TA).
+    message="${fe_url}"
   else
     state="needs-run"
     message="demo ${demo_sum}; frontend ${fe_sum}"

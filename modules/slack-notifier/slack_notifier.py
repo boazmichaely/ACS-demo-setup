@@ -343,11 +343,21 @@ def assess(
     sections = build_sections(
         cfg, source, notifier=hit, state="ok", demo_policies=demo_policies
     )
-    n = len(demo_policies)
-    if n:
-        msg = f"Slack notifier {name} ready; {n} DEMO polic{'y' if n == 1 else 'ies'} wired"
+    # Prefer channel deep link in the one-line summary (GUI linkifies https://).
+    channel = (cfg.get("channelUrl") or "").strip()
+    if channel:
+        if not channel.startswith(("http://", "https://")):
+            channel = f"https://{channel}"
+        msg = channel
     else:
-        msg = f"Slack notifier {name} ready (no DEMO policies yet)"
+        n = len(demo_policies)
+        if n:
+            msg = (
+                f"Slack notifier {name} ready; "
+                f"{n} DEMO polic{'y' if n == 1 else 'ies'} wired"
+            )
+        else:
+            msg = f"Slack notifier {name} ready (no DEMO policies yet)"
     return "ok", msg, sections, hit
 
 
