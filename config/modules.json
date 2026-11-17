@@ -63,10 +63,10 @@
       "label": "Users Part 1 (OCP)",
       "dependsOn": [],
       "statusComplexity": 2,
-      "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single",
-      "runSummary": "Secured cluster: create HTPasswd users adam/boaz/chris, IdP, and adam cluster-admin. Namespace admin for boaz/chris is applied when ms-demo / init-demo projects exist (safe to run before those demos).",
-      "uninstallSummary": "Secured cluster: remove those HTPasswd users / IdP pieces and related RBAC. Does not undo Parts 2–3 in Central."
+      "impactPlanes": ["central-ocp", "secured-cluster"],
+      "securedClusterPolicy": "multi",
+      "runSummary": "Central OpenShift and secured cluster(s): create the same HTPasswd users adam/boaz/chris, IdP lab_htpasswd, and adam cluster-admin on each selected cluster. Namespace admin for boaz/chris is applied when ms-demo / init-demo projects exist on that cluster.",
+      "uninstallSummary": "Selected Central OpenShift and secured cluster(s): remove those HTPasswd users / IdP pieces and related RBAC. Does not undo Parts 2–3 in Central."
     },
     {
       "id": "users-part2-oauth",

@@ -9,6 +9,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Changed
 
+- `users-part1-ocp`: default install creates the same HTPasswd users on Central OpenShift (`central-ocp`) and selected secured clusters (`secured-cluster`, policy `multi`) so Act 2 Central SSO matches Act 1 console users.
 - Modules live in `modules/<id>/` with entrypoint `modules/<id>/<id>.sh` (hard cutover; no flat `modules/<id>.sh`). Shared Python stays in `lib/`; shared orch-flag snippets stay as `modules/_*.sh`. Recovery tag before this layout: `snapshot-pre-module-folders`.
 
 ### Fixed

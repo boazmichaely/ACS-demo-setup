@@ -32,6 +32,11 @@ Part 1 is enough for this act. You do not need Part 2 or Part 3.
 Console Security follows OpenShift RBAC. ACS Central roles are not
 required for the plugin to work in a project the user can open.
 
+Part 1 creates the **same** HTPasswd users and OpenShift RBAC on
+**Central OpenShift** and on each selected **secured cluster** (default:
+all). Act 1 uses the secured-cluster console (where `ms-demo` /
+init-demo live). Central OpenShift users are for Act 2 SSO after Part 2.
+
 Part 1 creates HTPasswd users and OpenShift RBAC:
 
 | User | OpenShift role |
@@ -62,8 +67,10 @@ The default All-projects view is a common false alarm in this demo.
 
 ## Act 2 - Console vs ACS Central (Users Part 2 + Part 3)
 
-Part 2 adds Login with OpenShift on Central. Part 3 maps the three  
-people to ACS roles and scopes. Chris **is done incorrectly on purpose.**
+Part 1 must have created adam/boaz/chris on **Central’s** OpenShift
+(included in the default Part 1 install). Part 2 adds Login with
+OpenShift on Central. Part 3 maps the three people to ACS roles and
+scopes. Chris **is done incorrectly on purpose.**
 
 - adam → built-in **Admin** (full ACS)
 - boaz → **boaz-in-acs** (Analyst, access scope `ms-demo` only)

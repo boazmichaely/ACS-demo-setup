@@ -287,15 +287,17 @@ Demo notes: [`modules/signature-integration/signature-integration-demo.md`](modu
 
 ### M5 — `users-part1-ocp` — Users Part 1 (OCP)
 
-**Purpose:** Lead-in for the ACS console plugin visibility demo: HTPasswd users (adam/boaz/chris), IdP, and OpenShift project RBAC. Full walkthrough lives in `modules/users-part1-ocp/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed.
+**Purpose:** Lead-in for the ACS console plugin visibility demo: identical HTPasswd users (adam/boaz/chris), IdP `lab_htpasswd`, and OpenShift project RBAC on **Central OpenShift and each selected secured cluster** (no shared IdP). Full walkthrough lives in `modules/users-part1-ocp/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed on secured clusters used for Act 1.
 
-**Pre conditions:** ACS console plugin enabled; `htpasswd` and `openssl` on PATH
+**Catalog:** `impactPlanes: ["central-ocp","secured-cluster"]`, `securedClusterPolicy: multi`
 
-**Status must verify:** IdP, users, and bindings match demo spec; Demo fold shows the walkthrough; Credentials fold lists fixed lab passwords
+**Pre conditions:** ACS console plugin enabled on Act 1 SCs; `htpasswd` and `openssl` on PATH
 
-**Run must do:** Apply/regenerate HTPasswd secret, OAuth IdP `lab_htpasswd`, roles/bindings (adam cluster-admin; boaz admin on `ms-demo`; chris admin on `ms-demo` + `acs-init-container-test`)
+**Status must verify:** Per targeted cluster: IdP, users, and bindings match demo spec; Demo fold shows the walkthrough; Credentials fold lists fixed lab passwords
 
-**Acceptance:** Documented demo users can log in to OpenShift; personas match the demo script
+**Run must do:** On each targeted cluster (`central-ocp` and/or `secured-cluster`): apply/regenerate HTPasswd secret, OAuth IdP `lab_htpasswd`, roles/bindings (adam cluster-admin; boaz admin on `ms-demo`; chris admin on `ms-demo` + `acs-init-container-test` when those projects exist)
+
+**Acceptance:** Same usernames work on selected OpenShift consoles; after Part 2, Central Login with OpenShift can use those users on Central OCP; personas match the demo script
 
 ---
 
@@ -303,13 +305,13 @@ Demo notes: [`modules/signature-integration/signature-integration-demo.md`](modu
 
 **Purpose:** Configure Central to use OpenShift as an identity provider for UI login demos.
 
-**Pre conditions:** `users-part1-ocp` installed
+**Pre conditions:** `users-part1-ocp` installed (including HTPasswd users on Central OpenShift)
 
 **Status must verify:** Central auth provider configured for OpenShift OAuth
 
 **Run must do:** Apply Central/OpenShift OAuth integration per demo spec
 
-**Acceptance:** Login to Central via OpenShift works for a demo user
+**Acceptance:** Login to Central via OpenShift works for a demo user (users exist on Central OCP from Part 1)
 
 ---
 

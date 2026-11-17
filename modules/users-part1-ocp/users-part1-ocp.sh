@@ -14,10 +14,12 @@ MS_NS="ms-demo"
 INIT_NS="acs-init-container-test"
 # Extra namespaces for chris admin (--chris-ns); ms-demo + init always included.
 CHRIS_EXTRA_NS=()
-# Orchestrator / CLI: at most one SC id (OpenShift-only module).
+# Orchestrator: --plane central-ocp|secured-cluster; secured-cluster plane ≤1 SC id.
 U1_SC_IDS=()
 U1_SC_ID=""
 U1_PLANE=""
+# lib.openshift.CENTRAL_ONLY_SC_ID - Central's OpenShift block.
+CENTRAL_OC_ID="_central"
 
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
@@ -32,18 +34,27 @@ if [[ -z "$PYTHON" ]]; then
   fi
 fi
 
+want_central_ocp() {
+  [[ -z "${U1_PLANE}" || "${U1_PLANE}" == "central-ocp" ]]
+}
+want_secured_cluster() {
+  [[ -z "${U1_PLANE}" || "${U1_PLANE}" == "secured-cluster" || "${U1_PLANE}" == "openshift" ]]
+}
+
 usage() {
   cat <<EOF
 # users-part1-ocp
 
-Lead-in for the ACS console plugin visibility demo: create OpenShift
-HTPasswd users (adam, boaz, chris) and project RBAC so different people
-can log into the OpenShift console and open Security → Vulnerabilities.
+Lead-in for the ACS console plugin visibility demo: create the same
+OpenShift HTPasswd users (adam, boaz, chris) on each selected OpenShift
+cluster - Central OpenShift and secured cluster(s) - so the same people
+can use the OpenShift console (Act 1) and Central Login with OpenShift
+(Act 2 after Parts 2–3).
 
 This module alone is not the complete story. Run Users Part 2 (OAuth)
 and Users Part 3 (ACS) after this for Central OpenShift login and ACS
 role/scope mappings. The ACS console plugin must already be installed
-on the cluster.
+on the secured cluster(s) you use for Act 1.
 
 If ACS is installed but you do not see the Security menu in the
 OpenShift console, enable it in the OpenShift UI:
@@ -62,26 +73,26 @@ Status → Demo also links there.
 
 Lab passwords are listed under Status → Credentials.
 
-Catalog: \`impactPlanes: ["secured-cluster"]\`.
-\`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
-With \`--secured-cluster-id\`, targets that SC (console plugin / HTPasswd live
-there). With none, uses the lab soft-default SC.
+Catalog: \`impactPlanes: ["central-ocp","secured-cluster"]\`.
+\`securedClusterPolicy: multi\` - default install is Central OpenShift plus
+every selected secured cluster (identical HTPasswd IdP on each; no shared IdP).
+\`--plane\` selects one side per orchestrator invoke.
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane secured-cluster] [--secured-cluster-id ID]
-$(basename "$0") --run [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID] [--chris-ns NS]...
-$(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cluster-id ID]
+$(basename "$0") --status [--plane central-ocp|secured-cluster] [--secured-cluster-id ID]
+$(basename "$0") --run [--dry-run] [--plane central-ocp|secured-cluster] [--secured-cluster-id ID] [--chris-ns NS]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-ocp|secured-cluster] [--secured-cluster-id ID]
 \`\`\`
 
 ## Flags
 
-- \`--plane secured-cluster\` - implied; accepted (legacy \`openshift\` also). \`--plane central-api\` / \`central-ocp\` is rejected
-  (HTPasswd/IdP/RBAC are OpenShift-only; Parts 2–3 own Central)
-- \`--secured-cluster-id ID\` - create users/RBAC on that lab SC (at most one).
-  Soft-default SC when omitted. This is the cluster whose console shows Security
+- \`--plane central-ocp\` - HTPasswd users/IdP/RBAC on Central's OpenShift
+- \`--plane secured-cluster\` - same on one secured cluster (legacy \`openshift\` also)
+- omit \`--plane\` - both in one process (CLI convenience; orchestrator always sets \`--plane\`)
+- \`--secured-cluster-id ID\` - secured-cluster plane: exactly one lab SC (soft-default when omitted)
 - \`--chris-ns NS\` - Extra OpenShift namespace where chris gets admin
   (repeatable; always includes \`${MS_NS}\` and \`${INIT_NS}\`)
 - \`--dry-run\` - Print the plan; change nothing
@@ -95,13 +106,13 @@ $(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cl
 
 ## Pre Conditions
 
-- ACS console plugin enabled on the cluster
+- ACS console plugin enabled on secured clusters used for Act 1
 - \`htpasswd\` and \`openssl\` on PATH
 
 ## Side effects
 
 - \`--run\` ensures Secret \`${SECRET_NS}/${SECRET_NAME}\`, IdP \`${IDP_NAME}\`,
-  and named RoleBindings for adam/boaz/chris
+  and named RoleBindings for adam/boaz/chris on each targeted cluster
 - \`--uninstall\` removes those RoleBindings, IdP \`${IDP_NAME}\`, the Secret,
   OCP User and Identity objects for adam/boaz/chris (\`lab_htpasswd:*\`),
   and waits for oauth-openshift to roll out so the login page drops the IdP.
@@ -109,17 +120,25 @@ $(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cl
 EOF
 }
 
+# Login target: central-ocp → _central; secured-cluster → U1_SC_ID / soft-default.
 ensure_oc() {
-  local kc errf err
+  local kc errf err target="${1:-}"
   if ! command -v oc >/dev/null 2>&1; then
     printf 'oc not on PATH\n' >&2
     return 1
   fi
+  if [[ -z "$target" ]]; then
+    if [[ "${U1_PLANE}" == "central-ocp" ]]; then
+      target="${CENTRAL_OC_ID}"
+    else
+      target="${U1_SC_ID}"
+    fi
+  fi
   errf="$(mktemp)"
   if ! kc="$(
     cd "${ROOT}" || exit 1
-    if [[ -n "${U1_SC_ID}" ]]; then
-      "$PYTHON" -m lib.openshift login --secured-cluster-id "${U1_SC_ID}" --print-kubeconfig 2>"${errf}"
+    if [[ -n "${target}" ]]; then
+      "$PYTHON" -m lib.openshift login --secured-cluster-id "${target}" --print-kubeconfig 2>"${errf}"
     else
       "$PYTHON" -m lib.openshift login --print-kubeconfig 2>"${errf}"
     fi
@@ -136,6 +155,19 @@ ensure_oc() {
   fi
   export KUBECONFIG="${kc}"
   return 0
+}
+
+target_label() {
+  local t="${1:-}"
+  if [[ "$t" == "${CENTRAL_OC_ID}" || "${U1_PLANE}" == "central-ocp" ]]; then
+    printf 'central-ocp'
+  elif [[ -n "$t" ]]; then
+    printf 'secured-cluster:%s' "$t"
+  elif [[ -n "${U1_SC_ID}" ]]; then
+    printf 'secured-cluster:%s' "${U1_SC_ID}"
+  else
+    printf 'secured-cluster'
+  fi
 }
 
 require_bins() {
@@ -434,48 +466,36 @@ emit_status_sections() {
   printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
 }
 
-do_status() {
-  local errf err
+# Assess HTPasswd/RBAC on the current KUBECONFIG. Sets globals:
+# STATUS_STATE STATUS_MESSAGE (and prints ACS_SECTIONS_JSON).
+status_on_current() {
+  local label="$1"
   local demo_body cred_body cred_sum cred_tag
   local idp_body idp_sum idp_tag
   local secret_body secret_sum secret_tag
   local rbac_body rbac_sum rbac_tag
-  local state message
-  local u present_n=0 required_rbac_ok=1
+  local u present_n=0 required_rbac_ok=1 residue=""
 
   if [[ -f "$DEMO_MD" ]]; then
-    demo_body="Users Part 1 (OCP): OpenShift users and project RBAC for the ACS console plugin demo.
+    demo_body="Users Part 1 (OCP): same HTPasswd users on Central OpenShift and secured cluster(s).
 
 Before/after experience tables for adam, boaz, and chris:
   modules/users-part1-ocp/users-part1-ocp-demo.md
   GUI: /help?doc=users-part1-ocp-demo
 
-Run Part 2 and Part 3 for Act 2 (console vs ACS Central: boaz aligned, chris misaligned)."
+This status target: ${label}
+Run Part 2 and Part 3 for Act 2 (Central Login with OpenShift)."
   else
     demo_body="Missing demo script: ${DEMO_MD}
 GUI: /help?doc=users-part1-ocp-demo"
   fi
 
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
-    rm -f "${errf}"
-    emit_status_sections "$demo_body" \
-      "OpenShift login failed." "error" "error" \
-      "-" "error" "error" \
-      "-" "error" "error" \
-      "${err:-OpenShift access failed}" "error" "error"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 0
-  fi
-  rm -f "${errf}"
-
-  cred_body="Fixed lab passwords (password = username):"$'\n'
+  cred_body="Target: ${label}"$'\n'
+  cred_body+="Fixed lab passwords (password = username):"$'\n'
   cred_body+="  adam / ${PW_ADAM}"$'\n'
   cred_body+="  boaz / ${PW_BOAZ}"$'\n'
   cred_body+="  chris / ${PW_CHRIS}"$'\n'
   cred_body+=$'\n'"Cluster htpasswd lines:"$'\n'
-  local residue=""
   for u in "${DEMO_USERS[@]}"; do
     if htpasswd_user_present "$u"; then
       cred_body+="  ${u}: present"$'\n'
@@ -498,7 +518,6 @@ GUI: /help?doc=users-part1-ocp-demo"
   else
     cred_tag="warn"
   fi
-  # After uninstall, htpasswd is gone but User/Identity can linger without this check.
   if [[ "$present_n" -eq 0 && -n "$residue" ]]; then
     cred_tag="warn"
     cred_sum="residue"
@@ -507,24 +526,24 @@ GUI: /help?doc=users-part1-ocp-demo"
   if idp_present; then
     idp_sum="present"
     idp_tag="ok"
-    idp_body="IdP ${IDP_NAME} on oauth.config.openshift.io/cluster"
+    idp_body="IdP ${IDP_NAME} on oauth.config.openshift.io/cluster (${label})"
   else
     idp_sum="missing"
     idp_tag="warn"
-    idp_body="IdP ${IDP_NAME} not configured"
+    idp_body="IdP ${IDP_NAME} not configured (${label})"
   fi
 
   if oc -n "$SECRET_NS" get secret "$SECRET_NAME" >/dev/null 2>&1; then
     secret_sum="present"
     secret_tag="ok"
-    secret_body="Secret ${SECRET_NS}/${SECRET_NAME}"
+    secret_body="Secret ${SECRET_NS}/${SECRET_NAME} (${label})"
   else
     secret_sum="missing"
     secret_tag="warn"
-    secret_body="Secret ${SECRET_NS}/${SECRET_NAME} not found"
+    secret_body="Secret ${SECRET_NS}/${SECRET_NAME} not found (${label})"
   fi
 
-  rbac_body=""
+  rbac_body="Target: ${label}"$'\n'
   if oc get clusterrolebinding adam-cluster-admin >/dev/null 2>&1; then
     rbac_body+="adam-cluster-admin: present"$'\n'
   else
@@ -532,8 +551,6 @@ GUI: /help?doc=users-part1-ocp-demo"
     required_rbac_ok=0
   fi
 
-  # Namespace RBAC is optional until ms-demo / init-demo projects exist.
-  # Missing projects are pending (ok), not a failed install.
   if oc get "project/${MS_NS}" >/dev/null 2>&1; then
     if oc get rolebinding boaz-namespace-admin -n "${MS_NS}" >/dev/null 2>&1; then
       rbac_body+="boaz-namespace-admin (${MS_NS}): present"$'\n'
@@ -574,29 +591,66 @@ GUI: /help?doc=users-part1-ocp-demo"
     "$rbac_body" "$rbac_sum" "$rbac_tag"
 
   if [[ "$cred_tag" == "ok" && "$idp_tag" == "ok" && "$secret_tag" == "ok" && "$rbac_tag" == "ok" ]]; then
-    state="ok"
-    message="users-part1-ocp ready (adam/boaz/chris; IdP ${IDP_NAME})"
+    STATUS_STATE="ok"
+    STATUS_MESSAGE="${label}: ready (adam/boaz/chris; IdP ${IDP_NAME})"
   else
-    state="needs-run"
-    message="users ${cred_sum}; IdP ${idp_sum}; secret ${secret_sum}; RBAC ${rbac_sum}"
+    STATUS_STATE="needs-run"
+    STATUS_MESSAGE="${label}: users ${cred_sum}; IdP ${idp_sum}; secret ${secret_sum}; RBAC ${rbac_sum}"
   fi
-  printf '%s\t%s\t%s\n' "$MODULE_ID" "$state" "$message"
 }
 
-do_run() {
-  local errf err tmp
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+do_status() {
+  local errf err messages=() worst=ok label
+
+  STATUS_STATE=""
+  STATUS_MESSAGE=""
+
+  if want_central_ocp; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${CENTRAL_OC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tcentral-ocp: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 0
+    fi
     rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
+    status_on_current "central-ocp"
+    messages+=("$STATUS_MESSAGE")
+    case "$STATUS_STATE" in
+      error) worst=error ;;
+      needs-run) [[ "$worst" != "error" ]] && worst=needs-run ;;
+    esac
   fi
-  rm -f "${errf}"
-  require_bins || {
-    printf '%s\terror\tmissing required tools\n' "$MODULE_ID"
-    return 1
-  }
+
+  if want_secured_cluster; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${U1_SC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tsecured-cluster: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 0
+    fi
+    rm -f "${errf}"
+    label="$(target_label "${U1_SC_ID}")"
+    status_on_current "$label"
+    messages+=("$STATUS_MESSAGE")
+    case "$STATUS_STATE" in
+      error) worst=error ;;
+      needs-run) [[ "$worst" != "error" ]] && worst=needs-run ;;
+    esac
+  fi
+
+  if ((${#messages[@]} == 0)); then
+    printf '%s\terror\tno plane selected\n' "$MODULE_ID"
+    return 0
+  fi
+  printf '%s\t%s\t%s\n' "$MODULE_ID" "$worst" "$(IFS='; '; echo "${messages[*]}")"
+}
+
+# Assumes KUBECONFIG is already set for the target cluster.
+apply_users_on_current() {
+  local tmp pending="" label="$1"
+  echo "${MODULE_ID}: applying on ${label}"
 
   if htpasswd_secret_matches; then
     echo "${MODULE_ID}: ${SECRET_NAME} unchanged"
@@ -616,29 +670,59 @@ do_run() {
   ensure_htpasswd_idp
   ensure_rbac
 
-  # Honest outcome: core IdP/users/adam always; ns RBAC only when projects exist.
-  local pending=""
   if ! oc get "project/${MS_NS}" >/dev/null 2>&1; then
     pending=" (ms-demo/init RBAC pending until those projects exist)"
   elif ! oc get "project/${INIT_NS}" >/dev/null 2>&1; then
     pending=" (init-demo RBAC pending until ${INIT_NS} exists)"
   fi
-  printf '%s\tok\tusers-part1-ocp ready (IdP %s; adam/boaz/chris)%s\n' \
-    "$MODULE_ID" "$IDP_NAME" "$pending"
+  echo "${MODULE_ID}: ready on ${label} (IdP ${IDP_NAME}; adam/boaz/chris)${pending}"
+}
+
+do_run() {
+  local errf err labels=() label
+  require_bins || {
+    printf '%s\terror\tmissing required tools\n' "$MODULE_ID"
+    return 1
+  }
+
+  if want_central_ocp; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${CENTRAL_OC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tcentral-ocp: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    apply_users_on_current "central-ocp"
+    labels+=("central-ocp")
+  fi
+
+  if want_secured_cluster; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${U1_SC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tsecured-cluster: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    label="$(target_label "${U1_SC_ID}")"
+    apply_users_on_current "$label"
+    labels+=("$label")
+  fi
+
+  if ((${#labels[@]} == 0)); then
+    printf '%s\terror\tno plane selected\n' "$MODULE_ID"
+    return 1
+  fi
+  printf '%s\tok\tusers-part1-ocp ready on %s (IdP %s; adam/boaz/chris)\n' \
+    "$MODULE_ID" "$(IFS=','; echo "${labels[*]}")" "$IDP_NAME"
   return 0
 }
 
-do_dry_run() {
-  local errf err have_secret="missing" have_idp="missing" secret_note
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
-    rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
-  fi
-  rm -f "${errf}"
-
+dry_run_on_current() {
+  local label="$1" have_secret="missing" have_idp="missing" secret_note
   if oc -n "$SECRET_NS" get secret "$SECRET_NAME" >/dev/null 2>&1; then
     have_secret="present"
   fi
@@ -650,9 +734,8 @@ do_dry_run() {
   else
     secret_note=" (would apply/update)"
   fi
-
   cat <<EOF
-${MODULE_ID}: dry-run
+${MODULE_ID}: dry-run (${label})
   Lab logins (fixed): adam/${PW_ADAM} boaz/${PW_BOAZ} chris/${PW_CHRIS}
   Secret ${SECRET_NS}/${SECRET_NAME}: ${have_secret}${secret_note}
   IdP ${IDP_NAME}: ${have_idp}$(
@@ -664,42 +747,81 @@ ${MODULE_ID}: dry-run
     chris-admin-<ns> on: $(chris_namespaces | tr '\n' ' ')
   Demo script: ${DEMO_MD}
 EOF
-  printf '%s\tok\tdry-run only\n' "$MODULE_ID"
 }
 
-do_uninstall() {
-  local errf err
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+do_dry_run() {
+  local errf err labels=()
+  if want_central_ocp; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${CENTRAL_OC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tcentral-ocp: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
     rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
+    dry_run_on_current "central-ocp"
+    labels+=("central-ocp")
   fi
-  rm -f "${errf}"
+  if want_secured_cluster; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${U1_SC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tsecured-cluster: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    dry_run_on_current "$(target_label "${U1_SC_ID}")"
+    labels+=("$(target_label "${U1_SC_ID}")")
+  fi
+  printf '%s\tok\tdry-run only (%s)\n' "$MODULE_ID" "$(IFS=','; echo "${labels[*]}")"
+}
 
+uninstall_on_current() {
+  local label="$1"
+  echo "${MODULE_ID}: uninstalling on ${label}"
   remove_rbac
   remove_htpasswd_idp
   oc -n "$SECRET_NS" delete secret "$SECRET_NAME" --ignore-not-found=true
   remove_demo_users_and_identities
   wait_for_oauth_rollout
+}
 
-  printf '%s\tok\tremoved IdP, secret, RoleBindings, Users/Identities; oauth rolled out\n' "$MODULE_ID"
+do_uninstall() {
+  local errf err labels=()
+  if want_central_ocp; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${CENTRAL_OC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tcentral-ocp: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    uninstall_on_current "central-ocp"
+    labels+=("central-ocp")
+  fi
+  if want_secured_cluster; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${U1_SC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tsecured-cluster: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    uninstall_on_current "$(target_label "${U1_SC_ID}")"
+    labels+=("$(target_label "${U1_SC_ID}")")
+  fi
+  printf '%s\tok\tremoved IdP/secret/RBAC/Users on %s; oauth rolled out\n' \
+    "$MODULE_ID" "$(IFS=','; echo "${labels[*]}")"
   return 0
 }
 
-do_uninstall_dry_run() {
-  local errf err
-  errf="$(mktemp)"
-  if ! ensure_oc 2>"${errf}"; then
-    err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
-    rm -f "${errf}"
-    printf '%s\terror\t%s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
-    return 1
-  fi
-  rm -f "${errf}"
-
-  echo "${MODULE_ID}: uninstall dry-run"
+uninstall_dry_run_on_current() {
+  local label="$1" ns u
+  echo "${MODULE_ID}: uninstall dry-run (${label})"
   echo "  Would delete (if present):"
   if oc get clusterrolebinding adam-cluster-admin >/dev/null 2>&1; then
     echo "    clusterrolebinding/adam-cluster-admin"
@@ -707,7 +829,6 @@ do_uninstall_dry_run() {
   if oc get rolebinding boaz-namespace-admin -n "${MS_NS}" >/dev/null 2>&1; then
     echo "    rolebinding/boaz-namespace-admin -n ${MS_NS}"
   fi
-  local ns
   while IFS= read -r ns; do
     [[ -z "$ns" ]] && continue
     if oc get rolebinding "chris-admin-${ns}" -n "${ns}" >/dev/null 2>&1; then
@@ -720,7 +841,6 @@ do_uninstall_dry_run() {
   if oc -n "$SECRET_NS" get secret "$SECRET_NAME" >/dev/null 2>&1; then
     echo "    secret/${SECRET_NAME} -n ${SECRET_NS}"
   fi
-  local u
   for u in "${DEMO_USERS[@]}"; do
     if oc get "identity/${IDP_NAME}:${u}" >/dev/null 2>&1; then
       echo "    identity/${IDP_NAME}:${u}"
@@ -730,7 +850,35 @@ do_uninstall_dry_run() {
     fi
   done
   echo "    wait for deploy/oauth-openshift rollout in openshift-authentication"
-  printf '%s\tok\tuninstall dry-run only\n' "$MODULE_ID"
+}
+
+do_uninstall_dry_run() {
+  local errf err labels=()
+  if want_central_ocp; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${CENTRAL_OC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tcentral-ocp: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    uninstall_dry_run_on_current "central-ocp"
+    labels+=("central-ocp")
+  fi
+  if want_secured_cluster; then
+    errf="$(mktemp)"
+    if ! ensure_oc "${U1_SC_ID}" 2>"${errf}"; then
+      err="$(tr '\n' ' ' <"${errf}" 2>/dev/null)"
+      rm -f "${errf}"
+      printf '%s\terror\tsecured-cluster: %s\n' "$MODULE_ID" "${err:-OpenShift access failed}"
+      return 1
+    fi
+    rm -f "${errf}"
+    uninstall_dry_run_on_current "$(target_label "${U1_SC_ID}")"
+    labels+=("$(target_label "${U1_SC_ID}")")
+  fi
+  printf '%s\tok\tuninstall dry-run only (%s)\n' "$MODULE_ID" "$(IFS=','; echo "${labels[*]}")"
 }
 
 emit_status() {
@@ -771,12 +919,16 @@ main() {
       --dry-run) dry_run=true ;;
       --plane)
         shift
-        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs secured-cluster" >&2; exit 1; }
+        [[ $# -gt 0 ]] || { echo "$(basename "$0"): --plane needs central-ocp|secured-cluster" >&2; exit 1; }
         U1_PLANE="$1"
         case "$U1_PLANE" in
-          secured-cluster|openshift) ;;
+          central-ocp|secured-cluster|openshift) ;;
+          central-api|central)
+            echo "$(basename "$0"): --plane central-api is Part 2/3; Part 1 is central-ocp|secured-cluster" >&2
+            exit 1
+            ;;
           *)
-            echo "$(basename "$0"): secured-cluster-only module; --plane must be secured-cluster (got ${U1_PLANE})" >&2
+            echo "$(basename "$0"): --plane must be central-ocp or secured-cluster (got ${U1_PLANE})" >&2
             exit 1
             ;;
         esac
@@ -800,9 +952,11 @@ main() {
     shift
   done
 
-  if ((${#U1_SC_IDS[@]} > 1)); then
-    echo "$(basename "$0"): OpenShift-only module expects at most one --secured-cluster-id" >&2
-    exit 1
+  if want_secured_cluster && ((${#U1_SC_IDS[@]} > 1)); then
+    if [[ "${U1_PLANE}" == "secured-cluster" || "${U1_PLANE}" == "openshift" ]]; then
+      echo "$(basename "$0"): secured-cluster plane expects at most one --secured-cluster-id" >&2
+      exit 1
+    fi
   fi
   U1_SC_ID="${U1_SC_IDS[0]:-${ACS_DEMO_SC_ID:-}}"
 
