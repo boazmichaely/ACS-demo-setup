@@ -220,8 +220,27 @@ co_scan_status_line() {
   printf '%s\n' "$parsed"
 }
 
+# Central Compliance Coverage UI (GUI linkifies https:// in the summary).
+co_coverage_url() {
+  local py url
+  py="$(co_python)"
+  [[ -n "${COMPLIANCE_MODULE_ROOT:-}" ]] || return 0
+  url="$(
+    cd "${COMPLIANCE_MODULE_ROOT}" && "$py" -c '
+from lib.central import load_lab_credentials, central_console_url
+u = (central_console_url(load_lab_credentials()) or "").strip().rstrip("/")
+if not u:
+    raise SystemExit(0)
+if not u.startswith(("http://", "https://")):
+    u = "https://" + u
+print(u + "/main/compliance/coverage/")
+' 2>/dev/null || true
+  )"
+  printf '%s' "$url"
+}
+
 co_combine_status() {
-  local op_st op_msg scan_st scan_msg combined_st combined_msg
+  local op_st op_msg scan_st scan_msg combined_st combined_msg cov
   op_st="${1%%$'\t'*}"
   op_msg="${1#*$'\t'}"
   scan_st="${2%%$'\t'*}"
@@ -239,6 +258,11 @@ co_combine_status() {
     combined_msg="$op_msg"
   else
     combined_msg="$op_msg; $scan_msg"
+  fi
+
+  if [[ "$combined_st" == "ok" ]]; then
+    cov="$(co_coverage_url)"
+    [[ -n "$cov" ]] && combined_msg="$cov"
   fi
 
   printf '%s\t%s\t%s\n' "$MODULE_ID" "$combined_st" "$combined_msg"
