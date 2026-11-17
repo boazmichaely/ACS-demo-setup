@@ -66,7 +66,9 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
   "dependsOn": [],
   "statusComplexity": 5,
   "impactPlanes": ["secured-cluster"],
-  "securedClusterPolicy": "single"
+  "securedClusterPolicy": "single",
+  "runSummary": "What Install will do (1-3 short lines for the confirm modal).",
+  "uninstallSummary": "What Uninstall will remove (1-3 short lines; separate from run)."
 }
 ```
 
@@ -75,6 +77,7 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
 - `impactPlanes` declares where the module does work (GUI **Type** column; see [Planes and multi-SC](#planes-and-multi-sc)). Required for new modules.
 - `securedClusterPolicy` - required when `impactPlanes` includes `secured-cluster`. Values: `single` (default for new modules; refuse multi-SC fan-out), `multi-warn` (allow multi-SC; GUI warns if already present elsewhere), `multi` (multi-SC is normal). Omit for Central-only modules. See [Secured-cluster policy](#secured-cluster-policy).
+- `runSummary` / `uninstallSummary` - required for GUI confirm modals (R-GUI-5). Two **separate** strings: Install vs Uninstall. Static intent only (no live cluster probe). The GUI always shows a confirm popup before Run or Uninstall; these fields are the “what will happen” copy.
 - Prefer `my-feature.sh` over `07-my-feature.sh`.
 
 ## Python helper (required for Central)
@@ -91,7 +94,7 @@ Copy the helper template when you need one:
 cp templates/module-helper.py modules/my_feature.py
 ```
 
-In `modules/my-feature.sh`, wire the helper block from the [skeleton](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh) and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put Central / heavy work in the `.py` file.
+In `modules/my-feature.sh`, wire the helper block from the [skeleton](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh) and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put Central / heavy work in the `.py` file. The helper’s teaching Status folds match the skeleton’s four groups; replace that sample data with real checks. Uninstall may stay in the shell until Central cleanup needs Python; the helper includes an `uninstall` subcommand for that case. If the module invents selectable option flags (not planes / multi-SC), follow [**ADVANCED — use this when your module has multiple choices**](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-choices.md); otherwise leave that file alone and keep the simple `run_helper`.
 
 ## Status output
 
@@ -171,46 +174,7 @@ Each element of `sections` is one fold:
 
 #### Skeleton example
 
-Copy `emit_status_sections()` from [`templates/module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh), then replace the sample data. Short version:
-
-```bash
-emit_status_sections() {
-  local sections_json prose_multiline
-  prose_multiline="$(cat <<'EOF'
-Body of a multi-line prose blob.
-Each newline becomes a line break in the GUI.
-EOF
-  )"
-  sections_json="$(
-    jq -nc --arg prose_multi "$prose_multiline" '{
-      sections: [
-        {
-          group: "Group 1 header. e.g. Overview",
-          title: "Title of first blob. e.g. Installed components",
-          summary: "(optional) right hand side info (1/1 ready)",
-          body: "Body of the first blob...",
-          bodyFormat: "prose"
-        },
-        {
-          group: "Group 2 header. e.g. Notes",
-          title: "Title of second blob. e.g. Multi-line prose",
-          summary: "(optional) right hand side info",
-          body: $prose_multi,
-          bodyFormat: "prose"
-        }
-      ]
-    }'
-  )"
-  printf 'ACS_SECTIONS_JSON=%s\n' "$sections_json"
-}
-
-do_status() {
-  emit_status_sections
-  printf '%s\tok\tshort human summary\n' "$MODULE_ID"
-}
-```
-
-Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. Large real example: [`scripts/compliance_co_overview.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/scripts/compliance_co_overview.py).
+Copy `emit_status_sections()` from [`templates/module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh) (four teaching groups; same shape in [`templates/module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py)), then replace the sample data. Prefer `jq --arg` / `--argjson` over interpolating shell into the `jq` program. Large real example: [`scripts/compliance_co_overview.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/scripts/compliance_co_overview.py).
 
 ## Run, dry-run, and uninstall
 
@@ -362,8 +326,8 @@ If the RHACS UI configures something in Central, prefer the Central API. Avoid a
 When a module creates or updates RHACS policies for the demo:
 
 1. Upsert through [`lib/demo_policies.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/demo_policies.py) `ensure_managed_policy`. That helper merges category **`DEMO`** into the policy (visible in Policy Management) and preserves any existing notifiers on update.
-2. **Do not** attach Slack, Syslog, or other notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier.sh) and [`syslog-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/syslog-notifier.sh) attach/detach their notifiers on `--run` / `--uninstall` by discovering policies with category `DEMO`.
-3. After first creating DEMO policies on a lab (or after adding a new demo policy), re-run `slack-notifier` / `syslog-notifier` once so those notifiers are wired. A full install that already runs them after the policy modules is enough.
+2. **Do not** attach notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier.sh) attaches/detaches its Slack notifier on `--run` / `--uninstall` by discovering policies with category `DEMO`. [`syslog-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/syslog-notifier.sh) configures the Syslog notifier and Central Test only - it does **not** attach to DEMO policies.
+3. After first creating DEMO policies on a lab (or after adding a new demo policy), re-run `slack-notifier` once so Slack is wired. A full install that already runs it after the policy modules is enough.
 
 Examples: [`modules/init_demo.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/init_demo.py), [`modules/signature_integration.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/signature_integration.py).
 

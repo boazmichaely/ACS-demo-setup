@@ -75,7 +75,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 | G-MOD-5 | Status cell: badge (detail via title / Status jump). Pending **checking** while refresh runs. |
 | G-MOD-6 | Badge mapping `ok` / `needs-run` / `error` (ready / needs-run / error). |
 | G-MOD-7 | **Not installed** (no `modules/<id>.sh`): row **grayed out**, checkbox **disabled**, not selectable; badge **not installed**. Count selectable rows only in bulk toolbar. |
-| G-MOD-8 | One toolbar above the table: Select all, selection count, then **Dry run** beside **Run selected** / **Uninstall selected** / **Run full install**. Per-row kebab: Run / Uninstall (Dry run applies). |
+| G-MOD-8 | One toolbar above the table: Select all, selection count, then **Dry run** beside **Run selected** / **Uninstall selected**. Per-row kebab: Run / Uninstall (Dry run applies). No “run everything” shortcut - use Select all + Run selected if needed. |
 
 ---
 
@@ -109,7 +109,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 | ID | Requirement |
 |----|-------------|
 | G-UX-1 | Refresh status = all installed modules (Status card). No per-selection status refresh. |
-| G-UX-2 | Run selected in dependency order; confirm destructive modules (REQUIREMENTS R-GUI-5). |
+| G-UX-2 | Run / Uninstall (single or selected) **always** open a confirm modal first (REQUIREMENTS R-GUI-5): static `runSummary` / `uninstallSummary`, plus impact selection when the module has `impactPlanes`. Not a live dry-run. Optional full-help link. |
 | G-UX-3 | Disable controls while in flight. |
 | G-UX-4 | Errors use danger colors; do not print secrets into the log stream from the GUI. |
 | G-UX-5 | Keyboard: focusable controls, `focus-visible` outlines. |
@@ -150,4 +150,4 @@ Milestone: **shell port** + not-installed module rules.
 | Not-installed modules | Enforce G-MOD-7 / G-STAT-5 in live `app.js` |
 | oc chip | Wire to orchestrator `--oc-status` JSON or lightweight API |
 | Module scripts | Real status when `modules/<id>.sh` exist |
-| Destructive run confirm | Dialog when module documents destructive `--run` |
+| Run / Uninstall confirm | Always-on modal (summary + selectors); catalog `runSummary` / `uninstallSummary` |

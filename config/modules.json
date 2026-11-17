@@ -5,14 +5,18 @@
       "label": "Configure ACS image integrations",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central-api", "central-ocp"]
+      "impactPlanes": ["central-api", "central-ocp"],
+      "runSummary": "Central OpenShift: read the pull-secret. Central API: upsert Quay, registry.redhat.io, and GAR image integrations and test them.",
+      "uninstallSummary": "Central API: remove the image integrations this module created. Does not change the cluster pull-secret."
     },
     {
       "id": "signature-integration",
       "label": "ACS Cosign / signature integration (Red Hat Public)",
       "dependsOn": [],
       "statusComplexity": 4,
-      "impactPlanes": ["central-api"]
+      "impactPlanes": ["central-api"],
+      "runSummary": "Central API: create or update the Red Hat Public Cosign / signature integration.",
+      "uninstallSummary": "Central API: delete the Red Hat Public signature integration."
     },
     {
       "id": "compliance-operator",
@@ -20,7 +24,9 @@
       "dependsOn": [],
       "statusComplexity": 7,
       "impactPlanes": ["central-api", "secured-cluster"],
-      "securedClusterPolicy": "multi"
+      "securedClusterPolicy": "multi",
+      "runSummary": "Secured cluster(s): install Compliance Operator (OLM). Central API: merge those clusters into scan schedule ocp4-cis-scan-schedule.",
+      "uninstallSummary": "Secured cluster(s): remove Compliance Operator. Central API: drop those clusters from the CIS schedule (schedule kept if others remain)."
     },
     {
       "id": "virt-vm-demo",
@@ -28,7 +34,9 @@
       "dependsOn": [],
       "statusComplexity": 9,
       "impactPlanes": ["central-api", "central-ocp", "secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Central OpenShift: enable ROX_VIRTUAL_MACHINES on the Central CR. Secured cluster: enable SecuredCluster flags, install OpenShift Virtualization, deploy two RHEL 9 VMs with roxagent. Central API: wait until guest CVEs appear.",
+      "uninstallSummary": "Secured cluster: delete project acs-virt-demo (the VMs). Leaves CNV and ACS virtual-machine flags in place."
     },
     {
       "id": "ms-demo",
@@ -36,7 +44,9 @@
       "dependsOn": [],
       "statusComplexity": 4,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "multi-warn"
+      "securedClusterPolicy": "multi-warn",
+      "runSummary": "Secured cluster(s): create project ms-demo and apply the Online Boutique microservices manifests.",
+      "uninstallSummary": "Secured cluster(s): delete project ms-demo and wait until it is gone."
     },
     {
       "id": "init-demo",
@@ -44,7 +54,9 @@
       "dependsOn": [],
       "statusComplexity": 3,
       "impactPlanes": ["central-api", "secured-cluster"],
-      "securedClusterPolicy": "multi-warn"
+      "securedClusterPolicy": "multi-warn",
+      "runSummary": "Secured cluster(s): deploy clean/dirty/blue/red apps in acs-init-container-test. Central API: create the three DEMO-Init-Test policies.",
+      "uninstallSummary": "Secured cluster(s): delete project acs-init-container-test. Central API: remove the DEMO-Init-Test policies."
     },
     {
       "id": "users-part1-ocp",
@@ -52,7 +64,9 @@
       "dependsOn": [],
       "statusComplexity": 2,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: create HTPasswd users adam/boaz/chris, IdP, and adam cluster-admin. Namespace admin for boaz/chris is applied when ms-demo / init-demo projects exist (safe to run before those demos).",
+      "uninstallSummary": "Secured cluster: remove those HTPasswd users / IdP pieces and related RBAC. Does not undo Parts 2–3 in Central."
     },
     {
       "id": "users-part2-oauth",
@@ -61,7 +75,9 @@
         "users-part1-ocp"
       ],
       "statusComplexity": 2,
-      "impactPlanes": ["central-api"]
+      "impactPlanes": ["central-api"],
+      "runSummary": "Central API: configure OpenShift OAuth / auth provider wiring for the demo users (after Part 1).",
+      "uninstallSummary": "Central API: remove the OAuth / auth provider configuration this module added."
     },
     {
       "id": "users-part3-acs",
@@ -70,14 +86,18 @@
         "users-part2-oauth"
       ],
       "statusComplexity": 2,
-      "impactPlanes": ["central-api"]
+      "impactPlanes": ["central-api"],
+      "runSummary": "Central API: create ACS roles and access scopes so adam, boaz, and chris see the intended views.",
+      "uninstallSummary": "Central API: remove the ACS roles and access scopes this module created."
     },
     {
       "id": "slack-notifier",
       "label": "Central Slack integration",
       "dependsOn": [],
       "statusComplexity": 3,
-      "impactPlanes": ["central-api"]
+      "impactPlanes": ["central-api"],
+      "runSummary": "Central API: create or update the Slack notifier (lab webhook) and attach it to every DEMO policy.",
+      "uninstallSummary": "Central API: delete the Slack notifier. DEMO policies remain."
     },
     {
       "id": "syslog-notifier",
@@ -85,7 +105,9 @@
       "dependsOn": [],
       "statusComplexity": 5,
       "impactPlanes": ["central-api", "secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: deploy acs-syslog-demo (CEF receiver, LoadBalancer, viewer Route). Central API: create or update the Syslog notifier to that endpoint and run Central Test.",
+      "uninstallSummary": "Central API: delete the Syslog notifier. Secured cluster: delete namespace acs-syslog-demo (when that target is selected)."
     },
     {
       "id": "splunk-TA",
@@ -93,7 +115,9 @@
       "dependsOn": [],
       "statusComplexity": 6,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: install Splunk Operator, Free Standalone, Web Route, and the RHACS Splunk TA from the local .tgz. Central is wired later in the Splunk UI (not in this run).",
+      "uninstallSummary": "Secured cluster: delete the Splunk Standalone, Helm release, and demo namespace. Leaves cluster-scoped CRDs."
     },
     {
       "id": "openshift-mcp",
@@ -101,7 +125,9 @@
       "dependsOn": [],
       "statusComplexity": 5,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: install or update the OpenShift MCP server and wire it for your AI agent.",
+      "uninstallSummary": "Secured cluster: remove the OpenShift MCP server footprint."
     },
     {
       "id": "openshift-mcp-gateway",
@@ -109,7 +135,9 @@
       "dependsOn": [],
       "statusComplexity": 5,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: launch or update the MCP gateway.",
+      "uninstallSummary": "Secured cluster: remove the MCP gateway."
     },
     {
       "id": "acs-lightspeed",
@@ -117,7 +145,9 @@
       "dependsOn": [],
       "statusComplexity": 4,
       "impactPlanes": ["central-api", "secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: configure OpenShift Lightspeed pieces for ACS. Central API: complete Lightspeed integration on the selected targets.",
+      "uninstallSummary": "Secured cluster: remove Lightspeed pieces this module owns. Central API: remove the related Central wiring."
     },
     {
       "id": "acs-mcp",
@@ -125,7 +155,9 @@
       "dependsOn": [],
       "statusComplexity": 5,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: install or update the ACS MCP server and wire it to your agent.",
+      "uninstallSummary": "Secured cluster: remove the ACS MCP server footprint."
     },
     {
       "id": "prometheus",
@@ -133,7 +165,9 @@
       "dependsOn": [],
       "statusComplexity": 5,
       "impactPlanes": ["central-api", "secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: enable or configure Prometheus / user-workload monitoring. Central API: wire ACS monitoring on the selected targets.",
+      "uninstallSummary": "Secured cluster: remove Prometheus / monitoring pieces this module owns. Central API: remove related ACS monitoring wiring."
     },
     {
       "id": "secrets-manager",
@@ -141,7 +175,9 @@
       "dependsOn": [],
       "statusComplexity": 6,
       "impactPlanes": ["secured-cluster"],
-      "securedClusterPolicy": "single"
+      "securedClusterPolicy": "single",
+      "runSummary": "Secured cluster: install Vault and External Secrets Operator pieces, enable the console plugin, and deploy the demo application.",
+      "uninstallSummary": "Secured cluster: remove the Vault / ESO / demo app footprint this module owns."
     }
   ]
 }

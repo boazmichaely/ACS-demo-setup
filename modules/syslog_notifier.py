@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -18,18 +19,14 @@ from lib.central import (  # noqa: E402
     check_central_auth,
     load_lab_credentials,
 )
-from lib.demo_policies import (  # noqa: E402
-    DEMO_CATEGORY,
-    attach_notifier,
-    detach_notifier,
-    list_demo_policies,
-    policy_has_notifier,
-)
 
 MODULE_ID = "syslog-notifier"
 DEFAULT_NAME = "acs-demo-syslog"
 DEFAULT_FACILITY = "LOCAL0"
 DEFAULT_PORT = 5140
+# Central Test can race a brand-new LoadBalancer; retry briefly.
+TEST_ATTEMPTS = 4
+TEST_RETRY_SLEEP_SEC = 5
 
 
 def emit_status_line(state: str, message: str) -> None:
@@ -136,69 +133,6 @@ def syslog_endpoint(notifier: dict[str, Any] | None) -> tuple[str, int, str]:
     return host, port, fmt
 
 
-def demo_policy_sections(
-    policies: list[dict[str, Any]], *, notifier_id: str
-) -> list[dict[str, Any]]:
-    sections: list[dict[str, Any]] = []
-    nid = (notifier_id or "").strip()
-    if not policies:
-        sections.append(
-            {
-                "group": "DEMO policies",
-                "title": f"No {DEMO_CATEGORY} policies",
-                "summary": "none",
-                "tag": "ok",
-                "body": (
-                    f"No Central policies with category {DEMO_CATEGORY}. "
-                    "Re-run a policy module (init-demo, signature-integration, …), "
-                    "then re-run syslog-notifier."
-                ),
-                "bodyFormat": "prose",
-            }
-        )
-        return sections
-    wired = 0
-    for policy in policies:
-        name = (policy.get("name") or "(unnamed)").strip()
-        pid = str(policy.get("id") or "").strip()
-        ok = bool(nid) and policy_has_notifier(policy, nid)
-        if ok:
-            wired += 1
-        state = "ok" if ok else "needs-run"
-        sections.append(
-            {
-                "group": "DEMO policies",
-                "title": name,
-                "summary": "wired" if ok else "missing notifier",
-                "tag": _tag_for_state(state),
-                "body": (
-                    f"Policy id: {pid or '(none)'}\n"
-                    f"Category: {DEMO_CATEGORY}\n"
-                    f"Syslog notifier: {'attached' if ok else 'missing'}"
-                ),
-                "bodyFormat": "prose",
-            }
-        )
-    # Prepend summary fold
-    total = len(policies)
-    summary_state = "ok" if wired == total else "needs-run"
-    sections.insert(
-        0,
-        {
-            "group": "DEMO policies",
-            "title": "Wiring summary",
-            "summary": f"{wired}/{total} wired",
-            "tag": _tag_for_state(summary_state),
-            "body": (
-                f"{wired} of {total} {DEMO_CATEGORY} policies have this "
-                "Syslog notifier attached."
-            ),
-            "bodyFormat": "prose",
-        },
-    )
-    return sections
-
-
 def build_notifier_sections(
     *,
     name: str,
@@ -207,7 +141,6 @@ def build_notifier_sections(
     want_format: str,
     notifier: dict[str, Any] | None,
     state: str,
-    demo_policies: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     nid = str((notifier or {}).get("id") or "")
     got_host, got_port, got_fmt = syslog_endpoint(notifier)
@@ -223,7 +156,7 @@ def build_notifier_sections(
             "TLS: disabled (lab v1)",
         ]
     )
-    sections: list[dict[str, Any]] = [
+    return [
         {
             "group": "Syslog notifier",
             "title": name,
@@ -233,9 +166,6 @@ def build_notifier_sections(
             "bodyFormat": "prose",
         }
     ]
-    if demo_policies is not None:
-        sections.extend(demo_policy_sections(demo_policies, notifier_id=nid))
-    return sections
 
 
 def assess(
@@ -259,7 +189,6 @@ def assess(
                 want_format=message_format,
                 notifier=None,
                 state="error",
-                demo_policies=[],
             ),
             None,
         )
@@ -274,14 +203,12 @@ def assess(
                 want_format=message_format,
                 notifier=None,
                 state="needs-run",
-                demo_policies=list_demo_policies(base, authorization, creds=creds),
             ),
             None,
         )
 
     notifiers = list_notifiers(base, authorization, creds=creds)
     hit = find_syslog_notifier(notifiers, name)
-    demo_policies = list_demo_policies(base, authorization, creds=creds)
     if not hit:
         return (
             "needs-run",
@@ -293,7 +220,6 @@ def assess(
                 want_format=message_format,
                 notifier=None,
                 state="needs-run",
-                demo_policies=demo_policies,
             ),
             None,
         )
@@ -311,7 +237,6 @@ def assess(
                 want_format=message_format,
                 notifier=hit,
                 state="needs-run",
-                demo_policies=demo_policies,
             ),
             hit,
         )
@@ -326,40 +251,13 @@ def assess(
                 want_format=message_format,
                 notifier=hit,
                 state="needs-run",
-                demo_policies=demo_policies,
             ),
             hit,
         )
 
-    nid = str(hit.get("id") or "").strip()
-    unwired = [p for p in demo_policies if not policy_has_notifier(p, nid)]
-    if unwired:
-        return (
-            "needs-run",
-            f"Syslog notifier ready; {len(unwired)} DEMO polic"
-            f"{'y' if len(unwired) == 1 else 'ies'} missing notifier",
-            build_notifier_sections(
-                name=name,
-                want_host=host,
-                want_port=port,
-                want_format=message_format,
-                notifier=hit,
-                state="needs-run",
-                demo_policies=demo_policies,
-            ),
-            hit,
-        )
-
-    n = len(demo_policies)
-    msg = (
-        f"Syslog notifier {name} → {host}:{port}; "
-        f"{n} DEMO polic{'y' if n == 1 else 'ies'} wired"
-        if n
-        else f"Syslog notifier {name} → {host}:{port} (no DEMO policies yet)"
-    )
     return (
         "ok",
-        msg,
+        f"Syslog notifier {name} → {host}:{port} ({want_fmt})",
         build_notifier_sections(
             name=name,
             want_host=host,
@@ -367,7 +265,6 @@ def assess(
             want_format=message_format,
             notifier=hit,
             state="ok",
-            demo_policies=demo_policies,
         ),
         hit,
     )
@@ -446,69 +343,45 @@ def test_notifier(
     if dry_run:
         print(f"{MODULE_ID}: dry-run would POST /v1/notifiers/test for {body.get('name')!r}")
         return
-    code, resp = central_request(
-        base, authorization, "POST", "/v1/notifiers/test", body, creds=creds
-    )
-    if code != 200:
-        raise RuntimeError(f"POST /v1/notifiers/test failed ({code}): {resp}")
 
+    last_err: Exception | None = None
+    for attempt in range(1, TEST_ATTEMPTS + 1):
+        # Re-fetch each attempt in case Central finishes persisting fields late.
+        nid = str(notifier.get("id") or "").strip()
+        name = str(notifier.get("name") or "").strip()
+        if nid or name:
+            notifiers = list_notifiers(base, authorization, creds=creds)
+            fresh = None
+            if nid:
+                for n in notifiers:
+                    if str(n.get("id") or "") == nid:
+                        fresh = n
+                        break
+            if fresh is None and name:
+                fresh = find_syslog_notifier(notifiers, name)
+            if fresh:
+                notifier = fresh
+                body["id"] = notifier.get("id")
+                body["name"] = notifier.get("name")
+                body["uiEndpoint"] = (notifier.get("uiEndpoint") or base).rstrip("/")
+                body["syslog"] = notifier.get("syslog") or {}
 
-def wire_demo_policies(
-    base: str,
-    authorization: str,
-    *,
-    creds: dict[str, Any],
-    notifier_id: str,
-    dry_run: bool,
-) -> tuple[int, int]:
-    nid = (notifier_id or "").strip()
-    if not nid:
-        raise RuntimeError("notifier missing id; cannot wire DEMO policies")
-    policies = list_demo_policies(base, authorization, creds=creds)
-    changed = 0
-    for policy in policies:
-        pid = str(policy.get("id") or "").strip()
-        if not pid or policy_has_notifier(policy, nid):
-            continue
-        attach_notifier(
-            base,
-            authorization,
-            policy_id=pid,
-            notifier_id=nid,
-            creds=creds,
-            dry_run=dry_run,
+        code, resp = central_request(
+            base, authorization, "POST", "/v1/notifiers/test", body, creds=creds
         )
-        changed += 1
-    return changed, len(policies)
-
-
-def unwire_demo_policies(
-    base: str,
-    authorization: str,
-    *,
-    creds: dict[str, Any],
-    notifier_id: str,
-    dry_run: bool,
-) -> int:
-    nid = (notifier_id or "").strip()
-    if not nid:
-        return 0
-    policies = list_demo_policies(base, authorization, creds=creds)
-    changed = 0
-    for policy in policies:
-        pid = str(policy.get("id") or "").strip()
-        if not pid or not policy_has_notifier(policy, nid):
-            continue
-        detach_notifier(
-            base,
-            authorization,
-            policy_id=pid,
-            notifier_id=nid,
-            creds=creds,
-            dry_run=dry_run,
-        )
-        changed += 1
-    return changed
+        if code == 200:
+            if attempt > 1:
+                print(f"{MODULE_ID}: Central Test succeeded on attempt {attempt}")
+            return
+        last_err = RuntimeError(f"POST /v1/notifiers/test failed ({code}): {resp}")
+        if attempt < TEST_ATTEMPTS:
+            print(
+                f"{MODULE_ID}: Central Test attempt {attempt}/{TEST_ATTEMPTS} failed; "
+                f"retry in {TEST_RETRY_SLEEP_SEC}s…"
+            )
+            time.sleep(TEST_RETRY_SLEEP_SEC)
+    assert last_err is not None
+    raise last_err
 
 
 def delete_notifier(
@@ -597,7 +470,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if dry:
         print(
             f"{MODULE_ID}: dry-run would upsert Syslog notifier {name!r} → "
-            f"{host}:{port} format={message_format}, Test, attach DEMO policies"
+            f"{host}:{port} format={message_format}, then Central Test"
         )
         emit_sections(
             build_notifier_sections(
@@ -633,22 +506,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         test_notifier(
             base, authorization, creds=creds, notifier=notifier, dry_run=dry
         )
-        if not dry:
-            print(f"{MODULE_ID}: Central Test notifier succeeded for {name!r}")
-        nid = str(notifier.get("id") or "").strip()
-        if not nid and not dry:
-            # re-fetch
-            hit = find_syslog_notifier(
-                list_notifiers(base, authorization, creds=creds), name
-            )
-            nid = str((hit or {}).get("id") or "")
-            notifier = hit or notifier
-        attached, total = wire_demo_policies(
-            base, authorization, creds=creds, notifier_id=nid or "dry-run", dry_run=dry
-        )
-        print(
-            f"{MODULE_ID}: DEMO policies wired {attached} new / {total} total"
-        )
+        print(f"{MODULE_ID}: Central Test notifier succeeded for {name!r}")
         state, message, sections, _ = assess(
             base,
             authorization,
@@ -670,10 +528,7 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     dry = bool(args.dry_run)
     name = (args.name or DEFAULT_NAME).strip()
     if dry:
-        print(
-            f"{MODULE_ID}: dry-run would detach {name!r} from DEMO policies "
-            "and DELETE the Syslog notifier"
-        )
+        print(f"{MODULE_ID}: dry-run would DELETE Syslog notifier {name!r}")
         emit_status_line("ok", f"dry-run would delete Syslog notifier {name}")
         return 0
     try:
@@ -689,10 +544,6 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
             emit_status_line("ok", f"Syslog notifier {name!r} already absent")
             return 0
         nid = str(hit.get("id") or "").strip()
-        n = unwire_demo_policies(
-            base, authorization, creds=creds, notifier_id=nid, dry_run=False
-        )
-        print(f"{MODULE_ID}: detached from {n} DEMO polic{'y' if n == 1 else 'ies'}")
         delete_notifier(
             base, authorization, creds=creds, notifier_id=nid, dry_run=False
         )

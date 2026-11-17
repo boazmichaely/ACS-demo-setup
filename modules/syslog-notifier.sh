@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Module: syslog-notifier - SC CEF sink + Central Syslog notifier (ACSCS-safe)
+# Module: syslog-notifier - SC CEF sink + Central Syslog notifier
 set -euo pipefail
 
 MODULE_ID="syslog-notifier"
@@ -49,10 +49,7 @@ usage() {
 
 Deploy a generic TCP syslog/CEF receiver with a ring-buffer HTML viewer on a
 **secured cluster**, then configure Central's Syslog notifier to that public
-LoadBalancer endpoint and attach it to every policy with category **DEMO**.
-
-ACSCS-safe: nothing is deployed on Central's OpenShift. Central (self-managed
-or cloud) reaches the sink over the SC LoadBalancer.
+LoadBalancer endpoint and run Central Test.
 
 Catalog: \`impactPlanes: ["central-api","secured-cluster"]\`.
 \`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
@@ -71,7 +68,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane central-api|secured-cluster] [
 ## Flags
 
 - \`--plane secured-cluster\` - receiver Deployment, LoadBalancer :${SYSLOG_PORT}, viewer Route
-- \`--plane central-api\` - Syslog notifier upsert, Central Test, DEMO policy attach
+- \`--plane central-api\` - Syslog notifier upsert + Central Test
 - omit \`--plane\` - both planes in one process
 - \`--secured-cluster-id ID\` - secured-cluster plane: at most one lab SC (soft-default when omitted)
 - \`--name NAME\` - Central notifier display name (default \`${DEFAULT_NOTIFIER_NAME}\`)
@@ -81,7 +78,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane central-api|secured-cluster] [
 ## Status Info
 
 - \`secured-cluster\`: receiver Ready, syslog LB endpoint, viewer Route URL
-- \`central-api\`: notifier host/port/format + DEMO policy wiring
+- \`central-api\`: notifier host/port/format
 - omit \`--plane\`: combined view (message ring lives in the viewer, not Status)
 
 ## Pre Conditions
@@ -91,7 +88,7 @@ none (OpenShift must allocate a LoadBalancer address on the target SC)
 ## Side effects
 
 - \`--run\` secured-cluster: namespace \`${NS}\` + receiver + LB + viewer Route
-- \`--run\` central-api: Syslog notifier → Test → attach DEMO policies
+- \`--run\` central-api: Syslog notifier upsert → Central Test
 - \`--uninstall\` deletes the notifier (central-api) and/or namespace \`${NS}\` (secured-cluster)
 EOF
 }
@@ -178,6 +175,33 @@ wait_lb_address() {
   echo "${MODULE_ID}: LoadBalancer address not allocated within ${LB_WAIT_SECONDS}s" >&2
   oc -n "${NS}" get svc "${SVC_SYSLOG}" -o wide >&2 || true
   return 1
+}
+
+# Address alone is not enough - Central Test needs the port open.
+wait_lb_tcp() {
+  local host="$1"
+  local elapsed=0
+  local timeout=90
+  [[ -n "$host" ]] || return 1
+  echo "${MODULE_ID}: waiting for TCP ${host}:${SYSLOG_PORT} (timeout ${timeout}s)..."
+  while (( elapsed < timeout )); do
+    if command -v nc >/dev/null 2>&1; then
+      if nc -z -w 2 "$host" "${SYSLOG_PORT}" >/dev/null 2>&1; then
+        echo "${MODULE_ID}: TCP ${host}:${SYSLOG_PORT} open"
+        return 0
+      fi
+    elif (echo >/dev/tcp/"$host"/"${SYSLOG_PORT}") >/dev/null 2>&1; then
+      echo "${MODULE_ID}: TCP ${host}:${SYSLOG_PORT} open"
+      return 0
+    fi
+    sleep 3
+    elapsed=$((elapsed + 3))
+    if (( elapsed % 15 == 0 )); then
+      echo "${MODULE_ID}: still waiting for TCP... ${elapsed}s"
+    fi
+  done
+  echo "${MODULE_ID}: warning: TCP ${host}:${SYSLOG_PORT} not open yet; Central Test may retry" >&2
+  return 0
 }
 
 apply_receiver() {
@@ -328,6 +352,7 @@ EOF
   echo "${MODULE_ID}: waiting for deploy/${APP} Ready..."
   oc -n "${NS}" rollout status "deploy/${APP}" --timeout=180s
   wait_lb_address
+  wait_lb_tcp "$(lb_host)"
   echo "${MODULE_ID}: viewer $(viewer_url)"
 }
 
@@ -406,21 +431,21 @@ emit_sc_sections() {
     lb_body="Cluster: ${cluster}
 Namespace: ${NS}
 Syslog LoadBalancer: ${host}:${SYSLOG_PORT}
-Central must reach this host:port (ACSCS-safe public endpoint)."
+Central must reach this host:port to deliver CEF."
   else
     lb_tag=error
     lb_sum="pending/missing"
     lb_body="Cluster: ${cluster}
 Namespace: ${NS}
 LoadBalancer address not allocated yet for svc/${SVC_SYSLOG}.
-Without a public endpoint, Central/ACSCS cannot deliver CEF."
+Without a public endpoint, Central cannot deliver CEF."
   fi
   url="$(viewer_url)"
   if [[ -n "$url" ]]; then
     route_tag=ok
-    route_sum="present"
+    route_sum="${url}"
     route_body="Viewer: ${url}
-Open this URL for the CEF ring-buffer reader (raw + parsed + compare).
+Open this URL for the CEF ring-buffer reader (raw + parsed).
 Message ring is not shown in Status."
   else
     route_tag=error
@@ -562,7 +587,7 @@ do_dry_run() {
     echo "  - Apply ${NS} receiver + LoadBalancer :${SYSLOG_PORT} + viewer Route on SC ${SYSLOG_SC_ID:-soft-default}"
   fi
   if want_central_api; then
-    echo "  - Upsert Syslog notifier ${NOTIFIER_NAME} (format ${MESSAGE_FORMAT}), Test, attach DEMO policies"
+    echo "  - Upsert Syslog notifier ${NOTIFIER_NAME} (format ${MESSAGE_FORMAT}), then Central Test"
   fi
 }
 
@@ -590,7 +615,7 @@ main() {
         case "$SYSLOG_PLANE" in
           central-api|secured-cluster|central|openshift) ;;
           central-ocp)
-            echo "$(basename "$0"): central-ocp is not used (ACSCS-safe; receiver lives on secured-cluster)" >&2
+            echo "$(basename "$0"): central-ocp is not used (receiver lives on secured-cluster)" >&2
             exit 1
             ;;
           *)

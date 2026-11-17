@@ -256,7 +256,6 @@ function setBusy(on) {
     "btnAddSecuredCluster",
     "btnRun",
     "btnUninstall",
-    "btnRunFull",
     "dryRunToggle",
   ];
   for (const id of ids) {
@@ -265,6 +264,9 @@ function setBusy(on) {
   }
   modulesTbody?.querySelectorAll(".js-kebab").forEach((btn) => {
     if (!btn.dataset.forceDisabled) btn.disabled = on;
+  });
+  modulesTbody?.querySelectorAll("button.demo-mod__status-run").forEach((btn) => {
+    btn.disabled = on;
   });
   if (on) closeAllModuleMenus();
   if (activeLabSelect) activeLabSelect.disabled = on;
@@ -335,7 +337,7 @@ function uiStateFromOrchestrator(state) {
     default:
       return {
         ui: "partial",
-        label: "Needs run",
+        label: "needs run",
         badge: "module-status-badge--partial",
         icon: "◐",
       };
@@ -551,7 +553,7 @@ function renderSectionFoldsHtml(sections, moduleId, startIndex = 0) {
       ? `<span class="${tagClass}">${escapeHtml(tagText)}</span>`
       : "";
     const summary = item.summary
-      ? `<span class="demo-sec__sum">${escapeHtml(item.summary)}</span>`
+      ? `<span class="demo-sec__sum">${linkifyProseHtml(escapeHtml(item.summary))}</span>`
       : "";
     const body = renderSectionBody(item);
     const title = item.title || "Section";
@@ -652,24 +654,128 @@ function moduleTypeLabel(m) {
   return parts.length ? parts.join(" + ") : "—";
 }
 
-function modulePlaneMarkCell(active, label) {
+function modulePlaneMarkCell(active, label, { suffixHtml = "", title = "" } = {}) {
+  const tip = title || label;
   if (active) {
-    return `<td class="demo-mod__plane-cell" title="${escapeHtml(label)}">
-      <span class="demo-mod__plane-yes" aria-label="${escapeHtml(label)}">
-        <span class="material-symbols-outlined demo-mod__plane-icon" aria-hidden="true">done</span>
+    // data-plane-tip: custom float tip (native title on <td> is unreliable).
+    return `<td class="demo-mod__plane-cell">
+      <span class="demo-mod__plane-yes" tabindex="0" aria-label="${escapeHtml(tip)}" data-plane-tip="${escapeHtml(tip)}">
+        <span class="material-symbols-outlined demo-mod__plane-icon" aria-hidden="true">done</span>${suffixHtml}
       </span>
     </td>`;
   }
-  return `<td class="demo-mod__plane-cell demo-mod__plane-cell--empty" title="Not ${escapeHtml(label)}"><span class="pf-v6-screen-reader">Not ${escapeHtml(label)}</span></td>`;
+  return `<td class="demo-mod__plane-cell demo-mod__plane-cell--empty"><span class="pf-v6-screen-reader">Not ${escapeHtml(label)}</span></td>`;
+}
+
+/** Exception marks for non-single securedClusterPolicy (tooltip carries the words). */
+function securedClusterPolicyMark(m) {
+  const raw = String(m?.securedClusterPolicy || "")
+    .trim()
+    .toLowerCase();
+  if (raw === "multi-warn") {
+    return {
+      suffixHtml:
+        '<span class="demo-mod__sc-policy demo-mod__sc-policy--warn" aria-hidden="true">?</span>',
+      title: "may be installed on multiple secured clusters",
+    };
+  }
+  if (raw === "multi") {
+    return {
+      suffixHtml:
+        '<span class="demo-mod__sc-policy demo-mod__sc-policy--multi" aria-hidden="true">+</span>',
+      title: "installs on all secured clusters",
+    };
+  }
+  // single or unset: plain SC check
+  return {
+    suffixHtml: "",
+    title: "installs on one of the secured clusters",
+  };
 }
 
 function moduleTypeCellsHtml(m) {
   const p = moduleImpactPlaneSet(m);
+  const scMark = p.securedCluster ? securedClusterPolicyMark(m) : null;
   return (
     modulePlaneMarkCell(p.centralApi, "Central API") +
     modulePlaneMarkCell(p.centralOcp, "Central OCP") +
-    modulePlaneMarkCell(p.securedCluster, "Secured Cluster")
+    modulePlaneMarkCell(
+      p.securedCluster,
+      "Secured Cluster",
+      scMark || {}
+    )
   );
+}
+
+/** Floating tip for Type plane marks (body-level so table overflow cannot clip it). */
+let planeTipEl = null;
+function ensurePlaneTipEl() {
+  if (planeTipEl && document.body.contains(planeTipEl)) return planeTipEl;
+  planeTipEl = document.createElement("div");
+  planeTipEl.id = "demoPlaneTip";
+  planeTipEl.className = "demo-plane-tip";
+  planeTipEl.setAttribute("role", "tooltip");
+  planeTipEl.hidden = true;
+  document.body.appendChild(planeTipEl);
+  return planeTipEl;
+}
+
+function hidePlaneTip() {
+  const tip = ensurePlaneTipEl();
+  tip.hidden = true;
+  tip.textContent = "";
+}
+
+function showPlaneTip(anchor) {
+  const text = anchor?.getAttribute("data-plane-tip") || "";
+  if (!text) return;
+  const tip = ensurePlaneTipEl();
+  tip.textContent = text;
+  tip.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  const pad = 8;
+  // Prefer above the mark; flip below if near the top of the viewport.
+  tip.style.left = `${Math.round(r.left + r.width / 2)}px`;
+  const above = r.top > 48;
+  tip.classList.toggle("demo-plane-tip--below", !above);
+  tip.style.top = above
+    ? `${Math.round(r.top - pad)}px`
+    : `${Math.round(r.bottom + pad)}px`;
+  // Keep on-screen horizontally.
+  const tw = tip.offsetWidth || 0;
+  const minL = pad + tw / 2;
+  const maxL = window.innerWidth - pad - tw / 2;
+  const cx = Math.min(maxL, Math.max(minL, r.left + r.width / 2));
+  tip.style.left = `${Math.round(cx)}px`;
+}
+
+function bindPlaneTips(root) {
+  const scope = root || modulesTbody;
+  if (!scope || scope.dataset.planeTipsBound === "1") return;
+  scope.dataset.planeTipsBound = "1";
+  // pointerover/out bubble (pointerenter does not), so one listener on tbody works.
+  scope.addEventListener("pointerover", (e) => {
+    const el = e.target.closest?.("[data-plane-tip]");
+    if (!el || !scope.contains(el)) return;
+    showPlaneTip(el);
+  });
+  scope.addEventListener("pointerout", (e) => {
+    const el = e.target.closest?.("[data-plane-tip]");
+    if (!el || !scope.contains(el)) return;
+    const next = e.relatedTarget?.closest?.("[data-plane-tip]");
+    if (next === el) return;
+    hidePlaneTip();
+  });
+  scope.addEventListener("focusin", (e) => {
+    const el = e.target.closest?.("[data-plane-tip]");
+    if (!el || !scope.contains(el)) return;
+    showPlaneTip(el);
+  });
+  scope.addEventListener("focusout", (e) => {
+    const el = e.target.closest?.("[data-plane-tip]");
+    if (!el || !scope.contains(el)) return;
+    hidePlaneTip();
+  });
 }
 
 const MODULES_COL_WIDTHS_KEY = "acsDemoModulesColWidths";
@@ -892,16 +998,7 @@ function bindModuleMenus() {
       e.stopPropagation();
       closeAllModuleMenus();
       const id = uninstallBtn.dataset.moduleId;
-      const dry = dryRunMode();
-      if (
-        !dry &&
-        !window.confirm(
-          `Uninstall module “${id}”? Some modules refuse uninstall and will fail with a message.`
-        )
-      ) {
-        return;
-      }
-      runModule(id, { uninstall: true, dryRun: dry }).catch((err) =>
+      runModule(id, { uninstall: true, dryRun: dryRunMode() }).catch((err) =>
         log(`\n${err.message}\n`)
       );
       return;
@@ -1081,6 +1178,8 @@ function badgeHtml(moduleId, { linkToStatus = false } = {}) {
   let label = "…";
   let title = "";
   let locked = false;
+  /** ready | error | run | other */
+  let kind = "other";
   if (!isScriptInstalled(moduleId)) {
     label = "not installed";
     title = "module script not installed";
@@ -1090,7 +1189,9 @@ function badgeHtml(moduleId, { linkToStatus = false } = {}) {
   } else if (isDependencyLocked(moduleId)) {
     locked = true;
     tone = "pf-m-grey";
-    label = "needs run";
+    // Modules column: "run" (action). Status pane: "needs run" (label only).
+    label = linkToStatus ? "run" : "needs run";
+    kind = "run";
     const missing = missingDeps(moduleId);
     title = `Waiting on: ${missing.join(", ")}`;
   } else {
@@ -1099,8 +1200,16 @@ function badgeHtml(moduleId, { linkToStatus = false } = {}) {
       const mapped = uiStateFromOrchestrator(st.state);
       tone =
         mapped.ui === "ready" ? "pf-m-green" : mapped.ui === "blocked" ? "pf-m-red" : "pf-m-orange";
-      label =
-        mapped.ui === "ready" ? "ready" : mapped.ui === "blocked" ? "error" : "needs run";
+      if (mapped.ui === "ready") {
+        label = "ready";
+        kind = "ready";
+      } else if (mapped.ui === "blocked") {
+        label = "error";
+        kind = "error";
+      } else {
+        label = linkToStatus ? "run" : "needs run";
+        kind = "run";
+      }
       title = String(st.message || "");
     }
   }
@@ -1108,13 +1217,18 @@ function badgeHtml(moduleId, { linkToStatus = false } = {}) {
     ? `<span class="material-symbols-outlined demo-mod__lock-icon" aria-hidden="true">lock</span>`
     : "";
   const inner = `<span class="pf-v6-c-label__content">${lockIcon}${escapeHtml(label)}</span>`;
-  const canJump =
+  const interactive =
     linkToStatus &&
     isScriptInstalled(moduleId) &&
     statusReady &&
     !statusPendingIds.has(moduleId);
   const lockClass = locked ? " demo-mod__status--locked" : "";
-  if (canJump) {
+  // Action button only in Modules State column - never in the Status pane.
+  if (interactive && kind === "run" && !locked) {
+    const tip = title || `Run ${moduleId}`;
+    return `<button type="button" class="pf-v6-c-button pf-m-primary pf-m-small demo-mod__status-run${lockClass}" title="${escapeHtml(tip)}" data-module-run="${escapeHtml(moduleId)}">${lockIcon}run</button>`;
+  }
+  if (interactive && (kind === "ready" || kind === "error")) {
     return `<a class="pf-v6-c-label ${tone} pf-m-compact demo-mod__status-link${lockClass}" href="#status-mod-${escapeHtml(moduleId)}" title="${escapeHtml(title || `Jump to ${moduleId} in Status`)}" data-status-jump="${escapeHtml(moduleId)}">${inner}</a>`;
   }
   return `<span class="pf-v6-c-label ${tone} pf-m-compact${lockClass}" title="${escapeHtml(title)}">${inner}</span>`;
@@ -1272,6 +1386,8 @@ function renderModuleRows() {
     });
   });
   bindStatusJumpLinks(modulesTbody);
+  bindStatusRunButtons(modulesTbody);
+  bindPlaneTips(modulesTbody);
   bindModuleMenus();
 
   syncDependencyLocks();
@@ -1303,12 +1419,27 @@ function bindStatusJumpLinks(root) {
     });
 }
 
+function bindStatusRunButtons(root) {
+  (root || modulesTbody).querySelectorAll("button.demo-mod__status-run").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = el.dataset.moduleRun;
+      if (!id || el.disabled) return;
+      runModule(id, { dryRun: dryRunMode() }).catch((err) =>
+        log(`\n${err.message}\n`)
+      );
+    });
+  });
+}
+
 function refreshStatusCells() {
   modulesTbody.querySelectorAll(".js-status-cell").forEach((td) => {
     const id = td.dataset.moduleId;
     if (id) td.innerHTML = moduleStatusCellHtml(id);
   });
   bindStatusJumpLinks(modulesTbody);
+  bindStatusRunButtons(modulesTbody);
   syncModulesColumnWidths();
 }
 
@@ -1360,7 +1491,7 @@ function renderStatusModulesPanel() {
       const id = row.id;
       const st = lastStatusMap.get(id);
       const rawMsg = String(st?.message || row.message || "").trim();
-      const msg = escapeHtml(rawMsg || "—");
+      const msg = linkifyProseHtml(escapeHtml(rawMsg || "—"));
       const sectionsHtml = renderSectionsHtml(st?.sections || row.sections || [], id);
       const missing = missingDeps(id);
       const lockHtml = missing.length
@@ -1668,17 +1799,6 @@ async function refreshAllStatus() {
   }
 }
 
-/** Modules that accept orchestrator --plane / --secured-cluster-id fan-out. */
-const ORCHESTRATOR_PLANE_MODULES = new Set([
-  "compliance-operator",
-  "ms-demo",
-  "users-part1-ocp",
-  "splunk-TA",
-  "init-demo",
-  "virt-vm-demo",
-  "syslog-notifier",
-]);
-
 /** Debug: ``?debugScPicker=1`` or ``localStorage.acsDemoDebugScPicker=1``. */
 function debugScPickerEnabled() {
   try {
@@ -1706,39 +1826,94 @@ function moduleSecuredClusterPolicy(moduleId) {
   return String(raw).toLowerCase();
 }
 
-function moduleNeedsImpactPicker(moduleId) {
-  const planes = moduleImpactPlanes(moduleId);
-  if (!planes.length) return false;
-  // Debug: show the same Central + SC template for every typed module.
-  if (debugScPickerEnabled()) return true;
-  return ORCHESTRATOR_PLANE_MODULES.has(moduleId);
+function moduleActionSummary(moduleId, { uninstall = false } = {}) {
+  const meta = moduleMetaById.get(moduleId) || {};
+  const key = uninstall ? "uninstallSummary" : "runSummary";
+  const raw = meta[key];
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  const label = meta.label || moduleId;
+  return uninstall
+    ? `Remove the ${label} demo footprint from the selected targets.`
+    : `Install or update ${label} on the selected targets.`;
 }
 
-/** @deprecated use moduleNeedsImpactPicker */
+/** Bold plane labels + line breaks between Secured cluster / Central API / Central OpenShift. */
+function formatActionSummaryHtml(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return "";
+  const labelRe =
+    /^(Secured cluster(?:\(s\))?|Central API|Central OpenShift)\s*:\s*/i;
+  // Split before each known plane label (keep the label with its chunk).
+  const parts = raw
+    .split(
+      /(?=(?:Secured cluster(?:\(s\))?|Central API|Central OpenShift)\s*:)/i
+    )
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length <= 1 && !labelRe.test(parts[0] || raw)) {
+    return escapeHtml(raw).replace(/\n/g, "<br />");
+  }
+  return parts
+    .map((chunk) => {
+      const m = chunk.match(labelRe);
+      if (!m) return escapeHtml(chunk);
+      const label = m[1];
+      const rest = chunk.slice(m[0].length).trim();
+      return `<strong>${escapeHtml(label)}</strong>: ${escapeHtml(rest)}`;
+    })
+    .join("<br />");
+}
+
+/** True when the confirm modal should show Central / SC selectors. */
+function moduleShowsImpactSelectors(moduleId) {
+  if (debugScPickerEnabled()) return true;
+  return moduleImpactPlanes(moduleId).length > 0;
+}
+
+/** @deprecated use moduleShowsImpactSelectors / confirmModuleAction */
+function moduleNeedsImpactPicker(moduleId) {
+  return moduleShowsImpactSelectors(moduleId);
+}
+
+/** @deprecated */
 function moduleNeedsScPicker(moduleId) {
-  return moduleNeedsImpactPicker(moduleId);
+  return moduleShowsImpactSelectors(moduleId);
 }
 
 /**
- * Pre-launch impact picker: always Central + every SC (gray out irrelevant).
- * Resolves to ``{ includeCentral, securedClusterIds, force }`` or null if cancelled.
+ * Always-on Run / Uninstall confirm: static catalog summary + optional impact
+ * selectors. Not a live dry-run. Resolves selection or null if cancelled.
+ * When selectors are hidden, returns null plane flags (lab defaults).
  */
-function pickImpactTargets(moduleId, { uninstall = false } = {}) {
+function confirmModuleAction(
+  moduleId,
+  { uninstall = false, dryRun = false } = {}
+) {
   return new Promise((resolve) => {
     const dialog = document.getElementById("scPickerDialog");
     const list = document.getElementById("scPickerList");
     const form = document.getElementById("scPickerForm");
     const title = document.getElementById("scPickerTitle");
     const hint = document.getElementById("scPickerHint");
+    const summaryEl = document.getElementById("scPickerSummary");
+    const targetsWrap = document.getElementById("scPickerTargetsWrap");
+    const helpLink = document.getElementById("scPickerHelpLink");
+    const confirmBtn = document.getElementById("scPickerConfirm");
     const closeBtn = document.getElementById("scPickerClose");
-    if (!dialog || !list || !form) {
-      resolve({ includeCentral: false, securedClusterIds: [], force: false });
+    if (!dialog || !form) {
+      resolve({
+        includeCentral: null,
+        securedClusterIds: null,
+        force: false,
+        showSelectors: false,
+      });
       return;
     }
 
     const lab = activeLab();
     const clusters = [...(lab?.securedClusters || [])];
     const debug = debugScPickerEnabled();
+    const showSelectors = moduleShowsImpactSelectors(moduleId);
     const policy = moduleSecuredClusterPolicy(moduleId);
     const planes = moduleImpactPlanes(moduleId).map((p) =>
       String(p).toLowerCase().replace(/_/g, "-")
@@ -1755,94 +1930,126 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
     const scSingleSelect = policy === "single" && securedClusterOk;
 
     const verb = uninstall ? "Uninstall" : "Install";
+    const titleVerb = dryRun ? `Dry run ${verb}` : verb;
     if (title) {
-      title.textContent = `${verb} ${moduleId} - select impact${
-        debug ? " (debug)" : ""
-      }`;
+      title.textContent = `${titleVerb} ${moduleId}${debug ? " (debug)" : ""}`;
     }
+    if (summaryEl) {
+      let html = formatActionSummaryHtml(
+        moduleActionSummary(moduleId, { uninstall })
+      );
+      if (dryRun) {
+        html +=
+          "<br /><br />Dry run: the module will print its plan only (no cluster/Central changes).";
+      }
+      summaryEl.innerHTML = html;
+    }
+    if (confirmBtn) {
+      confirmBtn.textContent = dryRun
+        ? "Run dry-run"
+        : uninstall
+          ? "Uninstall"
+          : "Install";
+      confirmBtn.classList.toggle("pf-m-danger", Boolean(uninstall) && !dryRun);
+    }
+    if (helpLink) {
+      helpLink.onclick = (ev) => {
+        ev.preventDefault();
+        showModuleHelp(moduleId).catch((err) => log(`\n${err.message}\n`));
+      };
+    }
+
+    if (targetsWrap) targetsWrap.hidden = !showSelectors;
     if (hint) {
-      if (scSingleSelect) {
-        hint.textContent =
-          "This module installs on one secured cluster only. Pick one SC (radio). Gray rows are not used by this module’s Type.";
+      if (!showSelectors) {
+        hint.hidden = true;
+        hint.textContent = "";
+      } else if (scSingleSelect) {
+        hint.hidden = false;
+        hint.textContent = uninstall
+          ? "Pick one secured cluster to uninstall from."
+          : "This module installs on one secured cluster only.";
       } else if (policy === "multi-warn") {
+        hint.hidden = false;
         hint.textContent =
-          "Multi-SC is allowed. If this module is already on another SC, you will get a confirm before install. Gray rows are unused by Type.";
+          "Multi-SC is allowed. If already present elsewhere, you will get an extra confirm.";
       } else {
-        hint.textContent =
-          "Same checklist every time. Gray rows are not used by this module’s Type. Check Central and/or secured clusters that should take impact.";
+        hint.hidden = true;
+        hint.textContent = "";
       }
     }
 
-    const activeId = softDefaultScId(clusters, lab?.activeSecuredClusterId);
-
-    const centralDisabled = centralOk ? "" : "disabled";
-    const centralChecked = centralOk ? "checked" : "";
-    let centralNoteHtml;
-    if (!centralOk) {
-      centralNoteHtml =
-        "<small>Not used by this module (Type has no Central API / Central OCP)</small>";
-    } else if (hasCentralApi && hasCentralOcp) {
-      centralNoteHtml =
-        "<small>Central API + Central OCP (not ACSCS-safe)</small>";
-    } else if (hasCentralOcp) {
-      centralNoteHtml =
-        "<small>Central OpenShift via oc (not ACSCS-safe)</small>";
-    } else {
-      centralNoteHtml = "<small>RHACS Central API</small>";
-    }
-    const rows = [
-      `<label class="demo-sc-picker__row${
-        centralOk ? "" : " demo-sc-picker__row--disabled"
-      }">
+    if (showSelectors && list) {
+      const activeId = softDefaultScId(clusters, lab?.activeSecuredClusterId);
+      const centralDisabled = centralOk ? "" : "disabled";
+      const centralChecked = centralOk ? "checked" : "";
+      let centralNoteHtml;
+      if (!centralOk) {
+        centralNoteHtml =
+          "<small>Not used by this module (Type has no Central API / Central OCP)</small>";
+      } else if (hasCentralApi && hasCentralOcp) {
+        centralNoteHtml =
+          "<small>Central API + Central OpenShift (oc)</small>";
+      } else if (hasCentralOcp) {
+        centralNoteHtml = "<small>Central OpenShift via oc</small>";
+      } else {
+        centralNoteHtml = "<small>RHACS Central API</small>";
+      }
+      const rows = [
+        `<label class="demo-sc-picker__row${
+          centralOk ? "" : " demo-sc-picker__row--disabled"
+        }">
           <input type="checkbox" name="central" value="1" ${centralChecked} ${centralDisabled} />
           <span class="demo-sc-picker__row-meta">
             <span>Central</span>
             ${centralNoteHtml}
           </span>
         </label>`,
-    ];
+      ];
 
-    for (const sc of clusters) {
-      const id = sc.id || "";
-      const name = sc.name || id;
-      const can = securedClusterOk && Boolean(id);
-      const checked = can && id === activeId ? "checked" : "";
-      const disabled = can ? "" : "disabled";
-      const same = sc.sameAsCentralCluster
-        ? "same OpenShift as Central (cred shortcut)"
-        : "";
-      const inputType = scSingleSelect ? "radio" : "checkbox";
-      const note = can
-        ? same
-          ? `<small>${escapeHtml(same)}</small>`
-          : scSingleSelect
-            ? "<small>one secured cluster only</small>"
-            : ""
-        : "<small>Not used by this module (Type has no secured-cluster)</small>";
-      rows.push(`<label class="demo-sc-picker__row${
-        can ? "" : " demo-sc-picker__row--disabled"
-      }">
+      for (const sc of clusters) {
+        const id = sc.id || "";
+        const name = sc.name || id;
+        const can = securedClusterOk && Boolean(id);
+        const checked = can && id === activeId ? "checked" : "";
+        const disabled = can ? "" : "disabled";
+        const same = sc.sameAsCentralCluster
+          ? "same OpenShift as Central (cred shortcut)"
+          : "";
+        const inputType = scSingleSelect ? "radio" : "checkbox";
+        const note = can
+          ? same
+            ? `<small>${escapeHtml(same)}</small>`
+            : scSingleSelect
+              ? "<small>one secured cluster only</small>"
+              : ""
+          : "<small>Not used by this module (Type has no secured-cluster)</small>";
+        rows.push(`<label class="demo-sc-picker__row${
+          can ? "" : " demo-sc-picker__row--disabled"
+        }">
           <input type="${inputType}" name="sc" value="${escapeHtml(id)}" ${checked} ${disabled} />
           <span class="demo-sc-picker__row-meta">
             <span>${escapeHtml(name)}</span>
             ${note}
           </span>
         </label>`);
-    }
+      }
 
-    if (debug && clusters.length < 2) {
-      for (let i = clusters.length; i < 2; i++) {
-        rows.push(`<label class="demo-sc-picker__row demo-sc-picker__row--debug">
+      if (debug && clusters.length < 2) {
+        for (let i = clusters.length; i < 2; i++) {
+          rows.push(`<label class="demo-sc-picker__row demo-sc-picker__row--debug">
           <input type="checkbox" disabled />
           <span class="demo-sc-picker__row-meta">
             <span>(debug) secured-cluster-${i + 1}</span>
             <small>placeholder only - not submitted</small>
           </span>
         </label>`);
+        }
       }
+      list.innerHTML = rows.join("");
+    } else if (list) {
+      list.innerHTML = "";
     }
-
-    list.innerHTML = rows.join("");
 
     const finish = (selection) => {
       dialog.removeEventListener("close", onDialogClose);
@@ -1862,6 +2069,17 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
         finish(null);
         return;
       }
+
+      if (!showSelectors) {
+        finish({
+          includeCentral: null,
+          securedClusterIds: null,
+          force: false,
+          showSelectors: false,
+        });
+        return;
+      }
+
       const includeCentral = Boolean(
         list.querySelector('input[name="central"]:checked:not(:disabled)')
       );
@@ -1910,7 +2128,12 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
         }
       }
 
-      finish({ includeCentral, securedClusterIds, force });
+      finish({
+        includeCentral,
+        securedClusterIds,
+        force,
+        showSelectors: true,
+      });
     };
 
     const onDialogClose = () => {
@@ -1922,6 +2145,11 @@ function pickImpactTargets(moduleId, { uninstall = false } = {}) {
     dialog.addEventListener("close", onDialogClose);
     dialog.showModal();
   });
+}
+
+/** @deprecated use confirmModuleAction */
+function pickImpactTargets(moduleId, opts = {}) {
+  return confirmModuleAction(moduleId, opts);
 }
 
 async function executeModuleRun(
@@ -1993,16 +2221,11 @@ async function executeModuleRun(
 
 async function runModule(moduleId, { dryRun = false, uninstall = false } = {}) {
   if (!moduleId) return;
-  let securedClusterIds = null;
-  let includeCentral = null;
-  let force = false;
-  if (moduleNeedsImpactPicker(moduleId)) {
-    const picked = await pickImpactTargets(moduleId, { uninstall });
-    if (picked === null) return;
-    securedClusterIds = picked.securedClusterIds;
-    includeCentral = picked.includeCentral;
-    force = Boolean(picked.force);
-  }
+  const picked = await confirmModuleAction(moduleId, { uninstall, dryRun });
+  if (picked === null) return;
+  const securedClusterIds = picked.securedClusterIds;
+  const includeCentral = picked.includeCentral;
+  const force = Boolean(picked.force);
   const label = runVerbLabel({ dryRun, uninstall });
   setBusy(true);
   ensureLogDrawerOpen();
@@ -2030,29 +2253,11 @@ async function runModules(ids, { dryRun = false, uninstall = false } = {}) {
     setModuleRefreshFeedback("Select at least one module.");
     return;
   }
-  if (uninstall && !dryRun) {
-    const labelList = ids.join(", ");
-    if (
-      !window.confirm(
-        `Uninstall selected module(s): ${labelList}?\n\nSome modules refuse uninstall and will fail with a message.`
-      )
-    ) {
-      return;
-    }
-  }
   const order = uninstall ? [...ids] : topologicalRunOrder(ids);
   /** @type {Map<string, {securedClusterIds: string[]|null, includeCentral: boolean|null, force: boolean}>} */
   const impactByModule = new Map();
   for (const moduleId of order) {
-    if (!moduleNeedsImpactPicker(moduleId)) {
-      impactByModule.set(moduleId, {
-        securedClusterIds: null,
-        includeCentral: null,
-        force: false,
-      });
-      continue;
-    }
-    const picked = await pickImpactTargets(moduleId, { uninstall });
+    const picked = await confirmModuleAction(moduleId, { uninstall, dryRun });
     if (picked === null) return;
     impactByModule.set(moduleId, {
       securedClusterIds: picked.securedClusterIds,
@@ -3162,11 +3367,6 @@ document.getElementById("btnUninstall")?.addEventListener("click", () => {
   runModules(selectedModuleIds(), { uninstall: true, dryRun: dryRunMode() }).catch((e) =>
     log(`\n${e.message}\n`)
   );
-});
-document.getElementById("btnRunFull").addEventListener("click", () => {
-  const allIds = registryModules.map((m) => m.id);
-  applySelectAll(true);
-  runModules(allIds, { dryRun: dryRunMode() }).catch((e) => log(`\n${e.message}\n`));
 });
 modSelectAll.addEventListener("change", () => applySelectAll(modSelectAll.checked));
 

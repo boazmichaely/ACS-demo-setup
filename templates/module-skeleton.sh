@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Copy this file to modules/<id>.sh, then search for TODO and fill them in.
 # Example: cp templates/module-skeleton.sh modules/my-feature.sh && chmod +x modules/my-feature.sh
+#
+# This file is the simple starting point (default). Do not add EXTRA_ARGS or
+# choice flags unless you need them - see templates/module-choices.md
+# (ADVANCED — use this when your module has multiple choices).
 set -euo pipefail
 
 # TODO: set to the same id you put in config/modules.json (and in the filename).
@@ -10,9 +14,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # When this file lives in modules/, ROOT is the repo root.
 # If you are still editing under templates/, adjust paths after you copy.
 
-# Set by orchestrator / CLI when impactPlanes includes openshift or both.
+# Set by orchestrator / CLI when impactPlanes includes secured-cluster and/or Central.
 PLANE=""
-# Lab secured-cluster id(s). OpenShift plane: at most one. Central: zero or more.
+# Lab secured-cluster id(s). secured-cluster plane: at most one. Central planes: zero or more.
 SC_IDS=()
 
 usage() {
@@ -35,7 +39,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane central-api|central-ocp|secure
 
 ## Flags
 
-- \`--plane central-api|central-ocp|secured-cluster\` - which plane this invocation owns (orchestrator sets for multi-plane modules)
+- \`--plane central-api|central-ocp|secured-cluster\` - which plane this invocation owns (orchestrator sets for multi-plane modules; legacy \`central\` / \`openshift\` still accepted)
 - \`--secured-cluster-id ID\` - lab SC id (\`secured-cluster\`: exactly one; Central planes: selection set)
 
 ## Status Info
@@ -176,7 +180,7 @@ do_uninstall_dry_run() {
 }
 
 # ---------------------------------------------------------------------------
-# Optional: call a Python helper for Central API / heavy JSON.
+# Optional: call a Python helper for Central API / heavy JSON (simple path).
 # Copy templates/module-helper.py to modules/<id_with_underscores>.py only if
 # you need it. Example for id "my-feature" → modules/my_feature.py
 #
@@ -190,7 +194,15 @@ do_uninstall_dry_run() {
 #     fi
 #   fi
 #   run_helper() { "$PYTHON" "$HELPER" "$@"; }
-#   # Then in do_status / do_run / do_uninstall, call run_helper and print status.
+#   # Then in do_status / do_run, call run_helper and print status, e.g.:
+#   #   run_helper status --cli
+#   #   run_helper run --cli
+#   # Uninstall may stay in the shell (refuse/delete below) until Central
+#   # cleanup needs Python; then: run_helper uninstall --cli
+#
+# If the module invents selectable option flags (--format, --name, …), do not
+# extend this simple run_helper. Replace it with the recipe in
+# templates/module-choices.md (ADVANCED). Never stack both helpers.
 # ---------------------------------------------------------------------------
 
 emit_status() {

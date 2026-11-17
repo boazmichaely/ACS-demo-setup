@@ -363,7 +363,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M10 — `syslog-notifier` (SC CEF sink + Central Syslog notifier)
 
-**Purpose:** Deploy a generic TCP syslog/CEF receiver with an in-pod ring-buffer viewer on a **secured cluster** (ACSCS-safe; no Central OCP deploy), configure Central’s Syslog notifier to that public LoadBalancer endpoint, attach the notifier to policies stamped with category `DEMO`, and prove CEF arrival (including CEF vs legacy field-order compare) in a tiny viewer UI.
+**Purpose:** Deploy a generic TCP syslog/CEF receiver with an in-pod ring-buffer viewer on a **secured cluster**, configure Central’s Syslog notifier to that public LoadBalancer endpoint, run Central Test, and prove CEF arrival (including CEF vs legacy field-order compare) in a tiny viewer UI. Does **not** attach the notifier to policies.
 
 **Pre conditions:** none (OpenShift LoadBalancer must be able to allocate an address on the target SC)
 
@@ -371,18 +371,16 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Plane contract:**
 
-- `secured-cluster`: namespace `acs-syslog-demo`, Deployment (TCP `:5140` + HTTP viewer `:8080`), LoadBalancer Service for syslog, viewer Route; at most one `--secured-cluster-id` per SC invoke
-- `central-api`: upsert Syslog notifier via `/v1/notifiers` (host/port = LB), `POST /v1/notifiers/test` (must succeed), attach/detach on `DEMO` policies (same ownership as Slack)
-- ACSCS-safe: never deploys to Central’s OpenShift
+- `secured-cluster`: namespace `acs-syslog-demo`, Deployment (TCP `:5140` + HTTP viewer `:8080`), LoadBalancer Service for syslog, viewer Route; at most one `--secured-cluster-id` per SC invoke; wait for LB address **and** TCP open before returning
+- `central-api`: upsert Syslog notifier via `/v1/notifiers` (host/port = LB), `POST /v1/notifiers/test` (must succeed; brief retries allowed for LB race)
 
 **Status / Run / Acceptance:**
 
-- `--status` is `ok` when receiver Ready, LB has an address, viewer Route present, Syslog notifier points at that host:port, and every `DEMO` policy has the notifier attached; folds show receiver health, syslog endpoint, **viewer Route URL**, notifier summary, and DEMO wiring counts - **not** the message ring
-- `--run` secured-cluster: apply workload + wait Ready/LB; central-api: upsert → Test → wire DEMO policies (default message format `CEF`; `--format LEGACY` for legacy field order)
-- `--uninstall` central-api: detach + delete this notifier only; secured-cluster: delete namespace `acs-syslog-demo`
+- `--status` is `ok` when receiver Ready, LB has an address, viewer Route present, and Syslog notifier points at that host:port; folds show receiver health, syslog endpoint, **viewer Route URL** (clickable in GUI), and notifier summary - **not** the message ring
+- `--run` secured-cluster: apply workload + wait Ready/LB/TCP; central-api: upsert → Test (default message format `CEF`; `--format LEGACY` for legacy field order)
+- `--uninstall` central-api: delete this notifier only; secured-cluster: delete namespace `acs-syslog-demo`
 - Viewer: list / raw+parsed detail / compare two buffered messages; ring size 100 in memory; clear API; no PVC/TLS/auth in v1
 - Demo notes: [`modules/syslog-notifier-demo.md`](modules/syslog-notifier-demo.md)
-- Shared policy helper: [`lib/demo_policies.py`](lib/demo_policies.py)
 
 ---
 
@@ -399,7 +397,7 @@ The GUI is **required from the first deliverable** (module M1 `registries`). No 
 | R-GUI-2b | Status refresh probes installed modules one at a time in ascending `statusComplexity` (1-10), updating the UI after each; missing complexity defaults to 5 |
 | R-GUI-3 | Shows per-module status (invokes orchestrator `--status --json` or equivalent API) |
 | R-GUI-4 | Lab credentials form per [REQUIREMENTS-GUI.md](REQUIREMENTS-GUI.md) §3; persisted to `lab-credentials.json` |
-| R-GUI-5 | For each shipped module: control to run that module (with confirmation when `--run` is destructive) |
+| R-GUI-5 | For each shipped module: controls to **Run** and **Uninstall**. Both **always** open a confirm modal before any mutation (or before a dry-run stream). The modal shows a static intent summary from catalog `runSummary` / `uninstallSummary` (not a live `--dry-run` / `oc` / Central probe). When the module has `impactPlanes`, the same modal shows Central / secured-cluster selection (policy-aware). Cancel changes nothing; Confirm starts the action. Optional link to full module help. Dry-run toggle remains a separate deep plan path and must not gate the modal. |
 | R-GUI-6 | Refresh status on demand and after a run completes; full refresh is progressive (per module, ordered by `statusComplexity`) |
 | R-GUI-7 | Does not commit secrets; server-side gitignored storage preferred over browser localStorage for tokens |
 | R-GUI-8 | GUI backend invokes `scripts/acs-setup.sh` (or module entrypoints directly with the same contract); GUI does not reimplement module logic |

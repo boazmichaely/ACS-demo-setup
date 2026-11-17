@@ -147,8 +147,14 @@ require_bins() {
 }
 
 chris_namespaces() {
+  # macOS bash 3.2 + set -u: empty "${arr[@]}" is an unbound-variable error.
   local ns
-  for ns in "${CHRIS_EXTRA_NS[@]}" "$MS_NS" "$INIT_NS"; do
+  local -a list=()
+  if ((${#CHRIS_EXTRA_NS[@]} > 0)); then
+    list+=("${CHRIS_EXTRA_NS[@]}")
+  fi
+  list+=("$MS_NS" "$INIT_NS")
+  for ns in "${list[@]}"; do
     [[ -n "$ns" ]] && printf '%s\n' "$ns"
   done | sed '/^$/d' | sort -u
 }
@@ -524,6 +530,8 @@ GUI: /help?doc=users-part1-ocp-demo"
     required_rbac_ok=0
   fi
 
+  # Namespace RBAC is optional until ms-demo / init-demo projects exist.
+  # Missing projects are pending (ok), not a failed install.
   if oc get "project/${MS_NS}" >/dev/null 2>&1; then
     if oc get rolebinding boaz-namespace-admin -n "${MS_NS}" >/dev/null 2>&1; then
       rbac_body+="boaz-namespace-admin (${MS_NS}): present"$'\n'
@@ -532,8 +540,7 @@ GUI: /help?doc=users-part1-ocp-demo"
       required_rbac_ok=0
     fi
   else
-    rbac_body+="boaz on ${MS_NS}: project missing"$'\n'
-    required_rbac_ok=0
+    rbac_body+="boaz on ${MS_NS}: project not present yet (install ms-demo, then re-run)"$'\n'
   fi
 
   local ns
@@ -546,8 +553,7 @@ GUI: /help?doc=users-part1-ocp-demo"
         required_rbac_ok=0
       fi
     else
-      rbac_body+="chris on ${ns}: project missing"$'\n'
-      required_rbac_ok=0
+      rbac_body+="chris on ${ns}: project not present yet"$'\n'
     fi
   done
 
@@ -608,7 +614,15 @@ do_run() {
   ensure_htpasswd_idp
   ensure_rbac
 
-  printf '%s\tok\tusers-part1-ocp ready (IdP %s; adam/boaz/chris)\n' "$MODULE_ID" "$IDP_NAME"
+  # Honest outcome: core IdP/users/adam always; ns RBAC only when projects exist.
+  local pending=""
+  if ! oc get "project/${MS_NS}" >/dev/null 2>&1; then
+    pending=" (ms-demo/init RBAC pending until those projects exist)"
+  elif ! oc get "project/${INIT_NS}" >/dev/null 2>&1; then
+    pending=" (init-demo RBAC pending until ${INIT_NS} exists)"
+  fi
+  printf '%s\tok\tusers-part1-ocp ready (IdP %s; adam/boaz/chris)%s\n' \
+    "$MODULE_ID" "$IDP_NAME" "$pending"
   return 0
 }
 

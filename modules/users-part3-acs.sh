@@ -84,7 +84,12 @@ EOF
 }
 
 run_helper() {
-  "$PYTHON" "$HELPER" "$@" "${EXTRA_ARGS[@]}"
+  # macOS bash 3.2 + set -u: empty "${EXTRA_ARGS[@]}" is unbound.
+  if ((${#EXTRA_ARGS[@]})); then
+    "$PYTHON" "$HELPER" "$@" "${EXTRA_ARGS[@]}"
+  else
+    "$PYTHON" "$HELPER" "$@"
+  fi
 }
 
 do_status() {

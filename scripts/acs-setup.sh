@@ -171,7 +171,8 @@ status_json() {
 
   local rows=()
   local id row state message num label depends base_row
-  for id in "${ids[@]}"; do
+  # macOS bash 3.2 + set -u: empty "${ids[@]}" is unbound.
+  for id in ${ids[@]+"${ids[@]}"}; do
     # Avoid $(module_status_capture): command substitution runs in a subshell and
     # drops MODULE_LAST_SECTIONS_JSON before we build JSON rows.
     module_status_capture "$id" >/dev/null
@@ -345,7 +346,8 @@ run_modules() {
   fi
 
   local id
-  for id in "${ids[@]}"; do
+  # macOS bash 3.2 + set -u: empty "${ids[@]}" is unbound.
+  for id in ${ids[@]+"${ids[@]}"}; do
     if [[ ${#sc_ids[@]} -gt 0 ]]; then
       if ! run_module_planned --run "$id" "$dry_run" "${sc_ids[@]}"; then
         failed=1
