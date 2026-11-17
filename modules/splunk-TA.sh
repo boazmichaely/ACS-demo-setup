@@ -12,7 +12,8 @@ usage() {
 
 Deploy Splunk Operator and a Splunk Free Standalone on the lab OpenShift
 cluster, expose Splunk Web, and install the RHACS Splunkbase Technology
-Add-on (TA) from a local \`.tgz\`. Catalog: \`impactPlanes: ["secured-cluster"]\`.
+Add-on (TA) from a local \`.spl\` (Splunkbase default). Catalog:
+\`impactPlanes: ["secured-cluster"]\`.
 \`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
 
 With \`--secured-cluster-id\`, targets that SC. With none, uses the lab
@@ -37,7 +38,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cl
   (Splunk Operator/lab live on OpenShift; Central is configured in Splunk UI later)
 - \`--secured-cluster-id ID\` - install on that lab SC (at most one). Soft-default
   SC when omitted
-- \`--ta-dir DIR\` - Directory with the Splunkbase \`.tgz\` (default \`~/code/Splunk\`)
+- \`--ta-dir DIR\` - Directory with the Splunkbase \`.spl\` (default \`~/code/Splunk\`)
 - \`--skip-ta\` - Install Operator + Standalone + Route only (no TA package)
 - \`--dry-run\` - Print the plan; change nothing
 
@@ -46,25 +47,18 @@ $(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cl
 - Namespace and Splunk Operator controller
 - Standalone pod readiness
 - Splunk Web Route URL
-- Local TA \`.tgz\` found vs TA installed inside Splunk
+- Local TA \`.spl\` found vs TA installed inside Splunk
 
 ## Installation (TA package)
 
-The \`.tgz\` is **not** in this repo (Splunkbase license). Do not commit it.
-
-1. Download **Red Hat Advanced Cluster Security** from
-   [Splunkbase app 5315](https://splunkbase.splunk.com/app/5315)
-   (keep the Splunkbase filename).
-2. Place it under \`~/code/Splunk/\` (or pass \`--ta-dir\`).
-3. \`$(basename "$0") --run\`
-4. In Splunk Web, set Central endpoint + API token and create modular inputs.
-   Product doc:
-   [RHACS 4.10 - Integrating with Splunk](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/4.10/html/integrating/integrate-with-splunk)
+See [modules/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA-demo.md)
+(download \`.spl\`, place under \`~/code/Splunk/\`, talk track). That page is the
+source of truth - do not duplicate the steps here.
 
 ## Pre Conditions
 
 - \`helm\` on PATH
-- RHACS TA \`.tgz\` under \`--ta-dir\` (unless \`--skip-ta\`)
+- RHACS TA \`.spl\` under \`--ta-dir\` (unless \`--skip-ta\`)
 
 ## Side effects
 

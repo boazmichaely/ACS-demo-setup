@@ -347,17 +347,17 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M9 — `splunk-TA` (Splunk Operator + RHACS Technology Add-on)
 
-**Purpose:** Deploy Splunk Operator and a Splunk Free Standalone lab, install the RHACS Splunkbase Technology Add-on (TA) from a user-supplied `.tgz`, so audit/violation events can flow to Splunk for SIEM demos. Splunk UI wiring (Central endpoint, token, modular inputs) is documented in demo notes, not automated.
+**Purpose:** Deploy Splunk Operator and a Splunk Free Standalone lab, install the RHACS Splunkbase Technology Add-on (TA) from a user-supplied `.spl` (Splunkbase default), so audit/violation events can flow to Splunk for SIEM demos. Splunk UI wiring (Central endpoint, token, modular inputs) is documented in demo notes, not automated.
 
-**Pre conditions:** `helm` on PATH; RHACS TA `.tgz` under `--ta-dir` unless `--skip-ta`
+**Pre conditions:** `helm` on PATH; RHACS TA `.spl` under `--ta-dir` unless `--skip-ta`
 
-**Status must verify:** Namespace, operator, Standalone pod Ready, Splunk Web Route, local `.tgz` presence, TA app present in pod (`TA-stackrox`)
+**Status must verify:** Namespace, operator, Standalone pod Ready, Splunk Web Route, local `.spl` presence, TA app present in pod (`TA-stackrox`)
 
-**Run must do:** Native install in-repo (`modules/splunk-TA.sh` + `modules/splunk_ta_lib.sh`): CRDs → Helm operator (pinned image) → SCC → Standalone → Route → TA install. Idempotent where safe. `--dry-run` required. `--skip-ta` allows stack-only; `--ta-dir` selects the `.tgz` directory (default `~/code/Splunk`). Lab defaults (namespace, CR names, chart/image pins) are constants, not env knobs. Fail clearly if `.tgz` missing and `--skip-ta` not set.
+**Run must do:** Native install in-repo (`modules/splunk-TA.sh` + `modules/splunk_ta_lib.sh`): CRDs → Helm operator (pinned image) → SCC → Standalone → Route → TA install. Idempotent where safe. `--dry-run` required. `--skip-ta` allows stack-only; `--ta-dir` selects the `.spl` directory (default `~/code/Splunk`). Lab defaults (namespace, CR names, chart/image pins) are constants, not env knobs. Fail clearly if `.spl` missing and `--skip-ta` not set. Silently accept a `.tgz` in that directory as a fallback and report it in status when used.
 
 **Uninstall must do:** Delete Standalone, Helm release, and namespace. Leave cluster-scoped CRDs. `--dry-run` required.
 
-**Acceptance:** Splunk Web reachable; TA installed when `.tgz` present; `--status` folds reflect stack + TA; clear message if TA bundle missing; demo notes cover UI config and search verification
+**Acceptance:** Splunk Web reachable; TA installed when `.spl` present; `--status` folds reflect stack + TA; clear message if TA `.spl` missing; demo notes cover UI config and search verification
 
 ---
 
@@ -438,7 +438,7 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 | D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json` v2** (`activeLabId` + `labs[]` with multi secured clusters). ACS Central and OpenShift are independent blocks per lab. Modules flatten the active lab. Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`, `ACS_INSECURE_SKIP_TLS_VERIFY`. |
 | D-2 | M3 `--run`: verify-only or also register/fix secured cluster? | **N/A:** `secured-cluster` removed from module list; registration is a manual prerequisite (§3.1 E-5). |
 | D-3 | GUI stack and how the local server is started | **Decided:** Python backend (FastAPI) + HTML/JS frontend; **`./serve.sh`** at repo root (wraps `gui/serve.sh`); REST API shells out to `scripts/acs-setup.sh`. Bind **`127.0.0.1` only**; port **8765**. No auth (solo laptop use). |
-| D-4 | Splunk: wrap `splunk-lab.sh` or native module? | **Decided:** **Native** `modules/splunk-TA.sh` + `splunk_ta_lib.sh` (battle-tested Operator/Standalone/TA steps in-repo). No dependency on `rhacs-splunk-ta-demo-skill`. TA `.tgz` remains **user-supplied**; UI Central/token/inputs stay in demo notes. |
+| D-4 | Splunk: wrap `splunk-lab.sh` or native module? | **Decided:** **Native** `modules/splunk-TA.sh` + `splunk_ta_lib.sh` (battle-tested Operator/Standalone/TA steps in-repo). No dependency on `rhacs-splunk-ta-demo-skill`. TA `.spl` remains **user-supplied** (Splunkbase default; `.tgz` accepted as silent fallback); UI Central/token/inputs stay in demo notes. |
 | D-5 | Per-module `--dry-run` mandatory for all modules or only destructive ones? | **Decided:** **All modules** implement `--dry-run` for consistency. Verify/read-only modules describe checks and examination context only; mutating modules describe planned changes without applying. GUI may expose dry-run where useful. |
 
 ---

@@ -101,7 +101,7 @@
     },
     {
       "id": "syslog-notifier",
-      "label": "Syslog CEF receiver + ACS notifier",
+      "label": "Implements a Syslog CEF receiver and provides a log parser UI",
       "dependsOn": [],
       "statusComplexity": 5,
       "impactPlanes": ["central-api", "secured-cluster"],
@@ -116,7 +116,7 @@
       "statusComplexity": 6,
       "impactPlanes": ["secured-cluster"],
       "securedClusterPolicy": "single",
-      "runSummary": "Secured cluster: install Splunk Operator, Free Standalone, Web Route, and the RHACS Splunk TA from the local .tgz. Central is wired later in the Splunk UI (not in this run).",
+      "runSummary": "Secured cluster: install Splunk Operator, Free Standalone, Web Route, and the RHACS Splunk TA from the local .spl. Central is wired later in the Splunk UI (not in this run).",
       "uninstallSummary": "Secured cluster: delete the Splunk Standalone, Helm release, and demo namespace. Leaves cluster-scoped CRDs."
     },
     {

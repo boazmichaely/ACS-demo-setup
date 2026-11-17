@@ -90,24 +90,13 @@ sta_ensure_helm() {
   return 1
 }
 
-# Prints absolute path of chosen .tgz on stdout. Returns 1 if none.
-sta_pick_ta_tgz() {
-  local dir f
-  local -a files=()
-  dir="${STA_TA_DIR}"
-  if [[ ! -d "$dir" ]]; then
+# Prefer an ACS-named match among candidates; else first. Prints path on stdout.
+sta_prefer_acs_named() {
+  local f
+  if (($# == 0)); then
     return 1
   fi
-  shopt -s nullglob
-  files=("${dir}"/*.tgz)
-  shopt -u nullglob
-  if ((${#files[@]} == 0)); then
-    return 1
-  fi
-  if ((${#files[@]} > 1)); then
-    printf 'WARN: multiple .tgz in %s; using preference order\n' "$dir" >&2
-  fi
-  for f in "${files[@]}"; do
+  for f in "$@"; do
     case "$(basename "$f" | tr '[:upper:]' '[:lower:]')" in
       *advanced*cluster*security*|*stackrox*|*acs*)
         printf '%s' "$f"
@@ -115,7 +104,58 @@ sta_pick_ta_tgz() {
         ;;
     esac
   done
-  printf '%s' "${files[0]}"
+  printf '%s' "$1"
+}
+
+# Splunkbase downloads the RHACS TA as .spl by default. Prefer *.spl under
+# STA_TA_DIR; silently accept *.tgz as a fallback.
+# Sets STA_TA_PICKED_PATH and STA_TA_PICKED_KIND (spl|tgz). Do not capture
+# stdout in $() if you need KIND - call directly and read the globals.
+# Still prints the path on stdout for convenience. Returns 1 if none.
+STA_TA_PICKED_PATH=""
+STA_TA_PICKED_KIND=""
+sta_pick_ta_bundle() {
+  local dir f
+  local -a spls=() tgzs=()
+  STA_TA_PICKED_PATH=""
+  STA_TA_PICKED_KIND=""
+  dir="${STA_TA_DIR}"
+  if [[ ! -d "$dir" ]]; then
+    return 1
+  fi
+  shopt -s nullglob
+  spls=("${dir}"/*.spl)
+  tgzs=("${dir}"/*.tgz)
+  shopt -u nullglob
+
+  if ((${#spls[@]} > 0)); then
+    if ((${#spls[@]} > 1)); then
+      printf 'WARN: multiple .spl in %s; using preference order\n' "$dir" >&2
+    fi
+    f="$(sta_prefer_acs_named "${spls[@]}")"
+    STA_TA_PICKED_KIND=spl
+    STA_TA_PICKED_PATH="$f"
+    printf '%s' "$f"
+    return 0
+  fi
+
+  # Silent .tgz fallback (older docs / renamed downloads).
+  if ((${#tgzs[@]} > 0)); then
+    if ((${#tgzs[@]} > 1)); then
+      printf 'WARN: multiple .tgz in %s; using preference order\n' "$dir" >&2
+    fi
+    f="$(sta_prefer_acs_named "${tgzs[@]}")"
+    STA_TA_PICKED_KIND=tgz
+    STA_TA_PICKED_PATH="$f"
+    printf '%s' "$f"
+    return 0
+  fi
+  return 1
+}
+
+# Back-compat name used by older call sites / notes.
+sta_pick_ta_tgz() {
+  sta_pick_ta_bundle "$@"
 }
 
 sta_default_storage_class() {
@@ -256,14 +296,21 @@ sta_emit_status() {
     sec_route="Route ${STA_ROUTE} not found in ${STA_NS}."
   fi
 
-  if ta_path="$(sta_pick_ta_tgz)"; then
+  if sta_pick_ta_bundle >/dev/null; then
+    ta_path="${STA_TA_PICKED_PATH}"
     tag_ta_local=ok
-    sum_ta_local="found"
-    sec_ta_local="Using ${ta_path}"
+    if [[ "${STA_TA_PICKED_KIND}" == "tgz" ]]; then
+      sum_ta_local="using .tgz"
+      sec_ta_local="No .spl under ${STA_TA_DIR}; using .tgz fallback ${ta_path}."
+    else
+      sum_ta_local="found"
+      sec_ta_local="Using ${ta_path}"
+    fi
   else
+    ta_path=""
     tag_ta_local=error
     sum_ta_local="missing"
-    sec_ta_local="No .tgz under ${STA_TA_DIR}. Download from https://splunkbase.splunk.com/app/5315 (see --help)."
+    sec_ta_local="No .spl under ${STA_TA_DIR}. Download from https://splunkbase.splunk.com/app/5315 (see --help)."
   fi
 
   if [[ "$tag_pod" == "ok" ]] && sta_ta_installed; then
@@ -277,7 +324,7 @@ sta_emit_status() {
   else
     tag_ta_pod=error
     sum_ta_pod="not installed"
-    sec_ta_pod="TA-stackrox not found in the Splunk pod. Place the .tgz under ${STA_TA_DIR} and --run."
+    sec_ta_pod="TA-stackrox not found in the Splunk pod. Place the .spl under ${STA_TA_DIR} and --run."
   fi
 
   if [[ "$tag_ns" != "ok" ]]; then
@@ -311,7 +358,7 @@ sta_emit_status() {
           {group:"Splunk Operator", title:"Controller", summary:$op_sum, tag:$op_tag, tagLabel:$op_tag, body:$op_body, bodyFormat:"prose"},
           {group:"Standalone", title:("Pod " + $pod), summary:$pod_sum, tag:$pod_tag, tagLabel:$pod_tag, body:$pod_body, bodyFormat:"prose"},
           {group:"Access", title:"Splunk Web Route", summary:$route_sum, tag:$route_tag, tagLabel:$route_tag, body:$route_body, bodyFormat:"prose"},
-          {group:"RHACS TA", title:"Local .tgz", summary:$tal_sum, tag:$tal_tag, tagLabel:$tal_tag, body:$tal_body, bodyFormat:"prose"},
+          {group:"RHACS TA", title:"Local .spl", summary:$tal_sum, tag:$tal_tag, tagLabel:$tal_tag, body:$tal_body, bodyFormat:"prose"},
           {group:"RHACS TA", title:"Installed in Splunk", summary:$tap_sum, tag:$tap_tag, tagLabel:$tap_tag, body:$tap_body, bodyFormat:"prose"}
         ]
       }'
@@ -326,10 +373,13 @@ sta_run_plan() {
   ta_path=""
   if [[ "$STA_SKIP_TA" == "true" ]]; then
     ta_path="(skipped via --skip-ta)"
-  elif ta_path="$(sta_pick_ta_tgz 2>/dev/null)"; then
-    :
+  elif sta_pick_ta_bundle >/dev/null 2>/dev/null; then
+    ta_path="${STA_TA_PICKED_PATH}"
+    if [[ "${STA_TA_PICKED_KIND}" == "tgz" ]]; then
+      ta_path="${ta_path} (.tgz fallback)"
+    fi
   else
-    ta_path="(MISSING - place RHACS TA .tgz under ${STA_TA_DIR})"
+    ta_path="(MISSING - place RHACS TA .spl under ${STA_TA_DIR})"
   fi
   sc="(resolve default StorageClass via oc)"
   if sta_ensure_oc 2>/dev/null; then
@@ -368,14 +418,19 @@ sta_install_ta() {
     return 0
   fi
 
-  if ! ta_local="$(sta_pick_ta_tgz)"; then
-    printf 'ERROR: No RHACS TA .tgz under %s\n' "${STA_TA_DIR}" >&2
+  if ! sta_pick_ta_bundle >/dev/null; then
+    printf 'ERROR: No RHACS TA .spl under %s\n' "${STA_TA_DIR}" >&2
     printf 'Download: https://splunkbase.splunk.com/app/5315\n' >&2
-    printf 'Place the .tgz there, or pass --skip-ta for stack-only. See --help.\n' >&2
+    printf 'Place the .spl there, or pass --skip-ta for stack-only. See --help.\n' >&2
     return 1
   fi
+  ta_local="${STA_TA_PICKED_PATH}"
 
-  echo "==> [splunk-TA] Install TA from ${ta_local}"
+  if [[ "${STA_TA_PICKED_KIND}" == "tgz" ]]; then
+    echo "==> [splunk-TA] Install TA from ${ta_local} (.tgz fallback; Splunkbase usually ships .spl)"
+  else
+    echo "==> [splunk-TA] Install TA from ${ta_local}"
+  fi
   oc cp "${ta_local}" "${STA_NS}/${STA_POD}:${remote}"
   admin_pass="$(oc get secret "${STA_ADMIN_SECRET}" -n "${STA_NS}" -o jsonpath='{.data.password}' | base64 -d)"
   oc exec -n "${STA_NS}" "${STA_POD}" -- /opt/splunk/bin/splunk install app "${remote}" \
@@ -398,10 +453,10 @@ sta_run() {
   sta_ensure_helm
   sta_ensure_oc || return 1
 
-  if [[ "$STA_SKIP_TA" != "true" ]] && ! sta_pick_ta_tgz >/dev/null; then
-    printf 'ERROR: No RHACS TA .tgz under %s\n' "${STA_TA_DIR}" >&2
+  if [[ "$STA_SKIP_TA" != "true" ]] && ! sta_pick_ta_bundle >/dev/null; then
+    printf 'ERROR: No RHACS TA .spl under %s\n' "${STA_TA_DIR}" >&2
     printf 'Download: https://splunkbase.splunk.com/app/5315\n' >&2
-    printf 'Place the .tgz there, or pass --skip-ta for stack-only. See --help.\n' >&2
+    printf 'Place the .spl there, or pass --skip-ta for stack-only. See --help.\n' >&2
     return 1
   fi
 

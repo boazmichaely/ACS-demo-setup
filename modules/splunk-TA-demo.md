@@ -7,41 +7,51 @@ Module: `splunk-TA`
 
 - Lab credentials have working OpenShift admin access (`oc` via this tool).
 - [`helm`](https://helm.sh/docs/intro/install/) on PATH (on macOS: `brew install helm`).
-- RHACS TA `.tgz` on disk (see [Install the Technology Add-on package](#install-the-technology-add-on-package) below).
+- RHACS TA `.spl` on disk (see [Install the Technology Add-on package](#install-the-technology-add-on-package) below).
 
 ## Install the Technology Add-on package
 
 The add-on is **not** in this git repo (Splunkbase license). Download it yourself:
 
 1. Open [Splunkbase app 5315 - Red Hat Advanced Cluster Security](https://splunkbase.splunk.com/app/5315) and sign in.
-2. Download the Technology Add-on as a `.tgz` (keep Splunkbase’s filename).
+2. Download the Technology Add-on (Splunkbase saves it as a `.spl`; keep that filename).
 3. Place it under `~/code/Splunk/` (or pass `--ta-dir`).
 
 ```bash
 mkdir -p ~/code/Splunk
-# copy the downloaded .tgz into ~/code/Splunk/
+# copy the downloaded .spl into ~/code/Splunk/
 ./modules/splunk-TA.sh --run
 ```
 
 Stack only (no TA yet): `./modules/splunk-TA.sh --run --skip-ta`
 
-Product reference: [RHACS 4.10 - Integrating with Splunk](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/4.10/html/integrating/integrate-with-splunk).
+Product reference: [RHACS 5.0 - 15.3. Using the Red Hat Advanced Cluster Security for Kubernetes add-on](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/5.0/html-single/integrating/index#integrate-splunk-add-on_integrate-with-splunk).
 
 ## What the module sets up
 
 1. Namespace `splunk-demo`.
 2. Splunk Operator (Helm) + Standalone Splunk Free + PVCs + Route `splunk-web`.
-3. Installs the RHACS Technology Add-on into the Splunk pod from your local `.tgz`.
+3. Installs the RHACS Technology Add-on into the Splunk pod from your local `.spl`.
 
 It does **not** configure Central endpoint, API token, or modular inputs in the Splunk UI - that is the talk track below.
 
 ## Talk track (about 2 minutes)
 
-1. Open Splunk Web (URL from module Status → Splunk Web Route). Sign in as `admin` (password from the Standalone secret; `--help` shows the `oc get secret` command).
-2. **Apps → Red Hat Advanced Cluster Security**.
-3. **Configuration → Add-on Settings**: Central endpoint as `host:443` (no `https://` prefix unless the field help says otherwise). Paste an RHACS API token (Integrations → Authentication, Analyst / read).
-4. **Create New Input** three times: ACS Compliance, ACS Vulnerability Management, ACS Violations (lab defaults for Violations: interval 60s, index `default`, checkpoint from `2000-01-01T00:00:00.000Z`).
-5. Search: `index=* sourcetype="stackrox*"` after demo traffic / violations.
+### Configuration
+
+1. Open Splunk Web (URL from module Status → Splunk Web Route).
+2. You will be automatically logged in as the Splunk Admin.
+3. Configure the Add-on Setting:
+   1. Central endpoint as `host:443` (no `https://` prefix).
+   2. Paste an RHACS API token (as Analyst).
+4. Create New Input two times: ACS Vulnerability Management, ACS Violations.
+   1. Change the index from `default` to `main`.
+5. In the Add-on Search box, type `index=* sourcetype="stackrox*"`.
+6. To see only violations type `index=* sourcetype="stackrox*" sourcetype="stackrox-violations"`.
+7. To see only Vulnerability data type `index=* sourcetype="stackrox*" source="stackrox_vulnerability_management://acs_vulnerabilities"`.
+8. You can play with other sources by clicking the `source` field under **SELECTED FIELDS**.
+
+![Splunk Search showing stackrox vulnerability management events and the source field breakdown](splunk-TA-vuln-source.jpg)
 
 ## Commands
 
@@ -59,4 +69,4 @@ It does **not** configure Central endpoint, API token, or modular inputs in the 
 ## Notes
 
 - Uninstall removes Standalone, Helm release, and the namespace. Cluster-scoped Splunk Operator CRDs stay.
-- Never commit passwords, API tokens, or the Splunkbase `.tgz`.
+- Never commit passwords, API tokens, or the Splunkbase `.spl`.
