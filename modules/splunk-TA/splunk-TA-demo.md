@@ -20,10 +20,10 @@ The add-on is **not** in this git repo (Splunkbase license). Download it yoursel
 ```bash
 mkdir -p ~/code/Splunk
 # copy the downloaded .spl into ~/code/Splunk/
-./modules/splunk-TA.sh --run
+./modules/splunk-TA/splunk-TA.sh --run
 ```
 
-Stack only (no TA yet): `./modules/splunk-TA.sh --run --skip-ta`
+Stack only (no TA yet): `./modules/splunk-TA/splunk-TA.sh --run --skip-ta`
 
 Product reference: [RHACS 5.0 - 15.3. Using the Red Hat Advanced Cluster Security for Kubernetes add-on](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_security_for_kubernetes/5.0/html-single/integrating/index#integrate-splunk-add-on_integrate-with-splunk).
 
@@ -49,19 +49,19 @@ It does **not** configure Central endpoint, API token, or modular inputs in the 
 7. To see only Vulnerability data type `index=* sourcetype="stackrox*" source="stackrox_vulnerability_management://acs_vulnerabilities"`.
 8. You can play with other sources by clicking the `source` field under **SELECTED FIELDS**.
 
-![Splunk Search showing stackrox vulnerability management events and the source field breakdown](../docs/images/splunk-TA-vuln-source.png)
+![Splunk Search showing stackrox vulnerability management events and the source field breakdown](../../docs/images/splunk-TA-vuln-source.png)
 
 ## Commands
 
 ```bash
-./modules/splunk-TA.sh --help
-./modules/splunk-TA.sh --status
-./modules/splunk-TA.sh --run --dry-run
-./modules/splunk-TA.sh --run
-./modules/splunk-TA.sh --run --skip-ta
-./modules/splunk-TA.sh --run --ta-dir /path/to/dir
-./modules/splunk-TA.sh --uninstall --dry-run
-./modules/splunk-TA.sh --uninstall
+./modules/splunk-TA/splunk-TA.sh --help
+./modules/splunk-TA/splunk-TA.sh --status
+./modules/splunk-TA/splunk-TA.sh --run --dry-run
+./modules/splunk-TA/splunk-TA.sh --run
+./modules/splunk-TA/splunk-TA.sh --run --skip-ta
+./modules/splunk-TA/splunk-TA.sh --run --ta-dir /path/to/dir
+./modules/splunk-TA/splunk-TA.sh --uninstall --dry-run
+./modules/splunk-TA/splunk-TA.sh --uninstall
 ```
 
 ## Notes

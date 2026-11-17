@@ -102,7 +102,7 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 | ID | Requirement |
 |----|-------------|
 | R-LAY-1 | `config/modules.json` is the single registry: `id` (script / CLI / Module column), `label` (Description only), list order, `dependsOn`, and `statusComplexity` (1-10 hint for GUI status refresh order; lower refreshes first) |
-| R-LAY-2 | Each module has a documented entrypoint: `modules/<id>.sh` (may delegate to helpers in the same directory) |
+| R-LAY-2 | Each module has a documented entrypoint: `modules/<id>/<id>.sh` (may delegate to helpers in the same directory) |
 | R-LAY-3 | `./serve.sh` is the top-level GUI entrypoint; `scripts/acs-setup.sh` is the CLI orchestrator |
 | R-LAY-4 | `gui/` is part of the repo from the first shipped module; not a later add-on |
 | R-LAY-5 | `STATUS.md` is updated when module behavior ships (human changelog, not generated) |
@@ -123,7 +123,7 @@ Legacy v1 (`centralCluster` + `securedCluster`) and `central-credentials.json` (
 | R-ORCH-8 | Exit code: `0` only if every invoked module succeeds; otherwise non-zero |
 | R-ORCH-9 | Orchestrator **dispatches** to module scripts; it does not embed module logic and does not delegate to one giant script |
 
-### 5.3 Module script contract (every `modules/<id>.sh`)
+### 5.3 Module script contract (every `modules/<id>/<id>.sh`)
 
 | ID | Requirement |
 |----|-------------|
@@ -217,7 +217,7 @@ For each module: **purpose**, **pre conditions** (usually none; another installe
 - `--uninstall` removes the Inform policy only (leaves Red Hat Public)
 - `--hard-delete` (module shell only): print inventory, require interactive `DELETE`, then remove policy + Red Hat Public. Does not modify Signature Integration named exactly `Red Hat`
 
-Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integration-demo.md).
+Demo notes: [`modules/signature-integration/signature-integration-demo.md`](modules/signature-integration/signature-integration-demo.md).
 
 ---
 
@@ -241,7 +241,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M2b — `virt-vm-demo` (ACS guest vulnerabilities on OCP Virt)
 
-**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo.md`. Catalog: `impactPlanes: ["central-api","central-ocp","secured-cluster"]` (not ACSCS-safe). `central-ocp`: Central CR on Central's OpenShift (`_central`); `central-api`: wait for VM CVEs; `secured-cluster`: CNV / VMs / SecuredCluster on the soft-default SC.
+**Purpose:** Install OpenShift Virtualization (VSOCK + KVM_EMULATION for infra labs), deploy two RHEL 9 VMs (`rhel9-1`, `rhel9-2`) in `acs-virt-demo` from the eng dnf-primed guest image with in-guest `roxagent`, and enable ACS `ROX_VIRTUAL_MACHINES` / short scraper poll so Central **Vulnerability Management → Virtual Machines** shows guest CVEs. Talk track: `modules/virt-vm-demo/virt-vm-demo.md`. Catalog: `impactPlanes: ["central-api","central-ocp","secured-cluster"]` (not ACSCS-safe). `central-ocp`: Central CR on Central's OpenShift (`_central`); `central-api`: wait for VM CVEs; `secured-cluster`: CNV / VMs / SecuredCluster on the soft-default SC.
 
 **Pre conditions:** none
 
@@ -287,7 +287,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M5 — `users-part1-ocp` — Users Part 1 (OCP)
 
-**Purpose:** Lead-in for the ACS console plugin visibility demo: HTPasswd users (adam/boaz/chris), IdP, and OpenShift project RBAC. Full walkthrough lives in `modules/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed.
+**Purpose:** Lead-in for the ACS console plugin visibility demo: HTPasswd users (adam/boaz/chris), IdP, and OpenShift project RBAC. Full walkthrough lives in `modules/users-part1-ocp/users-part1-ocp-demo.md`. `users-part2-oauth` and `users-part3-acs` complete Central login and ACS mappings; the ACS console plugin must already be installed.
 
 **Pre conditions:** ACS console plugin enabled; `htpasswd` and `openssl` on PATH
 
@@ -315,7 +315,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 ### M7 — `users-part3-acs` — Users Part 3 (ACS)
 
-**Purpose:** Map OpenShift logins adam, boaz, and chris to ACS roles and access scopes for Central. Adam becomes built-in Admin. Boaz and chris become Analysts (`boaz-in-acs`, `chris-in-acs`) with access scope limited to `ms-demo`. The OpenShift console Security plugin still follows OpenShift RBAC (Part 1); this module does not change that. Act 2 of the demo compares console vs ACS Central: boaz is aligned (both sides `ms-demo` only); chris is misaligned (OCP admin on `ms-demo` and `acs-init-container-test`, ACS only `ms-demo`). Full walkthrough lives in `modules/users-part1-ocp-demo.md`.
+**Purpose:** Map OpenShift logins adam, boaz, and chris to ACS roles and access scopes for Central. Adam becomes built-in Admin. Boaz and chris become Analysts (`boaz-in-acs`, `chris-in-acs`) with access scope limited to `ms-demo`. The OpenShift console Security plugin still follows OpenShift RBAC (Part 1); this module does not change that. Act 2 of the demo compares console vs ACS Central: boaz is aligned (both sides `ms-demo` only); chris is misaligned (OCP admin on `ms-demo` and `acs-init-container-test`, ACS only `ms-demo`). Full walkthrough lives in `modules/users-part1-ocp/users-part1-ocp-demo.md`.
 
 **Pre conditions:** `users-part2-oauth` installed
 
@@ -340,7 +340,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 - `--status` is `ok` when the named Slack notifier exists in Central, `labelDefault` matches the resolved webhook, and every policy with category `DEMO` has this notifier attached; folds show webhook + channel URL plus each DEMO policy as wired or missing
 - `--run` creates/updates via `POST`/`PUT /v1/notifiers`, **must** `POST /v1/notifiers/test` (fails if the test fails), posts a lab-context webhook ping, then attaches the notifier to all `DEMO` policies
 - `--uninstall` detaches this notifier from `DEMO` policies (policies and category stay), then deletes only the resolved notifier name
-- Demo notes: [`modules/slack-notifier-demo.md`](modules/slack-notifier-demo.md)
+- Demo notes: [`modules/slack-notifier/slack-notifier-demo.md`](modules/slack-notifier/slack-notifier-demo.md)
 - Shared policy helper: [`lib/demo_policies.py`](lib/demo_policies.py)
 
 ---
@@ -353,7 +353,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Status must verify:** Namespace, operator, Standalone pod Ready, Splunk Web Route, local `.spl` presence, TA app present in pod (`TA-stackrox`)
 
-**Run must do:** Native install in-repo (`modules/splunk-TA.sh` + `modules/splunk_ta_lib.sh`): CRDs → Helm operator (pinned image) → SCC → Standalone → Route → TA install. Idempotent where safe. `--dry-run` required. `--skip-ta` allows stack-only; `--ta-dir` selects the `.spl` directory (default `~/code/Splunk`). Lab defaults (namespace, CR names, chart/image pins) are constants, not env knobs. Fail clearly if `.spl` missing and `--skip-ta` not set. Silently accept a `.tgz` in that directory as a fallback and report it in status when used.
+**Run must do:** Native install in-repo (`modules/splunk-TA/splunk-TA.sh` + `modules/splunk-TA/splunk_ta_lib.sh`): CRDs → Helm operator (pinned image) → SCC → Standalone → Route → TA install. Idempotent where safe. `--dry-run` required. `--skip-ta` allows stack-only; `--ta-dir` selects the `.spl` directory (default `~/code/Splunk`). Lab defaults (namespace, CR names, chart/image pins) are constants, not env knobs. Fail clearly if `.spl` missing and `--skip-ta` not set. Silently accept a `.tgz` in that directory as a fallback and report it in status when used.
 
 **Uninstall must do:** Delete Standalone, Helm release, and namespace. Leave cluster-scoped CRDs. `--dry-run` required.
 
@@ -380,7 +380,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 - `--run` secured-cluster: apply workload + wait Ready/LB/TCP; central-api: upsert → Test (default message format `CEF`; `--format LEGACY` for legacy field order)
 - `--uninstall` central-api: delete this notifier only; secured-cluster: delete namespace `acs-syslog-demo`
 - Viewer: list / raw+parsed detail / compare two buffered messages; ring size 100 in memory; clear API; no PVC/TLS/auth in v1
-- Demo notes: [`modules/syslog-notifier-demo.md`](modules/syslog-notifier-demo.md)
+- Demo notes: [`modules/syslog-notifier/syslog-notifier-demo.md`](modules/syslog-notifier/syslog-notifier-demo.md)
 
 ---
 
@@ -410,7 +410,7 @@ The GUI is **required from the first deliverable** (module M1 `registries`). No 
 Shipping M1 is not complete until all of the following work:
 
 1. `config/modules.json` includes module `registries` as M1
-2. `modules/registries.sh` meets R-MOD-* and M1 acceptance
+2. `modules/registries/registries.sh` meets R-MOD-* and M1 acceptance
 3. `scripts/acs-setup.sh` can `--status` and `--run --module registries`
 4. GUI lists module `registries`, shows its status, and triggers run
 5. Lab credentials form saves Central endpoint and API token (manual prerequisite)
@@ -438,7 +438,7 @@ Later modules extend the same GUI (new row/card, config fields if needed, run bu
 | D-1 | Local credentials file: path and JSON shape? | **Decided:** gitignored **`lab-credentials.json`** at repo root, schema **`config/lab-credentials.schema.json` v2** (`activeLabId` + `labs[]` with multi secured clusters). ACS Central and OpenShift are independent blocks per lab. Modules flatten the active lab. Env: `ACS_LAB_CREDENTIALS_FILE`, `ACS_CENTRAL_ENDPOINT`, `ROX_API_TOKEN`/`TOKEN`, `ACS_INSECURE_SKIP_TLS_VERIFY`. |
 | D-2 | M3 `--run`: verify-only or also register/fix secured cluster? | **N/A:** `secured-cluster` removed from module list; registration is a manual prerequisite (§3.1 E-5). |
 | D-3 | GUI stack and how the local server is started | **Decided:** Python backend (FastAPI) + HTML/JS frontend; **`./serve.sh`** at repo root (wraps `gui/serve.sh`); REST API shells out to `scripts/acs-setup.sh`. Bind **`127.0.0.1` only**; port **8765**. No auth (solo laptop use). |
-| D-4 | Splunk: wrap `splunk-lab.sh` or native module? | **Decided:** **Native** `modules/splunk-TA.sh` + `splunk_ta_lib.sh` (battle-tested Operator/Standalone/TA steps in-repo). No dependency on `rhacs-splunk-ta-demo-skill`. TA `.spl` remains **user-supplied** (Splunkbase default; `.tgz` accepted as silent fallback); UI Central/token/inputs stay in demo notes. |
+| D-4 | Splunk: wrap `splunk-lab.sh` or native module? | **Decided:** **Native** `modules/splunk-TA/splunk-TA.sh` + `splunk_ta_lib.sh` (battle-tested Operator/Standalone/TA steps in-repo). No dependency on `rhacs-splunk-ta-demo-skill`. TA `.spl` remains **user-supplied** (Splunkbase default; `.tgz` accepted as silent fallback); UI Central/token/inputs stay in demo notes. |
 | D-5 | Per-module `--dry-run` mandatory for all modules or only destructive ones? | **Decided:** **All modules** implement `--dry-run` for consistency. Verify/read-only modules describe checks and examination context only; mutating modules describe planned changes without applying. GUI may expose dry-run where useful. |
 
 ---

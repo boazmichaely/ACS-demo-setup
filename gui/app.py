@@ -239,7 +239,7 @@ def list_modules() -> list[dict]:
         entry = dict(mod)
         mid = (entry.get("id") or "").strip()
         entry["number"] = index
-        script = REPO_ROOT / "modules" / f"{mid}.sh"
+        script = REPO_ROOT / "modules" / mid / f"{mid}.sh"
         entry["scriptInstalled"] = script.is_file() and os.access(script, os.X_OK)
         modules.append(entry)
     return modules
@@ -247,11 +247,11 @@ def list_modules() -> list[dict]:
 
 @app.get("/api/modules/{module_id}/help")
 def module_help(module_id: str) -> dict[str, str]:
-    """Return ``modules/<id>.sh --help`` text for the kebab Help action."""
+    """Return ``modules/<id>/<id>.sh --help`` text for the kebab Help action."""
     mid = (module_id or "").strip()
     if mid not in _catalog_module_ids():
         raise HTTPException(status_code=404, detail=f"unknown module: {mid}")
-    script = REPO_ROOT / "modules" / f"{mid}.sh"
+    script = REPO_ROOT / "modules" / mid / f"{mid}.sh"
     if not script.is_file() or not os.access(script, os.X_OK):
         raise HTTPException(status_code=404, detail=f"module script not installed: {mid}")
     result = subprocess.run(
@@ -436,11 +436,11 @@ HELP_DOCS: dict[str, tuple[str, Path]] = {
     "adding-a-module": ("How to add a module", REPO_ROOT / "ADDING-A-MODULE.md"),
     "users-part1-ocp-demo": (
         "Users series demo script",
-        REPO_ROOT / "modules" / "users-part1-ocp-demo.md",
+        REPO_ROOT / "modules" / "users-part1-ocp" / "users-part1-ocp-demo.md",
     ),
     "slack-notifier-demo": (
         "Slack notifier demo",
-        REPO_ROOT / "modules" / "slack-notifier-demo.md",
+        REPO_ROOT / "modules" / "slack-notifier" / "slack-notifier-demo.md",
     ),
 }
 

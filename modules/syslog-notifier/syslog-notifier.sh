@@ -15,10 +15,12 @@ RING_SIZE=100
 IMAGE="registry.access.redhat.com/ubi9/python-311:latest"
 DEFAULT_NOTIFIER_NAME="acs-demo-syslog"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ASSET_DIR="${ROOT}/modules/syslog-notifier"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+ASSET_DIR="${MODULE_DIR}"
 RECEIVER_PY="${ASSET_DIR}/receiver.py"
-HELPER="${ROOT}/modules/syslog_notifier.py"
+HELPER="${MODULE_DIR}/syslog_notifier.py"
 
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
@@ -54,7 +56,7 @@ LoadBalancer endpoint and run Central Test.
 Catalog: \`impactPlanes: ["central-api","secured-cluster"]\`.
 \`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
 
-Talk track: \`modules/syslog-notifier-demo.md\`
+Talk track: \`modules/syslog-notifier/syslog-notifier-demo.md\`
 
 ## Usage
 

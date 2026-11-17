@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lib.central import (  # noqa: E402
@@ -249,8 +249,8 @@ def find_login_groups(
 DEMO_SCRIPT_BODY = (
     "Users Part 3 (ACS): map adam, boaz, and chris to ACS roles and scopes.\n\n"
     "Act 2 compares console (OCP RBAC) vs ACS Central (boaz aligned, chris misaligned):\n"
-    "  modules/users-part1-ocp-demo.md\n"
-    "  https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp-demo.md"
+    "  modules/users-part1-ocp/users-part1-ocp-demo.md\n"
+    "  https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp/users-part1-ocp-demo.md"
 )
 
 

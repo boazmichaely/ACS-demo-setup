@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lib.central import (  # noqa: E402
@@ -40,7 +40,7 @@ MODULE_ID = "signature-integration"
 INTEGRATION_NAME = "Red Hat Public"
 POLICY_NAME = "Images must be signed by Red Hat Public"
 KEY_LABEL = "release-key-3"
-ASSET_DIR = Path(__file__).resolve().parent / "signature-integration"
+ASSET_DIR = Path(__file__).resolve().parent
 PUB_KEY_PATH = ASSET_DIR / "red-hat-release-key-3.pub"
 IMAGES_PATH = ASSET_DIR / "images.txt"
 # Fingerprint of committed PEM (sha256 of file bytes including trailing newline).

@@ -3,8 +3,10 @@
 set -euo pipefail
 
 MODULE_ID="slack-notifier"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HELPER="${ROOT}/modules/slack_notifier.py"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+HELPER="${MODULE_DIR}/slack_notifier.py"
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
   if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
@@ -32,7 +34,7 @@ then attaches this notifier to every Central policy with category **DEMO**.
 
 Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
 
-Talk track: [\`modules/slack-notifier-demo.md\`](/help?doc=slack-notifier-demo)
+Talk track: [\`modules/slack-notifier/slack-notifier-demo.md\`](/help?doc=slack-notifier-demo)
 
 ## Incoming Webhook setup
 

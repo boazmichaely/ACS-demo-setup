@@ -7,7 +7,7 @@ A **module** is used to perform one setup step for the demo lab. It is a shell/P
 
 Template files ([`module-skeleton.sh`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh), [`module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py)) are provided to start you off, and a common Python library ([`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py), [`lib/openshift.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/openshift.py), [`lib/demo_policies.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/demo_policies.py)) provides a unified way to use admin credentials for the associated Central and OpenShift clusters in your lab (and to stamp demo policies with category `DEMO`).
 
-You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/ms-demo.sh) module as a lightweight example.
+You can also use the [ms-demo](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/ms-demo/ms-demo.sh) module as a lightweight example.
 
 
 | Flag | What the module must do (Module Contract) |
@@ -25,10 +25,10 @@ The rest of this page is the recipe: catalog row, skeleton, status shape, creden
 
 A module shows up in the GUI and the CLI orchestrator only when both exist:
 
-1. An executable script at `modules/<id>.sh`.
+1. An executable script at `modules/<id>/<id>.sh`.
 2. A matching row in [`config/modules.json`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/config/modules.json).
 
-The orchestrator reads the catalog, then runs `modules/<id>.sh`. A catalog row without a script still appears as **not installed** (handy as a placeholder). A script with no catalog row is invisible.
+The orchestrator reads the catalog, then runs `modules/<id>/<id>.sh`. A catalog row without a script still appears as **not installed** (handy as a placeholder). A script with no catalog row is invisible.
 
 ## Fast path
 
@@ -37,8 +37,9 @@ The orchestrator reads the catalog, then runs `modules/<id>.sh`. A catalog row w
 ID=my-feature
 
 # 2. Copy the shell skeleton (always required)
-cp templates/module-skeleton.sh "modules/${ID}.sh"
-chmod +x "modules/${ID}.sh"
+mkdir -p "modules/${ID}"
+cp templates/module-skeleton.sh "modules/${ID}/${ID}.sh"
+chmod +x "modules/${ID}/${ID}.sh"
 
 # 3. Edit the copy: set MODULE_ID, fill in usage() and the do_* functions.
 #    Search for TODO. The skeleton’s emit_status_sections() is the teaching
@@ -48,8 +49,8 @@ chmod +x "modules/${ID}.sh"
 #    Without that row, the module will not appear in the GUI.
 
 # 5. Smoke-test from the terminal
-./modules/${ID}.sh --help
-./modules/${ID}.sh --status
+./modules/${ID}/${ID}.sh --help
+./modules/${ID}/${ID}.sh --status
 ./scripts/acs-setup.sh --status --module "${ID}"
 ```
 
@@ -72,7 +73,7 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
 }
 ```
 
-- `id` is the module key. It must match `modules/<id>.sh`, CLI `--module`, other modules’ `dependsOn`, and the **Module** column. Do not repeat the id inside `label`.
+- `id` is the module key. It must match `modules/<id>/<id>.sh`, CLI `--module`, other modules’ `dependsOn`, and the **Module** column. Do not repeat the id inside `label`.
 - `statusComplexity` is an integer **1-10** hint for GUI status refresh order (lower = cheaper `--status`, refreshed first). Default to `5` if unsure; heavy OpenShift/Central probes (for example virt) belong near 8-10.
 - `label` is Description-column text only. Plain sentence or phrase, capitalized. Not `id - description`.
 - `impactPlanes` declares where the module does work (GUI **Type** column; see [Planes and multi-SC](#planes-and-multi-sc)). Required for new modules.
@@ -82,7 +83,7 @@ Add one object to the `modules` array in [`config/modules.json`](https://github.
 
 ## Python helper (required for Central)
 
-The entrypoint is always `modules/<id>.sh`. Whether you also need a `.py` file depends on what the module talks to:
+The entrypoint is always `modules/<id>/<id>.sh`. Whether you also need a `.py` file depends on what the module talks to:
 
 - **OpenShift only** (`oc`) - shell is enough. Call `python -m lib.openshift` for login, then use `oc` (see [Credentials and auth](#credentials-and-auth) below).
 - **Central** (RHACS HTTP API) - you need a Python helper. Shared Central auth lives only in [`lib/central.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/central.py); there is no bash equivalent (see [Credentials and auth](#credentials-and-auth) below).
@@ -91,10 +92,11 @@ The entrypoint is always `modules/<id>.sh`. Whether you also need a `.py` file d
 Copy the helper template when you need one:
 
 ```bash
-cp templates/module-helper.py modules/my_feature.py
+mkdir -p modules/my-feature
+cp templates/module-helper.py modules/my-feature/my_feature.py
 ```
 
-In `modules/my-feature.sh`, wire the helper block from the [skeleton](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh) and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put Central / heavy work in the `.py` file. The helper’s teaching Status folds match the skeleton’s four groups; replace that sample data with real checks. Uninstall may stay in the shell until Central cleanup needs Python; the helper includes an `uninstall` subcommand for that case. If the module invents selectable option flags (not planes / multi-SC), follow [**ADVANCED — use this when your module has multiple choices**](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-choices.md); otherwise leave that file alone and keep the simple `run_helper`.
+In `modules/my-feature/my-feature.sh`, wire the helper block from the [skeleton](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-skeleton.sh) and set `HELPER` to that path. Keep `--help` and flag parsing in the shell script. Put Central / heavy work in the `.py` file. The helper’s teaching Status folds match the skeleton’s four groups; replace that sample data with real checks. Uninstall may stay in the shell until Central cleanup needs Python; the helper includes an `uninstall` subcommand for that case. If the module invents selectable option flags (not planes / multi-SC), follow [**ADVANCED — use this when your module has multiple choices**](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-choices.md); otherwise leave that file alone and keep the simple `run_helper`.
 
 ## Status output
 
@@ -244,7 +246,7 @@ Current catalog map: `compliance-operator` → `multi`; `ms-demo` / `init-demo` 
 
 ### Central membership (optional)
 
-When a `central-api` install or uninstall runs with a selection of secured-cluster ids, the module **may** compare that selection to what is already configured in Central (policies, scan schedules, access scopes, and so on) and merge or drop cluster membership. This is not enforced by the orchestrator - each module decides whether adjustment is appropriate. [`compliance-operator`](modules/compliance-operator.sh) merges/drops schedule `clusters[]` this way.
+When a `central-api` install or uninstall runs with a selection of secured-cluster ids, the module **may** compare that selection to what is already configured in Central (policies, scan schedules, access scopes, and so on) and merge or drop cluster membership. This is not enforced by the orchestrator - each module decides whether adjustment is appropriate. [`compliance-operator`](modules/compliance-operator/compliance-operator.sh) merges/drops schedule `clusters[]` this way.
 
 ### Workload label (`secured-cluster` plane)
 
@@ -258,7 +260,7 @@ Use shared helpers in [`lib/openshift.py`](https://github.com/boazmichaely/ACS-d
 
 Each single invocation (one plane; one SC on `secured-cluster`) must be safe to re-run. Install on cluster A must not require uninstalling B. Modules must **not** loop `securedClusters` themselves; the orchestrator owns multi-select.
 
-Reference multi-plane module: [`compliance-operator`](modules/compliance-operator.sh) (orchestrator fans out; module stays single-SC per `secured-cluster` invoke).
+Reference multi-plane module: [`compliance-operator`](modules/compliance-operator/compliance-operator.sh) (orchestrator fans out; module stays single-SC per `secured-cluster` invoke).
 
 ## Credentials and auth
 
@@ -280,7 +282,8 @@ Env fallbacks (`ROX_API_TOKEN`, `ACS_CENTRAL_ENDPOINT`, and friends) only fill e
 Ask Python for a kubeconfig path, export it, then apply with labels:
 
 ```bash
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
 PYTHON="${ROOT}/gui/.venv/bin/python"
 # or: PYTHON="$(command -v python3)"
 
@@ -315,7 +318,7 @@ code, body = central_request(
 
 `central_connection` resolves console URL + `Authorization` (API token or admin password per the lab’s `authPreference`). Use that instead of reading tokens by hand.
 
-**Bottom line:** a module that works on Central practically must ship a `.py` helper and call it from `modules/<id>.sh`. Copy [`templates/module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py) and wire it as in [Python helper (required for Central)](#python-helper-required-for-central).
+**Bottom line:** a module that works on Central practically must ship a `.py` helper and call it from `modules/<id>/<id>.sh`. Copy [`templates/module-helper.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/templates/module-helper.py) and wire it as in [Python helper (required for Central)](#python-helper-required-for-central).
 
 ### Style tip
 
@@ -326,10 +329,10 @@ If the RHACS UI configures something in Central, prefer the Central API. Avoid a
 When a module creates or updates RHACS policies for the demo:
 
 1. Upsert through [`lib/demo_policies.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/lib/demo_policies.py) `ensure_managed_policy`. That helper merges category **`DEMO`** into the policy (visible in Policy Management) and preserves any existing notifiers on update.
-2. **Do not** attach notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier.sh) attaches/detaches its Slack notifier on `--run` / `--uninstall` by discovering policies with category `DEMO`. [`syslog-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/syslog-notifier.sh) configures the Syslog notifier and Central Test only - it does **not** attach to DEMO policies.
+2. **Do not** attach notifiers in the policy module. Ownership: policy modules create/delete policies; [`slack-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/slack-notifier/slack-notifier.sh) attaches/detaches its Slack notifier on `--run` / `--uninstall` by discovering policies with category `DEMO`. [`syslog-notifier`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/syslog-notifier/syslog-notifier.sh) configures the Syslog notifier and Central Test only - it does **not** attach to DEMO policies.
 3. After first creating DEMO policies on a lab (or after adding a new demo policy), re-run `slack-notifier` once so Slack is wired. A full install that already runs it after the policy modules is enough.
 
-Examples: [`modules/init_demo.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/init_demo.py), [`modules/signature_integration.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/signature_integration.py).
+Examples: [`modules/init-demo/init_demo.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/init-demo/init_demo.py), [`modules/signature-integration/signature_integration.py`](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/signature-integration/signature_integration.py).
 
 ## Verify end-to-end
 
@@ -345,4 +348,4 @@ In the GUI you should see an enabled Modules row, sensible Status after refresh,
 
 ## Contributing
 
-Open a pull request with the `config/modules.json` entry and `modules/<id>.sh`. Include a helper `.py` only if you added one. There is no plugin store and no auto-discovery outside the catalog. Private experiments can use the same layout locally; share them with a PR when they help beyond your lab.
+Open a pull request with the `config/modules.json` entry and `modules/<id>/<id>.sh`. Include a helper `.py` only if you added one. There is no plugin store and no auto-discovery outside the catalog. Private experiments can use the same layout locally; share them with a PR when they help beyond your lab.

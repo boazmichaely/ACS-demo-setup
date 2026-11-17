@@ -15,7 +15,7 @@ Catalog planes: `secured-cluster` (receiver + viewer) then `central-api` (notifi
 Or both planes in one process:
 
 ```bash
-./modules/syslog-notifier.sh --run
+./modules/syslog-notifier/syslog-notifier.sh --run
 ```
 
 `--status` prints the **Viewer Route URL**. Open that URL in a browser. Do not look for a new demo-setup button - Status is the deep link.
@@ -47,7 +47,7 @@ Or both planes in one process:
 ## Cleanup
 
 ```bash
-./modules/syslog-notifier.sh --uninstall
+./modules/syslog-notifier/syslog-notifier.sh --uninstall
 ```
 
 Deletes the Syslog notifier and removes namespace `acs-syslog-demo`.

@@ -74,12 +74,12 @@ Useful when you are not in the browser:
 | `gui/` | Web UI (FastAPI + static pages) |
 | `scripts/acs-setup.sh` | Orchestrator: status, run, and oc helpers |
 | `config/modules.json` | List of modules (display order, labels, dependencies, `statusComplexity` 1-10) |
-| `modules/<id>.sh` | One shell entrypoint per module |
+| `modules/<id>/<id>.sh` | One folder per module; shell entrypoint (unique basename) |
 | `templates/module-skeleton.sh` | Copy-paste starting point for a new module |
 | `templates/module-helper.py` | Python helper template (required for Central; also useful for heavy JSON) |
 | `lib/` | Shared helpers for Central API and OpenShift login |
 
-Today, `registries`, `signature-integration`, `slack-notifier`, `syslog-notifier`, `compliance-operator`, `virt-vm-demo`, `ms-demo`, `init-demo`, `users-part1-ocp`, `users-part2-oauth`, `users-part3-acs`, and `splunk-TA` have real scripts (`signature-integration` ensures Cosign trust **Red Hat Public**, an Inform signed-images policy, and primes signed images via Central image scan; `slack-notifier` configures Central’s Slack integration for `#acs-demo-notifier` with a test ping on `--run`; `syslog-notifier` deploys a generic CEF syslog receiver+viewer on a secured cluster and configures Central’s Syslog notifier (Test only; no DEMO policy attach) - see `modules/syslog-notifier-demo.md`; `virt-vm-demo` installs OpenShift Virtualization with KVM emulation, two dnf-primed RHEL guests, and the ACS `roxagent` for the guest CVE talk track in `modules/virt-vm-demo.md`; `ms-demo` is the minimal shell example; `init-demo` installs the [ACS-init-container-test](https://github.com/boazmichaely/ACS-init-container-test) Clean/Dirty/Blue/Red workloads plus `DEMO-Init-Test` Central policies; `users-part1-ocp` / `users-part2-oauth` / `users-part3-acs` are Users Part 1-3 for the ACS console plugin demo; `splunk-TA` deploys Splunk Operator + Standalone and installs the RHACS Splunkbase TA from a local `.spl` - see `modules/splunk-TA-demo.md`). Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
+Today, `registries`, `signature-integration`, `slack-notifier`, `syslog-notifier`, `compliance-operator`, `virt-vm-demo`, `ms-demo`, `init-demo`, `users-part1-ocp`, `users-part2-oauth`, `users-part3-acs`, and `splunk-TA` have real scripts (`signature-integration` ensures Cosign trust **Red Hat Public**, an Inform signed-images policy, and primes signed images via Central image scan; `slack-notifier` configures Central’s Slack integration for `#acs-demo-notifier` with a test ping on `--run`; `syslog-notifier` deploys a generic CEF syslog receiver+viewer on a secured cluster and configures Central’s Syslog notifier (Test only; no DEMO policy attach) - see `modules/syslog-notifier/syslog-notifier-demo.md`; `virt-vm-demo` installs OpenShift Virtualization with KVM emulation, two dnf-primed RHEL guests, and the ACS `roxagent` for the guest CVE talk track in `modules/virt-vm-demo/virt-vm-demo.md`; `ms-demo` is the minimal shell example; `init-demo` installs the [ACS-init-container-test](https://github.com/boazmichaely/ACS-init-container-test) Clean/Dirty/Blue/Red workloads plus `DEMO-Init-Test` Central policies; `users-part1-ocp` / `users-part2-oauth` / `users-part3-acs` are Users Part 1-3 for the ACS console plugin demo; `splunk-TA` deploys Splunk Operator + Standalone and installs the RHACS Splunkbase TA from a local `.spl` - see `modules/splunk-TA/splunk-TA-demo.md`). Other modules can appear in `modules.json` before their script exists; in the GUI those rows show as **not installed**.
 
 ## Adding a module
 
@@ -87,7 +87,7 @@ See [ADDING-A-MODULE.md](ADDING-A-MODULE.md) for the full walkthrough: catalog e
 
 In the running GUI, the masthead **?** menu opens this README, the module guide, and the users demo script on GitHub (rendered Markdown), plus the interactive Status folds field map locally.
 
-Each module should also explain itself when you run `./modules/<id>.sh --help` (what it does, what it needs, what it changes).
+Each module should also explain itself when you run `./modules/<id>/<id>.sh --help` (what it does, what it needs, what it changes).
 
 ## License
 

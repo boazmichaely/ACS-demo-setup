@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Module: users-part3-acs - ACS roles and access scopes for demo users (Users Part 3)
+# Module: signature-integration - Red Hat Public Cosign trust + Inform policy + image priming
 set -euo pipefail
 
-MODULE_ID="users-part3-acs"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HELPER="${ROOT}/modules/users_part3_acs.py"
+MODULE_ID="signature-integration"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+HELPER="${MODULE_DIR}/signature_integration.py"
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
   if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
@@ -13,83 +15,60 @@ if [[ -z "$PYTHON" ]]; then
     PYTHON="$(command -v python3)"
   fi
 fi
-EXTRA_ARGS=()
 
 usage() {
   cat <<EOF
-# users-part3-acs
+# signature-integration
 
-Map the OpenShift logins adam, boaz, and chris to ACS roles and
-access scopes for Central. The OpenShift console Security plugin
-still follows OpenShift RBAC from Part 1; this module does not change
-that.
+Ensure Signature Integration **Red Hat Public** (release key 3), an Inform
+Build+Deploy policy **Images must be signed by Red Hat Public**, and prime
+three signed images via Central image scan (no deploy).
 
-Part 1 gives boaz and chris different OpenShift roles. Part 3 adds
-ACS roles and scopes for Central login. Adam becomes Admin in ACS.
-Boaz and chris become Analysts in ACS, scoped to \`ms-demo\` only.
-
-**Act 2** of the demo compares console vs ACS Central:
-
-- \`boaz\` aligned - both sides cover \`ms-demo\` only
-- \`chris\` misaligned - OCP admin on \`ms-demo\` and
-  \`acs-init-container-test\`, ACS only \`ms-demo\` (init-demo missing in Central)
-
-Adam maps to the built-in Admin role with full ACS access. Boaz maps
-to \`boaz-in-acs\` as an Analyst scoped to \`ms-demo\`. Chris maps to
-\`chris-in-acs\` as an Analyst scoped to \`ms-demo\` only, which is
-incomplete compared with his two OpenShift administrator namespaces.
-
-Demo script: \`modules/users-part1-ocp-demo.md\`
-(GUI: \`/help?doc=users-part1-ocp-demo\`). Status → Demo also links there.
+Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
 
 ## Usage
 
 \`\`\`
 $(basename "$0") --help
-$(basename "$0") --status [--plane central-api] [--secured-cluster-id ID]... [--secured-cluster NAME]
-$(basename "$0") --run [--dry-run] [--plane central-api] [--secured-cluster-id ID]... [--secured-cluster NAME]
-$(basename "$0") --uninstall [--dry-run] [--plane central-api] [--secured-cluster-id ID]... [--secured-cluster NAME]
+$(basename "$0") --status [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --run [--dry-run] [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --uninstall [--dry-run] [--plane central-api] [--secured-cluster-id ID]...
+$(basename "$0") --hard-delete [--dry-run]
 \`\`\`
 
 ## Flags
 
-Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
-
 - \`--plane central-api\` - implied; accepted as a no-op (legacy \`central\` also accepted)
 - \`--plane secured-cluster\` / \`central-ocp\` - ignored (central-api-only; warn on stderr)
-- \`--secured-cluster-id ID\` - **lab** SC id from the orchestrator; ignored here (warn).
-  Not the same as \`--secured-cluster\`
-- \`--secured-cluster NAME\` - **ACS** secured cluster **name** used in the access
-  scope (default: the single cluster listed in Central)
+- \`--secured-cluster-id ID\` - ignored (no OpenShift work; warn)
 - \`--dry-run\` - Print the plan; change nothing
+- \`--hard-delete\` - Remove Inform policy and Red Hat Public (CLI only)
 
 ## Status Info
 
-- Demo script link; Central API
-- OpenShift provider still present (from Part 2)
-- Access scope \`ms-demo\`, roles \`boaz-in-acs\` / \`chris-in-acs\`, group rules
+- **Red Hat Public** - signature integration present
+- **Images must be signed by Red Hat Public** - Inform policy present
+- **Signed digests** - primed image digests Central has scanned
 
 ## Pre Conditions
 
-- \`users-part2-oauth\` installed (OpenShift login on Central)
+none
 
 ## Side effects
 
-- \`--run\` reconciles access scope \`ms-demo\`, roles \`boaz-in-acs\` and
-  \`chris-in-acs\`, and OpenShift auth group rules for adam, boaz, and chris
-- \`--uninstall\` removes those roles, that scope, and those name rules.
-  It does not remove the Part 2 auth provider, or the default rule that
-  maps unmatched users to None
+- \`--run\` ensures Red Hat Public + Inform policy; primes images
+- \`--uninstall\` removes the Inform policy only (leaves Red Hat Public;
+  \`--status\` stays needs-run until \`--run\` or \`--hard-delete\`)
+- \`--hard-delete\` removes the Inform policy and **Red Hat Public**
+  (CLI only, not GUI). Shows inventory, then requires typing \`DELETE\`
+  in an interactive terminal
+- Does not modify Signature Integration **Red Hat**
+- Does not delete images from Central
 EOF
 }
 
 run_helper() {
-  # macOS bash 3.2 + set -u: empty "${EXTRA_ARGS[@]}" is unbound.
-  if ((${#EXTRA_ARGS[@]})); then
-    "$PYTHON" "$HELPER" "$@" "${EXTRA_ARGS[@]}"
-  else
-    "$PYTHON" "$HELPER" "$@"
-  fi
+  "$PYTHON" "$HELPER" "$@"
 }
 
 do_status() {
@@ -121,10 +100,6 @@ do_run() {
     printf '%s\n' "$output"
     return 1
   fi
-  if [[ -z "$output" ]]; then
-    printf '%s\terror\trun command failed with no output\n' "$MODULE_ID" >&2
-    return 1
-  fi
   printf '%s\n' "$output"
   state="$(printf '%s\n' "$output" | awk -F'\t' 'NF >= 3 { s=$2 } END { print s }')"
   [[ "$state" == "ok" ]]
@@ -135,18 +110,7 @@ do_dry_run() {
     printf '%s\terror\tmissing helper %s\n' "$MODULE_ID" "$HELPER" >&2
     return 1
   fi
-  local output state
-  if ! output="$(run_helper run --cli --dry-run 2>&1)"; then
-    if [[ -z "$output" ]]; then
-      printf '%s\terror\tdry-run failed with no output\n' "$MODULE_ID" >&2
-      return 1
-    fi
-    printf '%s\n' "$output"
-    return 1
-  fi
-  printf '%s\n' "$output"
-  state="$(printf '%s\n' "$output" | awk -F'\t' 'NF >= 3 { s=$2 } END { print s }')"
-  [[ "$state" != "error" ]]
+  run_helper run --dry-run --cli
 }
 
 do_uninstall() {
@@ -156,10 +120,6 @@ do_uninstall() {
   fi
   local output state
   if ! output="$(run_helper uninstall --cli 2>&1)"; then
-    if [[ -z "$output" ]]; then
-      printf '%s\terror\tuninstall failed with no output\n' "$MODULE_ID" >&2
-      return 1
-    fi
     printf '%s\n' "$output"
     return 1
   fi
@@ -169,22 +129,57 @@ do_uninstall() {
 }
 
 do_uninstall_dry_run() {
+  run_helper uninstall --dry-run --cli
+}
+
+do_hard_delete() {
+  local dry_run="${1:-false}"
+
   if [[ ! -f "$HELPER" ]]; then
     printf '%s\terror\tmissing helper %s\n' "$MODULE_ID" "$HELPER" >&2
     return 1
   fi
+
+  if [[ ! -t 0 ]] || [[ -n "${CI:-}" ]]; then
+    echo "${MODULE_ID}: --hard-delete requires an interactive terminal (human confirmation)." >&2
+    printf '%s\terror\thard-delete requires interactive TTY\n' "$MODULE_ID"
+    return 1
+  fi
+
+  local inventory
+  if ! inventory="$(run_helper hard-delete-inventory --cli 2>&1)"; then
+    printf '%s\n' "$inventory" >&2
+    printf '%s\terror\thard-delete inventory failed\n' "$MODULE_ID"
+    return 1
+  fi
+  # Show inventory to the human (strip machine trailer from display if needed)
+  printf '%s\n' "$inventory" | grep -v '^ACS_HARD_DELETE_JSON=' || true
+  # Always flush before prompt
+  sync 2>/dev/null || true
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "${MODULE_ID}: dry-run hard-delete — inventory shown; nothing deleted."
+    printf '%s\tok\thard-delete dry-run (inventory only)\n' "$MODULE_ID"
+    return 0
+  fi
+
+  local answer
+  printf 'Type DELETE to confirm: '
+  IFS= read -r answer || true
+  if [[ "$answer" != "DELETE" ]]; then
+    echo "${MODULE_ID}: aborted (expected DELETE)." >&2
+    printf '%s\terror\thard-delete aborted\n' "$MODULE_ID"
+    return 1
+  fi
+
   local output state
-  if ! output="$(run_helper uninstall --cli --dry-run 2>&1)"; then
-    if [[ -z "$output" ]]; then
-      printf '%s\terror\tuninstall dry-run failed with no output\n' "$MODULE_ID" >&2
-      return 1
-    fi
+  if ! output="$(run_helper hard-delete-apply --cli 2>&1)"; then
     printf '%s\n' "$output"
     return 1
   fi
   printf '%s\n' "$output"
   state="$(printf '%s\n' "$output" | awk -F'\t' 'NF >= 3 { s=$2 } END { print s }')"
-  [[ "$state" != "error" ]]
+  [[ "$state" == "ok" ]]
 }
 
 emit_status() {
@@ -199,7 +194,7 @@ run_module() {
   local dry_run="${1:-false}"
   if [[ "$dry_run" == "true" ]]; then
     do_dry_run
-    return
+    return 0
   fi
   do_run
 }
@@ -227,6 +222,7 @@ main() {
       --status) action=status ;;
       --run) action=run ;;
       --uninstall) action=uninstall ;;
+      --hard-delete) action=hard-delete ;;
       --dry-run) dry_run=true ;;
       --plane)
         shift
@@ -237,11 +233,6 @@ main() {
         shift
         [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster-id needs an id" >&2; exit 1; }
         central_only_ignore_sc_id "$prog" "$1"
-        ;;
-      --secured-cluster)
-        shift
-        [[ $# -gt 0 ]] || { echo "${prog}: --secured-cluster needs a name" >&2; exit 1; }
-        EXTRA_ARGS+=(--secured-cluster "$1")
         ;;
       *)
         echo "${prog}: unknown option: $1" >&2
@@ -258,6 +249,7 @@ main() {
     status) emit_status ;;
     run) run_module "$dry_run" ;;
     uninstall) uninstall_module "$dry_run" ;;
+    hard-delete) do_hard_delete "$dry_run" ;;
   esac
 }
 

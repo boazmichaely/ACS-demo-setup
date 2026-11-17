@@ -150,7 +150,7 @@ co_ensure_oc() {
 }
 
 co_scan_helper() {
-  printf '%s' "${COMPLIANCE_MODULE_ROOT}/modules/compliance_scan.py"
+  printf '%s' "${MODULE_DIR}/compliance_scan.py"
 }
 
 co_parse_scan_status() {

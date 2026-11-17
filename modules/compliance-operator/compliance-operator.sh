@@ -4,8 +4,10 @@
 set -euo pipefail
 
 MODULE_ID="compliance-operator"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIB="${ROOT}/modules/compliance_operator_lib.sh"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+LIB="${MODULE_DIR}/compliance_operator_lib.sh"
 
 usage() {
   cat <<EOF
@@ -78,6 +80,7 @@ fi
 
 # shellcheck source=compliance_operator_lib.sh
 COMPLIANCE_MODULE_ROOT="$ROOT"
+export MODULE_DIR
 source "$LIB"
 
 do_status() {

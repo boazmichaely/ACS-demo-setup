@@ -26,8 +26,8 @@ If DEMO policies are missing the category (older installs), re-run the policy mo
 ## Commands
 
 ```bash
-./modules/slack-notifier.sh --status
-./modules/slack-notifier.sh --run
-./modules/slack-notifier.sh --run --dry-run
-./modules/slack-notifier.sh --uninstall
+./modules/slack-notifier/slack-notifier.sh --status
+./modules/slack-notifier/slack-notifier.sh --run
+./modules/slack-notifier/slack-notifier.sh --run --dry-run
+./modules/slack-notifier/slack-notifier.sh --uninstall
 ```

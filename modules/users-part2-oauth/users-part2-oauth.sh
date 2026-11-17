@@ -3,8 +3,10 @@
 set -euo pipefail
 
 MODULE_ID="users-part2-oauth"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HELPER="${ROOT}/modules/users_part2_oauth.py"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+HELPER="${MODULE_DIR}/users_part2_oauth.py"
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
   if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
@@ -27,7 +29,7 @@ Part of the Users series:
 - Part 2 (OAuth) - this module
 - Part 3 (ACS) - ACS roles and scopes (\`users-part3-acs\`)
 
-Demo script: \`modules/users-part1-ocp-demo.md\`
+Demo script: \`modules/users-part1-ocp/users-part1-ocp-demo.md\`
 (GUI: \`/help?doc=users-part1-ocp-demo\`). Status → Demo also links there.
 
 Catalog: \`impactPlanes: ["central-api"]\` (central-api only).

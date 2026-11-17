@@ -10,7 +10,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lib.central import (  # noqa: E402
@@ -66,8 +66,8 @@ DEMO_SCRIPT_SECTION: dict[str, Any] = {
         "Users Part 2 (OAuth): Central Login with OpenShift for the ACS "
         "console plugin demo.\n\n"
         "Before/after experience tables for adam, boaz, and chris:\n"
-        "  modules/users-part1-ocp-demo.md\n"
-        "  https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp-demo.md\n\n"
+        "  modules/users-part1-ocp/users-part1-ocp-demo.md\n"
+        "  https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/users-part1-ocp/users-part1-ocp-demo.md\n\n"
         "This module is required before OpenShift login works in that walkthrough."
     ),
     "bodyFormat": "prose",

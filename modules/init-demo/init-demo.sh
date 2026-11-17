@@ -16,8 +16,10 @@ MANIFEST_URLS=(
 REQUIRED_READY_DEPLOYS=(clean-app dirty-app)
 ALL_DEPLOYS=(clean-app dirty-app blue-app red-app)
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HELPER="${ROOT}/modules/init_demo.py"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+HELPER="${MODULE_DIR}/init_demo.py"
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
   if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then

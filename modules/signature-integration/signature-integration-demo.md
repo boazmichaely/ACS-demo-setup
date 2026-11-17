@@ -24,8 +24,8 @@ Module: `signature-integration`
 ## Commands
 
 ```bash
-./modules/signature-integration.sh --status
-./modules/signature-integration.sh --run
-./modules/signature-integration.sh --uninstall          # policy only
-./modules/signature-integration.sh --hard-delete        # interactive; type DELETE
+./modules/signature-integration/signature-integration.sh --status
+./modules/signature-integration/signature-integration.sh --run
+./modules/signature-integration/signature-integration.sh --uninstall          # policy only
+./modules/signature-integration/signature-integration.sh --hard-delete        # interactive; type DELETE
 ```

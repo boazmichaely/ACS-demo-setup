@@ -3,8 +3,10 @@
 set -euo pipefail
 
 MODULE_ID="splunk-TA"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LIB="${ROOT}/modules/splunk_ta_lib.sh"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+LIB="${MODULE_DIR}/splunk_ta_lib.sh"
 
 usage() {
   cat <<EOF
@@ -21,7 +23,7 @@ soft-default SC.
 
 Central endpoint, API token, and modular inputs are configured in the
 Splunk UI after install - see
-[modules/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA-demo.md).
+[modules/splunk-TA/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA/splunk-TA-demo.md).
 
 ## Usage
 
@@ -51,7 +53,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cl
 
 ## Installation (TA package)
 
-[modules/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA-demo.md)
+[modules/splunk-TA/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA/splunk-TA-demo.md)
 
 ## Pre Conditions
 

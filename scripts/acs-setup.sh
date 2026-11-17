@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ACS demo setup orchestrator - dispatches to modules/<id>.sh
+# ACS demo setup orchestrator - dispatches to modules/<id>/<id>.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -81,7 +81,7 @@ module_script_path() {
   local found
   found="$(module_meta "$id" id)"
   [[ -n "$found" && "$found" != "null" ]] || die "unknown module id: $id"
-  printf '%s/modules/%s.sh' "$ROOT" "$id"
+  printf '%s/modules/%s/%s.sh' "$ROOT" "$id" "$id"
 }
 
 # Catalog order in modules.json (1-based index for display / JSON "number").

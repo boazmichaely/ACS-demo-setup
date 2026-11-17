@@ -19,8 +19,10 @@ U1_SC_IDS=()
 U1_SC_ID=""
 U1_PLANE=""
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEMO_MD="${ROOT}/modules/users-part1-ocp-demo.md"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+DEMO_MD="${MODULE_DIR}/users-part1-ocp-demo.md"
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
   if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
@@ -49,7 +51,7 @@ Administration → Cluster Settings → Configuration → Console →
 Console plugins, then enable \`advanced-cluster-security\`.
 
 Demo script (before/after tables for adam, boaz, chris):
-\`modules/users-part1-ocp-demo.md\` (GUI: \`/help?doc=users-part1-ocp-demo\`).
+\`modules/users-part1-ocp/users-part1-ocp-demo.md\` (GUI: \`/help?doc=users-part1-ocp-demo\`).
 Status → Demo also links there.
 
 **Personas** (password = username)
@@ -445,7 +447,7 @@ do_status() {
     demo_body="Users Part 1 (OCP): OpenShift users and project RBAC for the ACS console plugin demo.
 
 Before/after experience tables for adam, boaz, and chris:
-  modules/users-part1-ocp-demo.md
+  modules/users-part1-ocp/users-part1-ocp-demo.md
   GUI: /help?doc=users-part1-ocp-demo
 
 Run Part 2 and Part 3 for Act 2 (console vs ACS Central: boaz aligned, chris misaligned)."

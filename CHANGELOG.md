@@ -7,6 +7,10 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- Modules live in `modules/<id>/` with entrypoint `modules/<id>/<id>.sh` (hard cutover; no flat `modules/<id>.sh`). Shared Python stays in `lib/`; shared orch-flag snippets stay as `modules/_*.sh`. Recovery tag before this layout: `snapshot-pre-module-folders`.
+
 ### Fixed
 
 - Update nudge: server-side GitHub compare via `/api/version` (no browser→GitHub fetch); dismiss is page-load only.

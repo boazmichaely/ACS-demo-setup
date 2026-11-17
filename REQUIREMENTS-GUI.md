@@ -74,7 +74,7 @@ Central fold collapsed by default; Secured clusters open by default. SC rows are
 | G-MOD-4 | Bulk toolbar: Select all + count; highlight when selection &gt; 0. |
 | G-MOD-5 | Status cell: badge (detail via title / Status jump). Pending **checking** while refresh runs. |
 | G-MOD-6 | Badge mapping `ok` / `needs-run` / `error` (ready / needs-run / error). |
-| G-MOD-7 | **Not installed** (no `modules/<id>.sh`): row **grayed out**, checkbox **disabled**, not selectable; badge **not installed**. Count selectable rows only in bulk toolbar. |
+| G-MOD-7 | **Not installed** (no `modules/<id>/<id>.sh`): row **grayed out**, checkbox **disabled**, not selectable; badge **not installed**. Count selectable rows only in bulk toolbar. |
 | G-MOD-8 | One toolbar above the table: Select all, selection count, then **Dry run** beside **Run selected** / **Uninstall selected**. Per-row kebab: Run / Uninstall (Dry run applies). No “run everything” shortcut - use Select all + Run selected if needed. |
 
 ---
@@ -149,5 +149,5 @@ Milestone: **shell port** + not-installed module rules.
 |------|--------|
 | Not-installed modules | Enforce G-MOD-7 / G-STAT-5 in live `app.js` |
 | oc chip | Wire to orchestrator `--oc-status` JSON or lightweight API |
-| Module scripts | Real status when `modules/<id>.sh` exist |
+| Module scripts | Real status when `modules/<id>/<id>.sh` exist |
 | Run / Uninstall confirm | Always-on modal (summary + selectors); catalog `runSummary` / `uninstallSummary` |

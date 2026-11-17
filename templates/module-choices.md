@@ -8,11 +8,11 @@ Most modules do **not** need this. Start from [`module-skeleton.sh`](module-skel
 
 **Is not:** multi-plane (`--plane`) or multi secured-cluster (`--secured-cluster-id` / `SC_IDS`). Those already live in the simple skeleton. Do not add this recipe only because the module has more than one plane or SC.
 
-Real modules that use this pattern: [`modules/slack-notifier.sh`](../modules/slack-notifier.sh), [`modules/users-part3-acs.sh`](../modules/users-part3-acs.sh), [`modules/syslog-notifier.sh`](../modules/syslog-notifier.sh) (`--format`).
+Real modules that use this pattern: [`modules/slack-notifier/slack-notifier.sh`](../modules/slack-notifier/slack-notifier.sh), [`modules/users-part3-acs/users-part3-acs.sh`](../modules/users-part3-acs/users-part3-acs.sh), [`modules/syslog-notifier/syslog-notifier.sh`](../modules/syslog-notifier/syslog-notifier.sh) (`--format`).
 
 Prefer CLI flags over module-specific environment variables for choices. Add only the flags you need (do not copy every example below).
 
-## Shell (`modules/<id>.sh`)
+## Shell (`modules/<id>/<id>.sh`)
 
 Copy these pieces into the live script from the skeleton. Replace the simple `run_helper` if you already wired one - do not stack both.
 
@@ -41,7 +41,7 @@ Minimal example (one choice flag). Add more flags the same way only if needed:
 macOS `/bin/bash` + `set -u`: empty `"${EXTRA_ARGS[@]}"` is unbound. Use a length guard:
 
 ```bash
-HELPER="${ROOT}/modules/my_feature.py"
+HELPER="${MODULE_DIR}/my_feature.py"
 PYTHON="${ACS_DEMO_PYTHON:-}"
 if [[ -z "$PYTHON" ]]; then
   if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then
@@ -74,7 +74,7 @@ run_helper uninstall --cli
 When the shell passes choice flags **before** the subcommand:
 
 ```text
-python modules/my_feature.py --format CEF status --cli
+python modules/my-feature/my_feature.py --format CEF status --cli
 ```
 
 declare those flags on the **parent** parser (not only on subcommands). Minimal example:

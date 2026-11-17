@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lib.central import (  # noqa: E402

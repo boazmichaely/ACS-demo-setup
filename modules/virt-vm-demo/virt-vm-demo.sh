@@ -19,9 +19,11 @@ CENTRAL_NS=""
 POLL_INTERVAL="1m"
 RESCAN_INTERVAL="30m"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ASSET_DIR="${ROOT}/modules/virt-vm-demo"
-HELPER="${ROOT}/modules/virt_vm_demo.py"
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
+ASSET_DIR="${MODULE_DIR}"
+HELPER="${MODULE_DIR}/virt_vm_demo.py"
 CACHE_DIR="${ROOT}/.cache/virt-vm-demo"
 BIN_DIR="${ROOT}/.cache/bin"
 KEY_PATH="${CACHE_DIR}/id_ed25519"
@@ -51,7 +53,7 @@ Prepare an ACS guest-vulnerability demo on OpenShift Virtualization:
 4. Install \`roxagent\` (from Sensor image) in each guest and start it
 5. Wait until Central shows CVE findings on both VMs
 
-Talk track: [modules/virt-vm-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/virt-vm-demo.md)
+Talk track: [modules/virt-vm-demo/virt-vm-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/virt-vm-demo/virt-vm-demo.md)
 
 Catalog: \`impactPlanes: ["central-api","central-ocp","secured-cluster"]\`.
 \`securedClusterPolicy: single\` - one SC only (orchestrator refuses multi-SC).
@@ -703,7 +705,7 @@ wait_central_vms() {
 # Build ACS_SECTIONS_JSON for the active plane(s) only. Do not probe SC resources
 # while on central-ocp (Central kubeconfig), or CNV/VMs will look falsely missing.
 emit_status_sections() {
-  local talk="https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/virt-vm-demo.md"
+  local talk="https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/virt-vm-demo/virt-vm-demo.md"
   local sections="[]"
   local cnv="missing" flags="missing" vms_ready="0"
   local central_json='{"ok":false,"error":"not probed","count":0,"scanned":0,"withFindings":0,"samples":[],"vms":[]}'
@@ -938,7 +940,7 @@ do_run() {
   if want_central_api; then
     wait_central_vms false
   fi
-  echo "${MODULE_ID}: done. Talk track: https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/virt-vm-demo.md"
+  echo "${MODULE_ID}: done. Talk track: https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/virt-vm-demo/virt-vm-demo.md"
   do_status || true
   if ! demo_ready; then
     echo "${MODULE_ID}: not demo-ready for plane=${VIRT_PLANE:-both}" >&2

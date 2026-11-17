@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Copy this file to modules/<id>.sh, then search for TODO and fill them in.
-# Example: cp templates/module-skeleton.sh modules/my-feature.sh && chmod +x modules/my-feature.sh
+# Copy into modules/<id>/<id>.sh, then search for TODO and fill them in.
+# Example:
+#   mkdir -p modules/my-feature
+#   cp templates/module-skeleton.sh modules/my-feature/my-feature.sh
+#   chmod +x modules/my-feature/my-feature.sh
 #
 # This file is the simple starting point (default). Do not add EXTRA_ARGS or
 # choice flags unless you need them - see templates/module-choices.md
-# (ADVANCED — use this when your module has multiple choices).
+# (ADVANCED - use this when your module has multiple choices).
 set -euo pipefail
 
 # TODO: set to the same id you put in config/modules.json (and in the filename).
 MODULE_ID="my-feature"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# When this file lives in modules/, ROOT is the repo root.
+MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "${MODULE_DIR}/../.." && pwd)"
+# When this file lives in modules/<id>/, ROOT is the repo root.
 # If you are still editing under templates/, adjust paths after you copy.
+[[ -f "$ROOT/config/modules.json" ]] || { echo "ROOT miscomputed: $ROOT" >&2; exit 1; }
 
 # Set by orchestrator / CLI when impactPlanes includes secured-cluster and/or Central.
 PLANE=""
@@ -131,8 +136,8 @@ EOF
 do_status() {
   # TODO: replace fold body + summary with real checks against the lab.
   emit_status_sections
-  printf '%s\tneeds-run\tTODO: implement do_status in modules/%s.sh\n' \
-    "$MODULE_ID" "$MODULE_ID"
+  printf '%s\tneeds-run\tTODO: implement do_status in modules/%s/%s.sh\n' \
+    "$MODULE_ID" "$MODULE_ID" "$MODULE_ID"
 }
 
 # Apply the desired state. Must be safe to run twice.
@@ -181,10 +186,10 @@ do_uninstall_dry_run() {
 
 # ---------------------------------------------------------------------------
 # Optional: call a Python helper for Central API / heavy JSON (simple path).
-# Copy templates/module-helper.py to modules/<id_with_underscores>.py only if
-# you need it. Example for id "my-feature" → modules/my_feature.py
+# Copy templates/module-helper.py next to this entrypoint only if you need it.
+# Example for id "my-feature" → modules/my-feature/my_feature.py
 #
-#   HELPER="${ROOT}/modules/my_feature.py"
+#   HELPER="${MODULE_DIR}/my_feature.py"
 #   PYTHON="${ACS_DEMO_PYTHON:-}"
 #   if [[ -z "$PYTHON" ]]; then
 #     if [[ -x "${ROOT}/gui/.venv/bin/python" ]]; then

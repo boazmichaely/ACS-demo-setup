@@ -4,12 +4,13 @@
 Copy next to your shell entrypoint only when bash is a poor fit - usually
 Central HTTP/JSON work. Example:
 
-  cp templates/module-skeleton.sh modules/my-feature.sh
-  cp templates/module-helper.py modules/my_feature.py
-  chmod +x modules/my-feature.sh
+  mkdir -p modules/my-feature
+  cp templates/module-skeleton.sh modules/my-feature/my-feature.sh
+  cp templates/module-helper.py modules/my-feature/my_feature.py
+  chmod +x modules/my-feature/my-feature.sh
 
 Wire the helper from the shell script using the commented block in
-templates/module-skeleton.sh (set HELPER to modules/my_feature.py).
+templates/module-skeleton.sh (set HELPER to ${MODULE_DIR}/my_feature.py).
 
 The shell script remains the module entrypoint the orchestrator runs.
 This file is a library/CLI the shell calls.
@@ -30,11 +31,11 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-# TODO: set to the same id as modules/<id>.sh and config/modules.json
+# TODO: set to the same id as modules/<id>/<id>.sh and config/modules.json
 MODULE_ID = "my-feature"
 
 

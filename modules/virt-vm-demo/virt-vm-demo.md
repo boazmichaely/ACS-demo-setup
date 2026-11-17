@@ -2,7 +2,7 @@
 
 Audience: security / platform teams evaluating RHACS on OpenShift Virtualization
 (for example EBC or discovery). Runtime for the click path: about 5-7 minutes
-once the lab module has finished (`./modules/virt-vm-demo.sh --run`).
+once the lab module has finished (`./modules/virt-vm-demo/virt-vm-demo.sh --run`).
 
 Lab module creates project `acs-virt-demo` with two RHEL 9 guests (`rhel9-1`,
 `rhel9-2`) from the eng **dnf-primed** image
@@ -64,7 +64,7 @@ visibility.
 
 | Item | Detail |
 |------|--------|
-| Module | `./modules/virt-vm-demo.sh --run` |
+| Module | `./modules/virt-vm-demo/virt-vm-demo.sh --run` |
 | Namespace | `acs-virt-demo` |
 | Guests | `rhel9-1`, `rhel9-2` (dnf-primed eng image + pull secret) |
 | Scraper | SecuredCluster `virtualMachines.scraper.pollInterval` = `1m` (SC); `ROX_VIRTUAL_MACHINES` also on Central CR (Central OCP) |
