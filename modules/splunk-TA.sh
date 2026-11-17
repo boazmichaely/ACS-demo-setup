@@ -51,9 +51,7 @@ $(basename "$0") --uninstall [--dry-run] [--plane secured-cluster] [--secured-cl
 
 ## Installation (TA package)
 
-See [modules/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA-demo.md)
-(download \`.spl\`, place under \`~/code/Splunk/\`, talk track). That page is the
-source of truth - do not duplicate the steps here.
+[modules/splunk-TA-demo.md](https://github.com/boazmichaely/ACS-demo-setup/blob/main/modules/splunk-TA-demo.md)
 
 ## Pre Conditions
 
