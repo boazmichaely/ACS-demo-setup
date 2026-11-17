@@ -503,6 +503,41 @@ body:has(#page) {
   border-top: 1px solid var(--pf-t--global--border--color--default);
 }
 
+/* Slack Incoming Webhook empty-state (Integration Secrets) */
+.demo-slack-webhook-missing {
+  margin: 0 0 var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border: 1px solid var(--pf-t--global--border--color--status--danger--default, #c9190b);
+  border-left-width: 4px;
+  border-radius: var(--pf-t--global--border--radius--sm, 4px);
+  background: var(--pf-t--global--background--color--status--danger--weak, #faeae8);
+  color: var(--pf-t--global--text--color--regular, #151515);
+  font-size: var(--pf-t--global--font--size--sm);
+  line-height: 1.45;
+}
+
+.demo-slack-webhook-missing strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--pf-t--global--text--color--status--danger--default, #a30000);
+}
+
+.demo-slack-webhook-missing a {
+  font-weight: 600;
+}
+
+.demo-field--webhook-missing .pf-v6-c-form-control {
+  border-color: var(--pf-t--global--border--color--status--danger--default, #c9190b);
+  box-shadow: inset 0 0 0 1px
+    var(--pf-t--global--border--color--status--danger--default, #c9190b);
+}
+
+.demo-field--webhook-missing .pf-v6-c-form-control::placeholder {
+  color: var(--pf-t--global--text--color--status--danger--default, #a30000);
+  opacity: 0.85;
+  font-weight: 600;
+}
+
 .demo-central-cols {
   display: grid;
   grid-template-columns: 1fr;

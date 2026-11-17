@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ACS demo: Slack Incoming Webhook guide</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png" />
+    <style>
+      :root {
+        --ink: #1b1b1b;
+        --muted: #5c5c5c;
+        --line: #d2d2d2;
+        --bg: #f5f5f5;
+        --card: #fff;
+        --accent: #0066cc;
+        --ok: #3e8635;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Red Hat Text", "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.45;
+      }
+      main {
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 1.5rem 1.25rem 4rem;
+      }
+      h1 {
+        font-size: 1.75rem;
+        margin: 0 0 0.35rem;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 1.5rem;
+      }
+      .callout {
+        background: #e7f1fa;
+        border-left: 4px solid var(--accent);
+        padding: 0.75rem 1rem;
+        margin: 0 0 1.5rem;
+      }
+      .callout strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+      .warn {
+        background: #fdf2e9;
+        border-left-color: #ec7a08;
+      }
+      ol.steps {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: step;
+      }
+      ol.steps > li {
+        counter-increment: step;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 1rem 1.1rem 1.15rem;
+        margin: 0 0 1rem;
+      }
+      ol.steps > li::before {
+        content: "Step " counter(step);
+        display: inline-block;
+        font-weight: 700;
+        color: var(--accent);
+        margin-bottom: 0.35rem;
+      }
+      ol.steps h2 {
+        font-size: 1.1rem;
+        margin: 0 0 0.5rem;
+      }
+      ol.steps p,
+      ol.steps ul {
+        margin: 0 0 0.65rem;
+      }
+      ol.steps ul {
+        padding-left: 1.2rem;
+      }
+      figure {
+        margin: 0.75rem 0 0;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        overflow: hidden;
+        background: #fff;
+      }
+      figure img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      figcaption {
+        font-size: 0.85rem;
+        color: var(--muted);
+        padding: 0.45rem 0.65rem;
+        border-top: 1px solid var(--line);
+        background: #fafafa;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.88em;
+      }
+      pre {
+        background: #1b1b1b;
+        color: #f0f0f0;
+        padding: 0.85rem 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        margin: 0.5rem 0 0;
+      }
+      a {
+        color: var(--accent);
+      }
+      .done {
+        color: var(--ok);
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Maintainer note: Slack Incoming Webhook</h1>
+      <p class="lede">
+        Demo labs typically use channel
+        <strong>#acs-demo-notifier</strong>. The Incoming Webhook URL is stored
+        only in Lab credentials (never in the shared defaults file). Day-to-day
+        users follow this page when the webhook field is empty.
+      </p>
+
+      <div class="callout">
+        <strong>When to use this guide</strong>
+        Create or rotate an Incoming Webhook, then paste the URL into Lab
+        credentials → Integration Secrets → Slack notifier.
+      </div>
+
+      
+      <ol class="steps">
+        <li>
+          <h2>Open the  Slack "Your Apps" page</h2>
+          <p>
+            In a normal browser, go to
+            <a href="https://api.slack.com/apps" target="_blank" rel="noopener"
+              >https://api.slack.com/apps</a
+            >.
+            You should already see Workspace <strong>Internal Red Hat</strong>.
+          
+          </p>
+          <figure>
+            <img
+              src="/help-assets/images/slack-webhook/01-your-apps.png"
+              alt="Slack Your Apps list showing ACS Demo Slack Notifier under Internal Red Hat"
+            />
+            <figcaption>
+              Find <strong>ACS Demo Slack Noti…</strong> (App ID A06NNRDCSKF). Do
+              not create a new app unless that row is missing.
+            </figcaption>
+          </figure>
+        </li>
+
+        <li>
+          <h2>Open the app, then Incoming Webhooks</h2>
+          <p>
+            Click <strong>ACS Demo Slack Notifier</strong>. You land on
+            <strong>Basic Information</strong>. Client Secret / Signing Secret
+            here are unrelated to the Incoming Webhook URL ACS needs - leave them
+            alone.
+          </p>
+          <p>
+            In the left sidebar under <strong>Features</strong>, click
+            <strong>Incoming Webhooks</strong> (red box).
+          </p>
+          <figure>
+            <img
+              src="/help-assets/images/slack-webhook/02-basic-information.png"
+              alt="Basic Information with Incoming Webhooks highlighted in the Features sidebar"
+            />
+            <figcaption>
+              Open the app, then Features → Incoming Webhooks (highlighted).
+            </figcaption>
+          </figure>
+        </li>
+
+        <li>
+          <h2>Confirm the shared channel row</h2>
+          <p>On the Incoming Webhooks page:</p>
+          <ul>
+            <li>Toggle should be <strong>On</strong>.</li>
+            <li>
+              Under <strong>Webhook URLs for Your Workspace</strong>, find the
+              row whose Channel is <code>#acs-demo-notifier</code>.
+            </li>
+            <li>
+              If the channel was renamed in Slack, the Channel column updates
+              here (no need to recreate the webhook).
+            </li>
+            <li>
+              If that row is missing: click <strong>Add New Webhook</strong>,
+              pick <code>#acs-demo-notifier</code>, authorize, then use the new
+              row.
+            </li>
+          </ul>
+          <figure>
+            <img
+              src="/help-assets/images/slack-webhook/04-incoming-webhooks-list.png"
+              alt="Incoming Webhooks list with webhook URLs redacted; channels visible"
+            />
+            <figcaption>
+              Shared demo row: <code>#acs-demo-notifier</code>. Webhook URL
+              values are redacted in this guide on purpose.
+            </figcaption>
+          </figure>
+        </li>
+
+        <li>
+          <h2>Copy the webhook and smoke-test</h2>
+          <p>
+            Click <strong>Copy</strong> on the
+            <code>#acs-demo-notifier</code> row. Do not paste the URL into chat,
+            tickets, or git.
+          </p>
+          <p>Local smoke test:</p>
+          <pre>curl -sS -X POST -H 'Content-type: application/json' \
+  --data '{"text":"ACS demo setup: webhook spike test"}' \
+  'PASTE_WEBHOOK_URL_HERE'</pre>
+          <p>
+            Success is a plain <code>ok</code> response and a message in
+            <code>#acs-demo-notifier</code>.
+          </p>
+          <p class="done">Spike verified: test message landed in #acs-demo-notifier.</p>
+        </li>
+
+        <li>
+          <h2>Update defaults or Lab credentials</h2>
+          <p>
+            In the ACS demo setup GUI: Lab credentials →
+            <strong>Integration Secrets → Slack notifier</strong> → paste the
+            webhook URL, confirm notifier name / channel URL, then Save.
+            <strong>Restore defaults</strong> resets name and channel only; it
+            does not clear a webhook you already pasted.
+          </p>
+          <p>
+            One-shot CLI:
+            <code>./modules/slack-notifier.sh --run --webhook URL --name NAME --channel-url URL</code>.
+          </p>
+        </li>
+      </ol>
+
+      <p class="lede" style="margin-top: 2rem">
+        Module <code>slack-notifier</code> creates the Central Slack integration
+        and sends a test message on <code>--run</code>.
+      </p>
+    </main>
+  </body>
+</html>

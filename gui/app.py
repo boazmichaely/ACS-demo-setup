@@ -431,6 +431,10 @@ HELP_DOCS: dict[str, tuple[str, Path]] = {
         "Users series demo script",
         REPO_ROOT / "modules" / "users-part1-ocp-demo.md",
     ),
+    "slack-notifier-demo": (
+        "Slack notifier demo",
+        REPO_ROOT / "modules" / "slack-notifier-demo.md",
+    ),
 }
 
 

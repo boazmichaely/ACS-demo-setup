@@ -92,14 +92,33 @@ function slackNotifierDefaults() {
 
 function restoreSlackNotifierDefaults() {
   const defs = slackNotifierDefaults();
+  // Name + channel come from shared defaults; webhook is never shipped - keep
+  // whatever the lab already has (or empty for a new user).
   if (fields.slackNotifierName) fields.slackNotifierName.value = defs.notifierName || "";
-  if (fields.slackWebhookUrl) fields.slackWebhookUrl.value = defs.webhookUrl || "";
   if (fields.slackChannelUrl) fields.slackChannelUrl.value = defs.channelUrl || "";
   const lab = editingLab();
   if (lab) {
-    lab.slackNotifier = { ...defs };
+    const currentWh = (fields.slackWebhookUrl?.value || lab.slackNotifier?.webhookUrl || "").trim();
+    lab.slackNotifier = {
+      notifierName: defs.notifierName || "#acs-demo-notifier",
+      channelUrl: defs.channelUrl || "",
+      webhookUrl: currentWh,
+    };
+    if (fields.slackWebhookUrl) fields.slackWebhookUrl.value = currentWh;
     updateFoldMetas(lab);
   }
+  syncSlackWebhookMissingHint();
+  if (credEditMode) syncCredChrome();
+}
+
+/** Show the webhook empty-state callout when the Incoming Webhook URL is blank. */
+function syncSlackWebhookMissingHint() {
+  const missing = document.getElementById("slackWebhookMissing");
+  const field = document.getElementById("slackWebhookField");
+  const input = fields.slackWebhookUrl;
+  const empty = !(input?.value || "").trim();
+  if (missing) missing.hidden = !empty;
+  if (field) field.classList.toggle("demo-field--webhook-missing", empty);
 }
 
 function emptySlackNotifier() {
@@ -2541,12 +2560,7 @@ function updateFoldMetas(lab) {
   const defs = slackNotifierDefaults();
   const snName = (sn.notifierName || defs.notifierName || "#acs-demo-notifier").trim();
   const wh = (sn.webhookUrl || "").trim() || (defs.webhookUrl || "").trim();
-  const ch = (sn.channelUrl || "").trim() || (defs.channelUrl || "").trim();
-  const usingDefault =
-    (!wh || wh === (defs.webhookUrl || "").trim()) &&
-    (!sn.notifierName || sn.notifierName === defs.notifierName) &&
-    (!ch || ch === (defs.channelUrl || "").trim());
-  const whBit = !wh ? "no webhook" : usingDefault ? "default" : "custom";
+  const whBit = !wh ? "no webhook" : "webhook set";
   if (slackMeta) {
     slackMeta.textContent = `${snName} · ${whBit}`;
   }
@@ -2841,7 +2855,8 @@ function fillEditingLabForm() {
       sn.notifierName || snDefs.notifierName || "#acs-demo-notifier";
   }
   if (fields.slackWebhookUrl) {
-    fields.slackWebhookUrl.value = sn.webhookUrl || snDefs.webhookUrl || "";
+    // Webhook is credentials-only (shared defaults never ship a URL).
+    fields.slackWebhookUrl.value = (sn.webhookUrl || "").trim();
   }
   if (fields.slackChannelUrl) {
     fields.slackChannelUrl.value = sn.channelUrl || snDefs.channelUrl || "";
@@ -2854,6 +2869,7 @@ function fillEditingLabForm() {
 
   renderSecuredClusters(lab);
   updateFoldMetas(lab);
+  syncSlackWebhookMissingHint();
   syncCredentialCopyButtons();
   syncCredChrome();
 }
@@ -2992,6 +3008,7 @@ async function switchActiveLab(labId) {
 
 function normalizeLabForCompare(lab) {
   if (!lab) return null;
+  const sn = lab.slackNotifier || {};
   return {
     id: lab.id || "",
     name: (lab.name || "").trim(),
@@ -2999,6 +3016,12 @@ function normalizeLabForCompare(lab) {
     centralCluster: lab.centralCluster || {},
     securedClusters: lab.securedClusters || [],
     activeSecuredClusterId: lab.activeSecuredClusterId || "",
+    // Integration Secrets (Slack) must dirty Save on their own.
+    slackNotifier: {
+      webhookUrl: (sn.webhookUrl || "").trim(),
+      notifierName: (sn.notifierName || "").trim(),
+      channelUrl: (sn.channelUrl || "").trim(),
+    },
   };
 }
 
@@ -3312,6 +3335,16 @@ document.getElementById("btnMakeActive")?.addEventListener("click", () => {
   makeEditingLabActive().catch((e) => setCredFeedback(e.message, true));
 });
 document.getElementById("btnAddSecuredCluster")?.addEventListener("click", addSecuredCluster);
+
+fields.slackWebhookUrl?.addEventListener("input", () => {
+  syncSlackWebhookMissingHint();
+  const lab = editingLab();
+  if (lab) {
+    lab.slackNotifier = lab.slackNotifier || emptySlackNotifier();
+    lab.slackNotifier.webhookUrl = (fields.slackWebhookUrl.value || "").trim();
+    updateFoldMetas(lab);
+  }
+});
 
 document.getElementById("btnSlackRestoreDefaults")?.addEventListener("click", (e) => {
   e.preventDefault();

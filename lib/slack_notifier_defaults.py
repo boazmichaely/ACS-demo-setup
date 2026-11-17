@@ -1,6 +1,8 @@
-"""Committed defaults for the shared #acs-demo-notifier Incoming Webhook.
+"""Committed defaults for Slack notifier name/channel (#acs-demo-notifier).
 
-Lab credentials may override per lab. Empty override → use this file.
+webhookUrl is intentionally empty here - Incoming Webhook URLs are credentials-
+only (per lab). Lab credentials supply the webhook; empty name/channel fall
+back to this file.
 """
 
 from __future__ import annotations

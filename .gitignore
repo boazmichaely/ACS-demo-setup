@@ -24,6 +24,10 @@ secrets/
 *token*
 !*token*example*
 *webhook*
+# Illustrated Slack webhook guide (redacted PNGs + HTML) is public docs, not a secret dump
+!gui/static/slack-webhook-guide.html
+!docs/images/slack-webhook/
+!docs/images/slack-webhook/**
 *htpasswd*
 *.htpasswd
 

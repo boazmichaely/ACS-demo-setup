@@ -17,7 +17,7 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=content_copy,done,lock,open_in_new"
     />
-    <link rel="stylesheet" href="/static/demo-setup.css?v=shell107" />
+    <link rel="stylesheet" href="/static/demo-setup.css?v=shell109" />
   </head>
   <body>
     <div class="pf-v6-c-page pf-m-no-sidebar" id="page">
@@ -534,11 +534,11 @@
                       </summary>
                       <div class="demo-fold__body">
                         <p class="demo-sub__hint">
-                          Defaults for
-                          <code>#acs-demo-notifier</code> ship in
-                          <code>config/slack-notifier.defaults.json</code>
-                          (read-only). Edit below to override for this lab, or
-                          restore defaults. Maintainer notes:
+                          Notifier name and channel default to
+                          <code>#acs-demo-notifier</code>. The Incoming Webhook
+                          URL is per lab (stored in credentials, never in the
+                          shared defaults). Restore defaults resets name and
+                          channel only.
                           <a
                             href="/static/slack-webhook-guide.html"
                             target="_blank"
@@ -556,7 +556,23 @@
                             placeholder="#acs-demo-notifier"
                           />
                         </label>
-                        <label class="demo-field">
+                        <div
+                          id="slackWebhookMissing"
+                          class="demo-slack-webhook-missing"
+                          hidden
+                          role="status"
+                        >
+                          <strong>Incoming webhook required</strong>
+                          Add your Slack Incoming Webhook URL here. Create one
+                          for your channel using the
+                          <a
+                            href="/static/slack-webhook-guide.html"
+                            target="_blank"
+                            rel="noopener"
+                            >webhook guide</a
+                          >, then paste the URL in the field below.
+                        </div>
+                        <label class="demo-field" id="slackWebhookField">
                           <span>Incoming Webhook URL</span>
                           <input
                             class="pf-v6-c-form-control"
@@ -564,7 +580,7 @@
                             type="text"
                             spellcheck="false"
                             autocomplete="off"
-                            placeholder="https://hooks.slack.com/services/…"
+                            placeholder="Paste Incoming Webhook URL from the webhook guide…"
                           />
                         </label>
                         <label class="demo-field">
@@ -987,6 +1003,6 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="/static/md-render.js?v=shell77"></script>
-    <script src="/static/app.js?v=shell107" type="module"></script>
+    <script src="/static/app.js?v=shell109" type="module"></script>
   </body>
 </html>

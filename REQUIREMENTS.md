@@ -333,7 +333,7 @@ Demo notes: [`modules/signature-integration-demo.md`](modules/signature-integrat
 
 **Pre conditions:** none
 
-**Webhook resolution:** module flags (`--webhook` / `--name` / `--channel-url`) → lab-credentials override → [`config/slack-notifier.defaults.json`](config/slack-notifier.defaults.json)
+**Webhook resolution:** module flags (`--webhook` / `--name` / `--channel-url`) → lab-credentials `slackNotifier` → [`config/slack-notifier.defaults.json`](config/slack-notifier.defaults.json) for name/channel only. Shared defaults never include a webhook URL (credentials-only secret).
 
 **Status / Run / Acceptance:**
 

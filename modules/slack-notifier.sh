@@ -22,14 +22,21 @@ usage() {
 
 Ensure a Slack notifier in Central (default channel \`#acs-demo-notifier\`).
 
-Defaults ship in \`config/slack-notifier.defaults.json\`. Lab credentials may
-override notifier name, webhook, and channel URL.
+Notifier name and channel default from \`config/slack-notifier.defaults.json\`.
+Incoming Webhook URL comes from lab credentials (or \`--webhook\`); it is never
+shipped in the shared defaults.
 
 \`--run\` sends Central's Test notifier message, then a second lab-context
 ping (lab name, Central host, secured cluster) via the Incoming Webhook,
 then attaches this notifier to every Central policy with category **DEMO**.
 
 Catalog: \`impactPlanes: ["central-api"]\` (central-api only).
+
+Talk track: [\`modules/slack-notifier-demo.md\`](/help?doc=slack-notifier-demo)
+
+## Incoming Webhook setup
+
+[\`gui/static/slack-webhook-guide.html\`](/static/slack-webhook-guide.html)
 
 ## Usage
 
