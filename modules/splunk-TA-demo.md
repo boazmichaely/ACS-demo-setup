@@ -33,11 +33,9 @@ Product reference: [RHACS 5.0 - 15.3. Using the Red Hat Advanced Cluster Securit
 2. Splunk Operator (Helm) + Standalone Splunk Free + PVCs + Route `splunk-web`.
 3. Installs the RHACS Technology Add-on into the Splunk pod from your local `.spl`.
 
-It does **not** configure Central endpoint, API token, or modular inputs in the Splunk UI - that is the talk track below.
+It does **not** configure Central endpoint, API token, or modular inputs in the Splunk UI - that is the configuration steps below.
 
-## Talk track (about 2 minutes)
-
-### Configuration
+## Configuration
 
 1. Open Splunk Web (URL from module Status → Splunk Web Route).
 2. You will be automatically logged in as the Splunk Admin.
