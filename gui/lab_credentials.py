@@ -27,6 +27,11 @@ from lib.lab_doc import (  # noqa: E402
     lab_log_blurb,
     normalize_document,
 )
+from lib.acs_lightspeed_defaults import (  # noqa: E402
+    effective_open_shift_lightspeed,
+    load_defaults as load_acs_lightspeed_defaults,
+    store_open_shift_lightspeed_override,
+)
 from lib.slack_notifier_defaults import (  # noqa: E402
     effective_slack_notifier,
     load_defaults as load_slack_notifier_defaults,
@@ -233,6 +238,24 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
                 repo_root=repo_root,
             )
 
+        prev_ols = (
+            prev.get("openShiftLightspeed")
+            if isinstance(prev.get("openShiftLightspeed"), dict)
+            else {}
+        )
+        if isinstance(lab_in.get("openShiftLightspeed"), dict):
+            open_shift_lightspeed = store_open_shift_lightspeed_override(
+                lab_in.get("openShiftLightspeed"),
+                existing=prev_ols,
+                repo_root=repo_root,
+            )
+        else:
+            open_shift_lightspeed = store_open_shift_lightspeed_override(
+                prev_ols,
+                existing=prev_ols,
+                repo_root=repo_root,
+            )
+
         merged_labs.append(
             {
                 "id": lab_id,
@@ -242,6 +265,7 @@ def merge_and_save(repo_root: Path, incoming: dict[str, Any]) -> Path:
                 "securedClusters": merged_scs,
                 "activeSecuredClusterId": active_sc,
                 "slackNotifier": slack_notifier,
+                "openShiftLightspeed": open_shift_lightspeed,
             }
         )
 
@@ -272,6 +296,7 @@ def set_active_lab(repo_root: Path, lab_id: str) -> dict[str, Any]:
 def for_api_response(repo_root: Path) -> dict[str, Any]:
     raw = load_raw(repo_root)
     slack_defaults = load_slack_notifier_defaults(repo_root)
+    ols_defaults = load_acs_lightspeed_defaults(repo_root)
     labs_out: list[dict[str, Any]] = []
     for lab in raw.get("labs") or []:
         cc = lab.get("centralCluster") or {}
@@ -297,6 +322,11 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
             lab.get("slackNotifier"),
             repo_root=repo_root,
             defaults=slack_defaults,
+        )
+        ols_eff = effective_open_shift_lightspeed(
+            lab.get("openShiftLightspeed"),
+            repo_root=repo_root,
+            defaults=ols_defaults,
         )
         labs_out.append(
             {
@@ -325,6 +355,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
                     scs[0]["id"] if scs else ""
                 ),
                 "slackNotifier": sn_eff,
+                "openShiftLightspeed": ols_eff,
             }
         )
 
@@ -348,6 +379,7 @@ def for_api_response(repo_root: Path) -> dict[str, Any]:
         "activeLabId": raw.get("activeLabId") or (labs_out[0]["id"] if labs_out else ""),
         "labs": labs_out,
         "slackNotifierDefaults": slack_defaults,
+        "acsLightspeedDefaults": ols_defaults,
         "activeLabSummary": {
             "id": active.get("id") or "",
             "name": active.get("name") or "",

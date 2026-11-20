@@ -1,0 +1,6 @@
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "url": "https://api.openai.com/v1",
+  "apiToken": ""
+}

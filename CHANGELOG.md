@@ -7,6 +7,20 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-20
+
+### Added
+
+- `acs-lightspeed` module: OpenShift Lightspeed on Central OCP (Operator, LLM Secret, OLSConfig, ols-user binding, NetworkPolicy) plus RHACS 5.0 Lightspeed connectivity checks; lab Integration Secrets for the LLM API token; Risk URL in status summaries.
+
+### Changed
+
+- `splunk-TA`: pin Splunk Operator Helm chart / image / CRDs to **3.2.0**.
+
+### Fixed
+
+- `splunk-TA`: configure Splunk Web `tools.proxy.on` / `tools.proxy.base` for the OpenShift edge Route so browsers no longer hit an https↔http redirect loop.
+
 ## [0.1.2] - 2026-11-17
 
 ### Added
@@ -52,7 +66,8 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Installed version in the Help menu and soft update nudge when a newer GitHub Release exists.
 - Release workflow (`v*` tags → GitHub Release from this changelog).
 
-[Unreleased]: https://github.com/boazmichaely/ACS-demo-setup/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/boazmichaely/ACS-demo-setup/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/boazmichaely/ACS-demo-setup/releases/tag/v0.1.3
 [0.1.2]: https://github.com/boazmichaely/ACS-demo-setup/releases/tag/v0.1.2
 [0.1.1]: https://github.com/boazmichaely/ACS-demo-setup/releases/tag/v0.1.1
 [0.1.0]: https://github.com/boazmichaely/ACS-demo-setup/releases/tag/v0.1.0

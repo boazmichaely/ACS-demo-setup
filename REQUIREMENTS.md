@@ -386,6 +386,29 @@ Demo notes: [`modules/signature-integration/signature-integration-demo.md`](modu
 
 ---
 
+### M15 — `acs-lightspeed` (OpenShift Lightspeed on Central + ACS risk AI)
+
+**Purpose:** Install OpenShift Lightspeed on the **same OpenShift cluster as Central**, configure a real LLM (default OpenAI via lab Integration Secrets), grant Central’s ServiceAccount `ols-user`, allow Central → OLS traffic, and verify RHACS 5.0 Lightspeed risk AI connectivity. Not related to OpenShift MCP / mcp-gateway / ACS MCP.
+
+**Pre conditions:** RHACS 5.0+ Central on OpenShift; LLM API token in lab credentials (`openShiftLightspeed.apiToken`)
+
+**Catalog:** `impactPlanes: ["central-ocp", "central-api"]` (not ACSCS-safe; no `securedClusterPolicy`)
+
+**Plane contract:**
+
+- `central-ocp`: namespace `openshift-lightspeed`, Operator Subscription `lightspeed-operator`, Secret `credentials` (`apitoken`), `OLSConfig` `cluster`, ClusterRoleBinding `acs-demo-central-ols-user`, NetworkPolicy `allow-acs-central`
+- `central-api`: verify feature flag `ROX_LIGHTSPEED_RISK_SUMMARY` and `GET /v1/lightspeed/status` available (RHACS 5.0.0 has no `/v2/ai-integrations` CRUD; default OLS endpoint is in-cluster)
+
+**Status / Run / Acceptance:**
+
+- `--status` is `ok` when Operator/OLS pods, Secret, OLSConfig, NetworkPolicy, binding are present and Lightspeed status is available; ok summary includes Central Risk HTTPS URL
+- `--run` is idempotent; fails clearly when API token missing; dry-run prints manifests without applying
+- `--uninstall` (central-ocp) removes demo-owned OLS resources and the Subscription/namespace this module installed; central-api has no integration object to delete on 5.0
+- Demo notes: [`modules/acs-lightspeed/acs-lightspeed-demo.md`](modules/acs-lightspeed/acs-lightspeed-demo.md)
+- Lab defaults (non-secret): [`config/acs-lightspeed.defaults.json`](config/acs-lightspeed.defaults.json)
+
+---
+
 ## 7. GUI requirements
 
 The GUI is **required from the first deliverable** (module M1 `registries`). No module ships without corresponding GUI support for that module’s status, configuration, and run action.

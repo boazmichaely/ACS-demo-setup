@@ -627,6 +627,86 @@
                           >
                             Restore defaults
                           </button>
+                        </div>
+                      </div>
+                    </details>
+
+                    <details class="demo-fold" id="lightspeedFold">
+                      <summary class="demo-fold__summary">
+                        <span class="demo-fold__chev" aria-hidden="true"></span>
+                        <span class="demo-fold__title">OpenShift Lightspeed LLM</span>
+                        <span class="demo-fold__meta" id="lightspeedFoldMeta"></span>
+                      </summary>
+                      <div class="demo-fold__body">
+                        <p class="demo-sub__hint">
+                          Used by <code>acs-lightspeed</code> on Central’s
+                          OpenShift cluster. The API token is stored as Secret
+                          <code>apitoken</code> in
+                          <code>openshift-lightspeed</code>. Provider, model, and
+                          URL defaults come from
+                          <code>config/acs-lightspeed.defaults.json</code>
+                          (OpenAI). Leave the token blank on Save to keep the
+                          previously stored secret.
+                        </p>
+                        <label class="demo-field">
+                          <span>Provider</span>
+                          <select
+                            class="pf-v6-c-form-control"
+                            id="olsProvider"
+                          >
+                            <option value="openai">openai</option>
+                          </select>
+                        </label>
+                        <label class="demo-field">
+                          <span>Model</span>
+                          <input
+                            class="pf-v6-c-form-control"
+                            id="olsModel"
+                            type="text"
+                            spellcheck="false"
+                            placeholder="gpt-4o"
+                          />
+                        </label>
+                        <label class="demo-field">
+                          <span>API URL</span>
+                          <input
+                            class="pf-v6-c-form-control"
+                            id="olsUrl"
+                            type="url"
+                            spellcheck="false"
+                            autocomplete="off"
+                            placeholder="https://api.openai.com/v1"
+                          />
+                        </label>
+                        <div
+                          id="olsTokenMissing"
+                          class="demo-slack-secret-missing"
+                          hidden
+                          role="status"
+                        >
+                          <strong>LLM API token required</strong>
+                          Paste an OpenAI (or compatible) API key for this lab
+                          before running <code>acs-lightspeed</code>.
+                        </div>
+                        <label class="demo-field" id="olsTokenField">
+                          <span>API token</span>
+                          <input
+                            class="pf-v6-c-form-control"
+                            id="olsApiToken"
+                            type="password"
+                            spellcheck="false"
+                            autocomplete="off"
+                            placeholder="Paste LLM API token…"
+                          />
+                        </label>
+                        <div class="demo-actions" style="margin-top: 0.5rem">
+                          <button
+                            type="button"
+                            class="pf-v6-c-button pf-m-secondary pf-m-small"
+                            id="btnOlsRestoreDefaults"
+                          >
+                            Restore defaults
+                          </button>
                           <button
                             type="button"
                             class="pf-v6-c-button pf-m-primary pf-m-small"

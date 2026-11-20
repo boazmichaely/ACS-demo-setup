@@ -89,6 +89,13 @@ class SlackNotifierIn(BaseModel):
     channelUrl: str = ""
 
 
+class OpenShiftLightspeedIn(BaseModel):
+    provider: str = "openai"
+    model: str = ""
+    url: str = ""
+    apiToken: str = ""
+
+
 class LabIn(BaseModel):
     id: str = ""
     name: str = ""
@@ -97,6 +104,9 @@ class LabIn(BaseModel):
     securedClusters: list[SecuredClusterIn] = Field(default_factory=list)
     activeSecuredClusterId: str = ""
     slackNotifier: SlackNotifierIn = Field(default_factory=SlackNotifierIn)
+    openShiftLightspeed: OpenShiftLightspeedIn = Field(
+        default_factory=OpenShiftLightspeedIn
+    )
 
 
 class LabCredentialsIn(BaseModel):
@@ -441,6 +451,10 @@ HELP_DOCS: dict[str, tuple[str, Path]] = {
     "slack-notifier-demo": (
         "Slack notifier demo",
         REPO_ROOT / "modules" / "slack-notifier" / "slack-notifier-demo.md",
+    ),
+    "acs-lightspeed-demo": (
+        "ACS Lightspeed demo",
+        REPO_ROOT / "modules" / "acs-lightspeed" / "acs-lightspeed-demo.md",
     ),
 }
 

@@ -86,6 +86,28 @@ def normalize_slack_notifier(raw: Any) -> dict[str, Any]:
     }
 
 
+def empty_open_shift_lightspeed() -> dict[str, Any]:
+    return {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "url": "https://api.openai.com/v1",
+        "apiToken": "",
+    }
+
+
+def normalize_open_shift_lightspeed(raw: Any) -> dict[str, Any]:
+    src = raw if isinstance(raw, dict) else {}
+    provider = (src.get("provider") or "").strip().lower() or "openai"
+    if provider not in ("openai",):
+        provider = "openai"
+    return {
+        "provider": provider,
+        "model": (src.get("model") or "").strip() or "gpt-4o",
+        "url": (src.get("url") or "").strip() or "https://api.openai.com/v1",
+        "apiToken": (src.get("apiToken") or "").strip(),
+    }
+
+
 def empty_lab(*, lab_id: str | None = None, name: str = "default") -> dict[str, Any]:
     lid = lab_id or "default"
     sc = empty_secured_cluster(name="production", same_as_central=True)
@@ -100,6 +122,7 @@ def empty_lab(*, lab_id: str | None = None, name: str = "default") -> dict[str, 
         "securedClusters": [sc],
         "activeSecuredClusterId": sc["id"],
         "slackNotifier": empty_slack_notifier(),
+        "openShiftLightspeed": empty_open_shift_lightspeed(),
     }
 
 
@@ -154,6 +177,7 @@ def migrate_v1_to_v2(raw: dict[str, Any]) -> dict[str, Any]:
         "securedClusters": [sc],
         "activeSecuredClusterId": sc["id"],
         "slackNotifier": empty_slack_notifier(),
+        "openShiftLightspeed": empty_open_shift_lightspeed(),
     }
     return {
         "$schema": "./config/lab-credentials.schema.json",
@@ -206,6 +230,9 @@ def normalize_document(raw: dict[str, Any] | None) -> dict[str, Any]:
             for sc in lab.get("securedClusters") or []:
                 sc["openshift"] = normalize_openshift(sc.get("openshift"))
             lab["slackNotifier"] = normalize_slack_notifier(lab.get("slackNotifier"))
+            lab["openShiftLightspeed"] = normalize_open_shift_lightspeed(
+                lab.get("openShiftLightspeed")
+            )
         return doc
     if "centralCluster" in raw:
         return migrate_v1_to_v2(raw)
@@ -276,11 +303,13 @@ def active_secured_cluster(lab: dict[str, Any]) -> dict[str, Any]:
 
 def flatten_active_lab(doc: dict[str, Any]) -> dict[str, Any]:
     """v1-shaped view of the active lab for module helpers (centralCluster + securedCluster)."""
+    from lib.acs_lightspeed_defaults import effective_open_shift_lightspeed
     from lib.slack_notifier_defaults import effective_slack_notifier
 
     lab = active_lab(doc)
     sc = active_secured_cluster(lab)
     slack = effective_slack_notifier(lab.get("slackNotifier"))
+    ols = effective_open_shift_lightspeed(lab.get("openShiftLightspeed"))
     return {
         "version": 1,
         "insecureSkipTlsVerify": bool(lab.get("insecureSkipTlsVerify", False)),
@@ -291,6 +320,7 @@ def flatten_active_lab(doc: dict[str, Any]) -> dict[str, Any]:
             "openshift": sc.get("openshift") or empty_openshift(),
         },
         "slackNotifier": slack,
+        "openShiftLightspeed": ols,
         # Extras for logging (ignored by old readers)
         "_activeLabId": lab.get("id") or "",
         "_activeLabName": lab.get("name") or "",

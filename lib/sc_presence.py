@@ -23,7 +23,7 @@ PRESENCE_NAMESPACE: dict[str, str] = {
     "virt-vm-demo": "acs-virt-demo",
     "openshift-mcp": "openshift-mcp",
     "openshift-mcp-gateway": "mcp-gateway",
-    "acs-lightspeed": "openshift-lightspeed",
+    # acs-lightspeed uses central-ocp (openshift-lightspeed ns); probe inside the module, not SC presence.
     "acs-mcp": "acs-mcp",
     "prometheus": "openshift-user-workload-monitoring",
     "secrets-manager": "vault",

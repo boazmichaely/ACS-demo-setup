@@ -12,9 +12,9 @@ readonly STA_ROUTE="splunk-web"
 readonly STA_SVC="splunk-lab-standalone-service"
 readonly STA_ADMIN_SECRET="splunk-lab-standalone-secret-v1"
 readonly STA_HELM_RELEASE="splunk-operator"
-readonly STA_HELM_CHART_VERSION="3.1.0"
-readonly STA_OPERATOR_IMAGE="docker.io/splunk/splunk-operator:3.0.0"
-readonly STA_CRD_URL="https://github.com/splunk/splunk-operator/releases/download/3.0.0/splunk-operator-crds.yaml"
+readonly STA_HELM_CHART_VERSION="3.2.0"
+readonly STA_OPERATOR_IMAGE="docker.io/splunk/splunk-operator:3.2.0"
+readonly STA_CRD_URL="https://github.com/splunk/splunk-operator/releases/download/3.2.0/splunk-operator-crds.yaml"
 readonly STA_TA_DIR_DEFAULT="${HOME}/code/Splunk"
 
 # Set by splunk-TA.sh from flags before calling into this lib.
@@ -409,6 +409,98 @@ ${MODULE_ID}: dry-run (--uninstall)
 EOF
 }
 
+# Splunk Web behind an OpenShift edge Route must honor X-Forwarded-* or it
+# redirects browsers to http:// while the Route forces https:// (loop).
+# Merges into local web.conf without wiping other stanzas the Operator may add.
+sta_configure_web_proxy() {
+  local host admin_pass base need_restart
+  host="$(sta_route_host)"
+  if [[ -z "$host" ]]; then
+    printf 'WARN: no Route host; skipping tools.proxy web.conf\n' >&2
+    return 0
+  fi
+  base="https://${host}"
+  echo "==> [splunk-TA] Configure Splunk Web proxy for ${base}"
+  need_restart="$(
+    # -i so the heredoc reaches the pod as python stdin (script via `-`)
+    oc exec -i -n "${STA_NS}" "${STA_POD}" -- python3 - "$base" <<'PY'
+import sys
+from pathlib import Path
+base = sys.argv[1]
+path = Path("/opt/splunk/etc/system/local/web.conf")
+text = path.read_text() if path.exists() else ""
+lines = text.splitlines()
+out = []
+in_settings = False
+have_settings = False
+seen_on = seen_base = False
+changed = False
+
+def flush_settings_tail():
+    global changed, seen_on, seen_base
+    if not seen_on:
+        out.append("tools.proxy.on = True")
+        changed = True
+    if not seen_base:
+        out.append(f"tools.proxy.base = {base}")
+        changed = True
+
+i = 0
+while i < len(lines):
+    line = lines[i]
+    stripped = line.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        if in_settings:
+            flush_settings_tail()
+            in_settings = False
+        if stripped == "[settings]":
+            have_settings = True
+            in_settings = True
+            seen_on = seen_base = False
+        out.append(line)
+        i += 1
+        continue
+    if in_settings:
+        key = stripped.split("=", 1)[0].strip().lower() if "=" in stripped else ""
+        if key == "tools.proxy.on":
+            seen_on = True
+            if "true" not in stripped.lower():
+                line = "tools.proxy.on = True"
+                changed = True
+        elif key == "tools.proxy.base":
+            seen_base = True
+            if base not in stripped:
+                line = f"tools.proxy.base = {base}"
+                changed = True
+    out.append(line)
+    i += 1
+
+if in_settings:
+    flush_settings_tail()
+elif not have_settings:
+    if out and out[-1].strip():
+        out.append("")
+    out.extend(["[settings]", "tools.proxy.on = True", f"tools.proxy.base = {base}"])
+    changed = True
+
+if changed:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(out) + "\n")
+    print("changed")
+else:
+    print("ok")
+PY
+  )"
+  if [[ "$need_restart" != "changed" ]]; then
+    echo "    tools.proxy already set for ${base}"
+    return 0
+  fi
+  admin_pass="$(oc get secret "${STA_ADMIN_SECRET}" -n "${STA_NS}" -o jsonpath='{.data.password}' | base64 -d)"
+  oc exec -n "${STA_NS}" "${STA_POD}" -- /opt/splunk/bin/splunk restart -auth "admin:${admin_pass}" || true
+  oc wait --for=condition=ready "pod/${STA_POD}" -n "${STA_NS}" --timeout=600s \
+    || printf 'WARN: pod not Ready after proxy config - check: oc get pods -n %s\n' "$STA_NS" >&2
+}
+
 sta_install_ta() {
   local ta_local remote admin_pass
   remote=/tmp/rhacs_ta.tgz
@@ -565,6 +657,8 @@ EOF
     echo "    Route ${STA_ROUTE} already exists"
   fi
 
+  # Apply before TA so a single restart can cover both when TA also restarts.
+  sta_configure_web_proxy || return 1
   sta_install_ta || return 1
 
   echo ""

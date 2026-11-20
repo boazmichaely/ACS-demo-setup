@@ -141,13 +141,12 @@
     },
     {
       "id": "acs-lightspeed",
-      "label": "Configures OpenShift Lightspeed integration",
+      "label": "OpenShift Lightspeed on Central + ACS risk AI",
       "dependsOn": [],
-      "statusComplexity": 4,
-      "impactPlanes": ["central-api", "secured-cluster"],
-      "securedClusterPolicy": "single",
-      "runSummary": "Secured cluster: configure OpenShift Lightspeed pieces for ACS. Central API: complete Lightspeed integration on the selected targets.",
-      "uninstallSummary": "Secured cluster: remove Lightspeed pieces this module owns. Central API: remove the related Central wiring."
+      "statusComplexity": 8,
+      "impactPlanes": ["central-ocp", "central-api"],
+      "runSummary": "Central OCP: install OpenShift Lightspeed (Operator, LLM Secret, OLSConfig), grant Central ols-user, and allow Central traffic to OLS. Central API: verify ROX_LIGHTSPEED_RISK_SUMMARY and Lightspeed connectivity (optional ROX_LIGHTSPEED_ENDPOINT when non-default).",
+      "uninstallSummary": "Central OCP: remove demo-owned NetworkPolicy, ols-user binding, OLSConfig, LLM Secret, and the Operator Subscription this module installed. Central API plane has no separate integration object to delete on RHACS 5.0."
     },
     {
       "id": "acs-mcp",

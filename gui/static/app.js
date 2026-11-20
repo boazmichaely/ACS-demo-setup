@@ -59,6 +59,10 @@ const fields = {
   slackNotifierName: document.getElementById("slackNotifierName"),
   slackWebhookUrl: document.getElementById("slackWebhookUrl"),
   slackChannelUrl: document.getElementById("slackChannelUrl"),
+  olsProvider: document.getElementById("olsProvider"),
+  olsModel: document.getElementById("olsModel"),
+  olsUrl: document.getElementById("olsUrl"),
+  olsApiToken: document.getElementById("olsApiToken"),
 };
 
 function newId() {
@@ -139,6 +143,55 @@ function emptySlackNotifier() {
   return { ...slackNotifierDefaults() };
 }
 
+function acsLightspeedDefaults() {
+  const d = credDoc?.acsLightspeedDefaults || {};
+  return {
+    provider: (d.provider || "").trim() || "openai",
+    model: (d.model || "").trim() || "gpt-4o",
+    url: (d.url || "").trim() || "https://api.openai.com/v1",
+    apiToken: (d.apiToken || "").trim(),
+  };
+}
+
+function emptyOpenShiftLightspeed() {
+  return { ...acsLightspeedDefaults(), apiToken: "" };
+}
+
+function restoreOpenShiftLightspeedDefaults() {
+  const defs = acsLightspeedDefaults();
+  const lab = editingLab();
+  const currentToken = (
+    fields.olsApiToken?.value ||
+    lab?.openShiftLightspeed?.apiToken ||
+    ""
+  ).trim();
+  if (fields.olsProvider) fields.olsProvider.value = defs.provider || "openai";
+  if (fields.olsModel) fields.olsModel.value = defs.model || "gpt-4o";
+  if (fields.olsUrl) fields.olsUrl.value = defs.url || "https://api.openai.com/v1";
+  if (fields.olsApiToken) fields.olsApiToken.value = currentToken;
+  if (lab) {
+    lab.openShiftLightspeed = {
+      provider: defs.provider || "openai",
+      model: defs.model || "gpt-4o",
+      url: defs.url || "https://api.openai.com/v1",
+      apiToken: currentToken,
+    };
+    updateFoldMetas(lab);
+  }
+  syncOlsSecretsMissingHints();
+  if (credEditMode) syncCredChrome();
+}
+
+function syncOlsSecretsMissingHints() {
+  const tokenEmpty = !(fields.olsApiToken?.value || "").trim();
+  const missing = document.getElementById("olsTokenMissing");
+  const tokenField = document.getElementById("olsTokenField");
+  if (missing) missing.hidden = !tokenEmpty;
+  if (tokenField) {
+    tokenField.classList.toggle("demo-field--secret-missing", tokenEmpty);
+  }
+}
+
 function emptyLab(name = "new-lab") {
   const sc = emptySecuredCluster("production");
   return {
@@ -160,6 +213,7 @@ function emptyLab(name = "new-lab") {
     securedClusters: [sc],
     activeSecuredClusterId: sc.id,
     slackNotifier: emptySlackNotifier(),
+    openShiftLightspeed: emptyOpenShiftLightspeed(),
   };
 }
 
@@ -2578,6 +2632,14 @@ function updateFoldMetas(lab) {
   if (slackMeta) {
     slackMeta.textContent = `${snName} · ${whBit}`;
   }
+  const olsMeta = document.getElementById("lightspeedFoldMeta");
+  const ols = lab?.openShiftLightspeed || emptyOpenShiftLightspeed();
+  const olsDefs = acsLightspeedDefaults();
+  const olsModel = (ols.model || olsDefs.model || "gpt-4o").trim();
+  const olsToken = (ols.apiToken || "").trim();
+  if (olsMeta) {
+    olsMeta.textContent = `${olsModel} · ${olsToken ? "token set" : "no token"}`;
+  }
   updateCredPanelChrome();
 }
 
@@ -2880,10 +2942,28 @@ function fillEditingLabForm() {
   if (centralFold) centralFold.open = false;
   const slackFold = document.getElementById("slackFold");
   if (slackFold) slackFold.open = false;
+  const lightspeedFold = document.getElementById("lightspeedFold");
+  if (lightspeedFold) lightspeedFold.open = false;
+
+  const ols = lab.openShiftLightspeed || emptyOpenShiftLightspeed();
+  const olsDefs = acsLightspeedDefaults();
+  if (fields.olsProvider) {
+    fields.olsProvider.value = ols.provider || olsDefs.provider || "openai";
+  }
+  if (fields.olsModel) {
+    fields.olsModel.value = ols.model || olsDefs.model || "gpt-4o";
+  }
+  if (fields.olsUrl) {
+    fields.olsUrl.value = ols.url || olsDefs.url || "https://api.openai.com/v1";
+  }
+  if (fields.olsApiToken) {
+    fields.olsApiToken.value = ols.apiToken || "";
+  }
 
   renderSecuredClusters(lab);
   updateFoldMetas(lab);
   syncSlackSecretsMissingHints();
+  syncOlsSecretsMissingHints();
   syncCredentialCopyButtons();
   syncCredChrome();
 }
@@ -2921,6 +3001,12 @@ function buildCredentialsPayload() {
       notifierName: (fields.slackNotifierName?.value || "").trim() || "#acs-demo-notifier",
       channelUrl: fields.slackChannelUrl?.value || "",
     },
+    openShiftLightspeed: {
+      provider: (fields.olsProvider?.value || "").trim() || "openai",
+      model: (fields.olsModel?.value || "").trim(),
+      url: (fields.olsUrl?.value || "").trim(),
+      apiToken: fields.olsApiToken?.value || "",
+    },
   };
 
   const labs = (credDoc.labs || []).map((existing) =>
@@ -2942,6 +3028,8 @@ function applyCredentialsResponse(data, { keepEditingId } = {}) {
     activeLabId: data.activeLabId || "",
     labs: Array.isArray(data.labs) ? data.labs : [],
     slackNotifierDefaults: data.slackNotifierDefaults || credDoc?.slackNotifierDefaults || {},
+    acsLightspeedDefaults:
+      data.acsLightspeedDefaults || credDoc?.acsLightspeedDefaults || {},
   };
   if (!credDoc.labs.length) {
     const lab = emptyLab("default");
@@ -2976,6 +3064,8 @@ async function persistEditingLab() {
     labs: Array.isArray(data.labs) ? data.labs : payload.labs,
     slackNotifierDefaults:
       data.slackNotifierDefaults || credDoc?.slackNotifierDefaults || {},
+    acsLightspeedDefaults:
+      data.acsLightspeedDefaults || credDoc?.acsLightspeedDefaults || {},
   };
   return data;
 }
@@ -3033,11 +3123,17 @@ function normalizeLabForCompare(lab) {
     centralCluster: lab.centralCluster || {},
     securedClusters: lab.securedClusters || [],
     activeSecuredClusterId: lab.activeSecuredClusterId || "",
-    // Integration Secrets (Slack) must dirty Save on their own.
+    // Integration Secrets must dirty Save on their own.
     slackNotifier: {
       webhookUrl: (sn.webhookUrl || "").trim(),
       notifierName: (sn.notifierName || "").trim(),
       channelUrl: (sn.channelUrl || "").trim(),
+    },
+    openShiftLightspeed: {
+      provider: (lab.openShiftLightspeed?.provider || "").trim() || "openai",
+      model: (lab.openShiftLightspeed?.model || "").trim(),
+      url: (lab.openShiftLightspeed?.url || "").trim(),
+      apiToken: (lab.openShiftLightspeed?.apiToken || "").trim(),
     },
   };
 }
@@ -3381,6 +3477,29 @@ fields.slackChannelUrl?.addEventListener("input", () => {
     lab.slackNotifier.channelUrl = (fields.slackChannelUrl.value || "").trim();
     updateFoldMetas(lab);
   }
+});
+
+function syncOlsFromForm() {
+  syncOlsSecretsMissingHints();
+  const lab = editingLab();
+  if (!lab) return;
+  lab.openShiftLightspeed = lab.openShiftLightspeed || emptyOpenShiftLightspeed();
+  lab.openShiftLightspeed.provider =
+    (fields.olsProvider?.value || "").trim() || "openai";
+  lab.openShiftLightspeed.model = (fields.olsModel?.value || "").trim();
+  lab.openShiftLightspeed.url = (fields.olsUrl?.value || "").trim();
+  lab.openShiftLightspeed.apiToken = (fields.olsApiToken?.value || "").trim();
+  updateFoldMetas(lab);
+}
+
+fields.olsProvider?.addEventListener("change", syncOlsFromForm);
+fields.olsModel?.addEventListener("input", syncOlsFromForm);
+fields.olsUrl?.addEventListener("input", syncOlsFromForm);
+fields.olsApiToken?.addEventListener("input", syncOlsFromForm);
+
+document.getElementById("btnOlsRestoreDefaults")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  restoreOpenShiftLightspeedDefaults();
 });
 
 document.getElementById("btnSlackRestoreDefaults")?.addEventListener("click", (e) => {
